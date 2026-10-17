@@ -10,9 +10,18 @@ import {
   CheckCircle2,
   ChevronRight,
   TrendingUp,
+  Gift,
+  Bell,
+  X,
 } from 'lucide-react';
 import { Restaurant, FoodCategory, Neighborhood } from '../types';
-import { CATEGORIES } from '../data/mockData';
+import {
+  CATEGORIES,
+  MOCK_ADMIN_NOTICES,
+  loadAdminNotices,
+  loadRegionalHighlights,
+  isRestaurantInNeighborhood,
+} from '../data/mockData';
 
 interface ExploreViewProps {
   currentNeighborhood: Neighborhood;
@@ -37,10 +46,8 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   // Filter restaurants
   const filteredRestaurants = useMemo(() => {
     return restaurants.filter((r) => {
-      // Matches neighborhood
-      const matchesNeighborhood =
-        r.neighborhoodId === currentNeighborhood.id ||
-        currentNeighborhood.id === 'mooca'; // Fallback to showcase if few items
+      // Matches neighborhood / region (shows all demonstrative spots belonging to that region)
+      const matchesNeighborhood = isRestaurantInNeighborhood(r, currentNeighborhood.id);
 
       // Matches search query
       const matchesSearch =
@@ -108,6 +115,39 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
             Trocar
           </button>
         </div>
+
+        {/* Active Community Notice from Admin */}
+        {(() => {
+          const notices = loadAdminNotices();
+          const activeNotice = notices.find(
+            (n) =>
+              n.active &&
+              (n.targetNeighborhood === 'Todos os Bairros' ||
+                n.targetNeighborhood.toLowerCase().includes(currentNeighborhood.name.toLowerCase()) ||
+                currentNeighborhood.name.toLowerCase().includes(n.targetNeighborhood.toLowerCase()))
+          );
+          if (!activeNotice) return null;
+          return (
+            <div className="p-3 rounded-2xl bg-[#141624] border border-amber-500/30 flex items-start justify-between gap-3 text-xs">
+              <div className="flex items-start gap-2.5">
+                <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                  <Bell className="w-3.5 h-3.5" />
+                </span>
+                <div>
+                  <div className="flex items-center gap-1.5 font-bold text-white">
+                    <span>{activeNotice.title}</span>
+                    <span className="text-[10px] text-amber-400 font-normal">
+                      · {activeNotice.targetNeighborhood}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                    {activeNotice.content}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Categories Horizontal Carousel */}
@@ -183,6 +223,56 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
 
       {/* Restaurant List */}
       <div>
+        {/* Highlight Regional (Patrocinado) */}
+        {(() => {
+          const dynamicHighlights = loadRegionalHighlights().filter((h) => h.status === 'ativo');
+          const matchingHl = dynamicHighlights.find(
+            (h) =>
+              currentNeighborhood.id === 'todos' ||
+              h.neighborhoodId === currentNeighborhood.id ||
+              h.neighborhoodName.toLowerCase().includes(currentNeighborhood.name.toLowerCase()) ||
+              currentNeighborhood.name.toLowerCase().includes(h.neighborhoodName.toLowerCase())
+          );
+          const featured = matchingHl
+            ? restaurants.find((r) => r.id === matchingHl.restaurantId) ||
+              filteredRestaurants.find((r) => r.activeHighlight && r.activeHighlight.status === 'ativo')
+            : filteredRestaurants.find((r) => r.activeHighlight && r.activeHighlight.status === 'ativo');
+
+          if (!featured) return null;
+          return (
+            <div
+              onClick={() => onSelectRestaurant(featured)}
+              className="mb-4 p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/10 border-2 border-amber-500/50 cursor-pointer shadow-lg hover:border-amber-400 transition-all group"
+            >
+              <div className="flex items-center justify-between text-xs mb-2">
+                <span className="flex items-center gap-1.5 font-bold text-amber-300 uppercase tracking-wider text-[11px] bg-amber-500/20 border border-amber-400/40 px-2.5 py-0.5 rounded-full">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  Patrocinado · Destaque de {featured.neighborhoodName}
+                </span>
+                <span className="text-[11px] text-slate-300 font-medium">
+                  {featured.activeHighlight?.requestedDuration} (Demonstração)
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-extrabold text-base text-white group-hover:text-amber-300 transition-colors">
+                    {featured.name}
+                  </h3>
+                  <p className="text-xs text-slate-300 line-clamp-1 mt-0.5">
+                    {featured.bio}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-bold text-amber-400 group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                    Ver destaque regional <ChevronRight className="w-4 h-4" />
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="flex items-center justify-between mb-3 px-0.5">
           <h2 className="text-base font-bold text-white flex items-center gap-2 font-display">
             <Flame className="w-4 h-4 text-orange-400" />
@@ -281,6 +371,14 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                       {restaurant.bio}
                     </p>
                   </div>
+
+                  {/* Loyalty Club Indicator */}
+                  {restaurant.rewards && restaurant.rewards.length > 0 && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-amber-300/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
+                      <Gift className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="truncate">Clube de Fidelidade: Recompensas a partir de {Math.min(...restaurant.rewards.map(r => r.pointsCost))} pts</span>
+                    </div>
+                  )}
 
                   {/* Popular Dishes chips */}
                   <div className="pt-2 border-t border-slate-800/70">

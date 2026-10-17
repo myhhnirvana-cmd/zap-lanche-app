@@ -70,7 +70,7 @@ export const NeighborhoodModal: React.FC<NeighborhoodModalProps> = ({
                     </span>
                   </div>
                   <span className="text-xs text-orange-400/90 font-medium">
-                    {item.activeSpotsCount} lanches cadastrados
+                    {item.activeSpotsCount} {item.activeSpotsCount === 1 ? 'lanche cadastrado' : 'lanches cadastrados'}
                   </span>
                 </div>
 

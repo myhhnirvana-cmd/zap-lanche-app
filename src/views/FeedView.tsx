@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Heart,
   MessageCircle,
-  Share2,
   MapPin,
   Flame,
   PlusCircle,
@@ -10,9 +9,17 @@ import {
   Send,
   Sparkles,
   ShoppingBag,
+  Camera,
+  Image as ImageIcon,
+  Trash2,
+  Pencil,
+  X,
+  AlertCircle,
+  AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
-import { SocialPost, Restaurant, MenuItem } from '../types';
-import { MOCK_POSTS, ASSET_BURGER } from '../data/mockData';
+import { SocialPost, Restaurant, PostComment } from '../types';
+import { MOCK_POSTS, MOCK_USER_PROFILE } from '../data/mockData';
 
 interface FeedViewProps {
   restaurants: Restaurant[];
@@ -20,83 +27,432 @@ interface FeedViewProps {
   onOpenDishPreview: (dishName: string, restaurantName: string) => void;
 }
 
+// -------------------------------------------------------------
+// IDENTIFICADOR ESTÁVEL DO USUÁRIO ATUAL (PROTÓTIPO)
+// Regra de interface para o protótipo: controle visual de autoria.
+// Em produção (Fase 2 / Supabase), a autoria será validada via JWT e RLS.
+// -------------------------------------------------------------
+const CURRENT_USER_ID = MOCK_USER_PROFILE.id || 'usr-thiago-jpa';
+const CURRENT_USER_NAME = 'Você (Thiago da Silva)';
+const CURRENT_USER_AVATAR =
+  MOCK_USER_PROFILE.avatarUrl ||
+  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
+
+const STORAGE_KEY = 'zap_lanche_feed_posts_v2';
+const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+
+// Função de persistência segura no localStorage
+const loadPostsFromStorage = (): SocialPost[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return MOCK_POSTS;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      // Normalização defensiva: sincronizar comments e commentsCount
+      return parsed.map((p: SocialPost) => {
+        const defaultPost = MOCK_POSTS.find((m) => m.id === p.id);
+        const comments = Array.isArray(p.comments)
+          ? p.comments
+          : defaultPost?.comments || [];
+        return {
+          ...p,
+          comments,
+          commentsCount: comments.length,
+        };
+      });
+    }
+  } catch (err) {
+    console.warn('Erro ao carregar postagens do localStorage:', err);
+  }
+  return MOCK_POSTS;
+};
+
+const savePostsToStorage = (posts: SocialPost[]): boolean => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+    return true;
+  } catch (err: unknown) {
+    console.error('Falha ao salvar postagens no localStorage:', err);
+    return false;
+  }
+};
+
+// -------------------------------------------------------------
+// UTILITÁRIO: VALIDAÇÃO, REDIMENSIONAMENTO E COMPRESSÃO DE FOTOS
+// Utiliza HTML5 Canvas nativo do navegador para compactar a foto
+// antes de gerar o DataURL (economizando memória no localStorage).
+// -------------------------------------------------------------
+const processAndCompressImage = (
+  file: File,
+  maxWidth = 1200,
+  maxHeight = 1200,
+  quality = 0.75
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    // 1. Validação de tipo de arquivo
+    if (!file.type || !file.type.startsWith('image/')) {
+      reject(new Error('O arquivo selecionado não é uma foto válida. Use JPG, PNG ou WebP.'));
+      return;
+    }
+
+    // 2. Validação rigorosa de tamanho máximo de 2 MB
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      reject(
+        new Error(`A imagem tem ${sizeMB} MB e ultrapassa o limite de 2 MB. Escolha uma foto menor.`)
+      );
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Não foi possível ler o arquivo da galeria.'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Não foi possível decodificar os dados da imagem.'));
+      img.onload = () => {
+        let { width, height } = img;
+
+        // Redimensionar proporcionalmente se exceder os limites
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          // Fallback seguro se contexto 2D falhar
+          resolve(e.target?.result as string);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Compressão em JPEG com qualidade otimizada (reduz 2MB para ~80-140KB)
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
 export const FeedView: React.FC<FeedViewProps> = ({
   restaurants,
   onSelectRestaurantById,
   onOpenDishPreview,
 }) => {
-  const [posts, setPosts] = useState<SocialPost[]>(MOCK_POSTS);
+  // Estado inicial carregado de forma resiliente do localStorage
+  const [posts, setPosts] = useState<SocialPost[]>(() => loadPostsFromStorage());
   const [filterRole, setFilterRole] = useState<'todos' | 'morador' | 'comerciante'>('todos');
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
-  const [postLikes, setPostLikes] = useState<Record<string, { count: number; liked: boolean }>>({
-    'post-1': { count: 142, liked: false },
-    'post-2': { count: 98, liked: true },
-    'post-3': { count: 231, liked: false },
-  });
 
-  // New post simulation
-  const [newPostText, setNewPostText] = useState('');
+  // Estado do formulário de criação
   const [showNewPostForm, setShowNewPostForm] = useState(false);
-  const [postCreatedSuccess, setPostCreatedSuccess] = useState(false);
+  const [newPostText, setNewPostText] = useState('');
+  const [newPostImage, setNewPostImage] = useState<string | null>(null);
+  const [newPostImageName, setNewPostImageName] = useState<string | null>(null);
+  const [isCompressingNewImage, setIsCompressingNewImage] = useState(false);
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(
+    restaurants[0]?.id || 'rest-jorge-jpa'
+  );
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const toggleLike = (postId: string) => {
-    setPostLikes((prev) => {
-      const current = prev[postId] || { count: 10, liked: false };
-      return {
-        ...prev,
-        [postId]: {
-          count: current.liked ? current.count - 1 : current.count + 1,
-          liked: !current.liked,
-        },
-      };
+  // Estado de edição de publicação própria
+  const [editingPost, setEditingPost] = useState<SocialPost | null>(null);
+  const [editText, setEditText] = useState('');
+  const [editImage, setEditImage] = useState<string | null>(null);
+  const [editImageName, setEditImageName] = useState<string | null>(null);
+  const [isCompressingEditImage, setIsCompressingEditImage] = useState(false);
+  const [editFormError, setEditFormError] = useState<string | null>(null);
+
+  // Estado de confirmação de exclusão
+  const [postToDelete, setPostToDelete] = useState<SocialPost | null>(null);
+
+  // Mensagens de feedback (sucesso, aviso ou erro)
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'warning' | 'error';
+    text: string;
+  } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sincronizar persistência no localStorage sempre que o array de postagens mudar
+  useEffect(() => {
+    savePostsToStorage(posts);
+  }, [posts]);
+
+  // Limpar notificação após tempo determinado
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => setNotification(null), 4000);
+    return () => clearTimeout(timer);
+  }, [notification]);
+
+  // Função para verificar se a publicação pertence ao usuário atual
+  // Regra de interface para o protótipo (não substitui autenticação no servidor)
+  const isPostOwner = (post: SocialPost): boolean => {
+    return post.authorId === CURRENT_USER_ID || post.isOwnPost === true;
+  };
+
+  // -------------------------------------------------------------
+  // SELEÇÃO E PRÉ-VISUALIZAÇÃO DE FOTO DA GALERIA (CRIAÇÃO)
+  // -------------------------------------------------------------
+  const handleSelectNewImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFormError(null);
+    setIsCompressingNewImage(true);
+
+    try {
+      const compressedDataUrl = await processAndCompressImage(file);
+      setNewPostImage(compressedDataUrl);
+      setNewPostImageName(file.name);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Falha ao processar a foto.';
+      setFormError(message);
+      setNewPostImage(null);
+      setNewPostImageName(null);
+    } finally {
+      setIsCompressingNewImage(false);
+      // Reset input para permitir selecionar o mesmo arquivo novamente se desejar
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveNewImage = () => {
+    setNewPostImage(null);
+    setNewPostImageName(null);
+    setFormError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // -------------------------------------------------------------
+  // CRIAÇÃO DE NOVA POSTAGEM
+  // Correção fundamental: se o usuário não escolheu foto, publica
+  // sem imagem (imageUrl: undefined). Nunca reutiliza ASSET_BURGER!
+  // -------------------------------------------------------------
+  const handlePublishPost = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPostText.trim()) {
+      setFormError('Escreva uma mensagem ou comentário para compartilhar no feed.');
+      return;
+    }
+
+    const targetRestaurant =
+      restaurants.find((r) => r.id === selectedRestaurantId) || restaurants[0];
+
+    const newPost: SocialPost = {
+      id: `post-user-${Date.now()}`,
+      restaurantId: targetRestaurant?.id || 'rest-jorge-jpa',
+      restaurantName: targetRestaurant?.name || 'Lanchonete do Jorge',
+      restaurantCategory: targetRestaurant?.categoryLabel || 'Lanches de Chapa',
+      neighborhood: targetRestaurant?.neighborhoodName || 'Freguesia (Jacarepaguá)',
+      authorId: CURRENT_USER_ID, // Identificador estável do autor
+      authorName: CURRENT_USER_NAME,
+      authorAvatar: CURRENT_USER_AVATAR,
+      authorRole: 'morador',
+      content: newPostText.trim(),
+      imageUrl: newPostImage || undefined, // Somente foto própria; sem fallback forçado para ASSET_BURGER!
+      likesCount: 1,
+      isLiked: true,
+      commentsCount: 0,
+      comments: [],
+      createdAt: 'Agora mesmo',
+      isOwnPost: true,
+      hasPhotoValidation: Boolean(newPostImage),
+    };
+
+    const updatedPosts = [newPost, ...posts];
+    setPosts(updatedPosts);
+
+    // Tentar persistir
+    const saved = savePostsToStorage(updatedPosts);
+    if (saved) {
+      setNotification({
+        type: 'success',
+        text: 'Sua publicação foi compartilhada e salva no feed do bairro!',
+      });
+    } else {
+      setNotification({
+        type: 'warning',
+        text: 'Publicação exibida na sessão, mas o armazenamento local do navegador está cheio.',
+      });
+    }
+
+    // Limpar formulário
+    setNewPostText('');
+    setNewPostImage(null);
+    setNewPostImageName(null);
+    setFormError(null);
+    setShowNewPostForm(false);
+  };
+
+  // -------------------------------------------------------------
+  // EDIÇÃO DE PUBLICAÇÃO PRÓPRIA
+  // -------------------------------------------------------------
+  const handleStartEdit = (post: SocialPost) => {
+    if (!isPostOwner(post)) return; // Bloqueia edição de outros autores
+    setEditingPost(post);
+    setEditText(post.content);
+    setEditImage(post.imageUrl || null);
+    setEditImageName(post.imageUrl ? 'Foto atual' : null);
+    setEditFormError(null);
+  };
+
+  const handleSelectEditImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setEditFormError(null);
+    setIsCompressingEditImage(true);
+
+    try {
+      const compressedDataUrl = await processAndCompressImage(file);
+      setEditImage(compressedDataUrl);
+      setEditImageName(file.name);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Falha ao processar a foto.';
+      setEditFormError(message);
+    } finally {
+      setIsCompressingEditImage(false);
+      if (editFileInputRef.current) editFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveEditImage = () => {
+    setEditImage(null);
+    setEditImageName(null);
+    if (editFileInputRef.current) editFileInputRef.current.value = '';
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPost) return;
+    if (!isPostOwner(editingPost)) {
+      setEditFormError('Você não tem permissão para editar esta publicação.');
+      return;
+    }
+    if (!editText.trim()) {
+      setEditFormError('O texto da publicação não pode ficar vazio.');
+      return;
+    }
+
+    const updatedPosts = posts.map((p) => {
+      if (p.id === editingPost.id) {
+        return {
+          ...p,
+          content: editText.trim(),
+          imageUrl: editImage || undefined,
+          editedAt: 'Editado agora',
+          hasPhotoValidation: Boolean(editImage),
+        };
+      }
+      return p;
     });
+
+    setPosts(updatedPosts);
+    const saved = savePostsToStorage(updatedPosts);
+
+    if (saved) {
+      setNotification({
+        type: 'success',
+        text: 'Publicação atualizada com sucesso!',
+      });
+    } else {
+      setNotification({
+        type: 'warning',
+        text: 'Alterações aplicadas na sessão, mas houve falha ao gravar no armazenamento local.',
+      });
+    }
+
+    setEditingPost(null);
+  };
+
+  // -------------------------------------------------------------
+  // EXCLUSÃO DE PUBLICAÇÃO PRÓPRIA (COM CONFIRMAÇÃO)
+  // -------------------------------------------------------------
+  const handleConfirmDelete = () => {
+    if (!postToDelete) return;
+    if (!isPostOwner(postToDelete)) {
+      setNotification({
+        type: 'error',
+        text: 'Não é permitido excluir publicações de outros autores.',
+      });
+      setPostToDelete(null);
+      return;
+    }
+
+    const updatedPosts = posts.filter((p) => p.id !== postToDelete.id);
+    setPosts(updatedPosts);
+    savePostsToStorage(updatedPosts);
+
+    setNotification({
+      type: 'success',
+      text: 'Sua publicação foi excluída do feed.',
+    });
+    setPostToDelete(null);
+  };
+
+  // Curtidas persistidas diretamente no post
+  const toggleLike = (postId: string) => {
+    const updatedPosts = posts.map((p) => {
+      if (p.id === postId) {
+        const isLiked = !p.isLiked;
+        const currentCount = p.likesCount || 0;
+        const likesCount = isLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
+        return {
+          ...p,
+          isLiked,
+          likesCount,
+        };
+      }
+      return p;
+    });
+    setPosts(updatedPosts);
+    savePostsToStorage(updatedPosts);
   };
 
   const handleAddComment = (postId: string) => {
     const text = commentInputs[postId]?.trim();
     if (!text) return;
 
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === postId ? { ...p, commentsCount: p.commentsCount + 1 } : p
-      )
-    );
-    setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
-  };
-
-  const handlePublishDemoPost = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPostText.trim()) return;
-
-    const newPost: SocialPost = {
-      id: `post-demo-${Date.now()}`,
-      restaurantId: 'rest-jorge-mooca',
-      restaurantName: 'Lanchonete do Jorge',
-      restaurantCategory: 'Hambúrguer Artesanal',
-      neighborhood: 'Mooca',
-      authorName: 'Você (Thiago da Silva)',
-      authorAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-      authorRole: 'morador',
-      content: newPostText,
-      imageUrl: ASSET_BURGER,
-      likesCount: 1,
-      isLiked: true,
-      commentsCount: 0,
+    const newComment: PostComment = {
+      id: `comm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      authorName: CURRENT_USER_NAME,
+      authorAvatar: CURRENT_USER_AVATAR,
+      text,
       createdAt: 'Agora mesmo',
-      taggedDish: {
-        id: 'm1',
-        name: 'Smash Mooca Monstro',
-        price: 36.9,
-      },
     };
 
-    setPosts([newPost, ...posts]);
-    setPostLikes((prev) => ({ ...prev, [newPost.id]: { count: 1, liked: true } }));
-    setNewPostText('');
-    setShowNewPostForm(false);
-    setPostCreatedSuccess(true);
-    setTimeout(() => setPostCreatedSuccess(false), 3000);
+    const updatedPosts = posts.map((p) => {
+      if (p.id === postId) {
+        const existingComments = Array.isArray(p.comments) ? p.comments : [];
+        const updatedComments = [...existingComments, newComment];
+        return {
+          ...p,
+          comments: updatedComments,
+          commentsCount: updatedComments.length,
+        };
+      }
+      return p;
+    });
+
+    setPosts(updatedPosts);
+    savePostsToStorage(updatedPosts);
+    setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
   };
 
   const filteredPosts = posts.filter((p) => {
@@ -114,64 +470,196 @@ export const FeedView: React.FC<FeedViewProps> = ({
             Feed Gastronômico do Bairro
           </h2>
           <p className="text-xs text-slate-400">
-            Fotos reais, dicas dos vizinhos e novidades fresquinhas das lanchonetes
+            Dicas dos vizinhos, fotos de lanches e novidades das lanchonetes locais
           </p>
         </div>
 
         <button
-          onClick={() => setShowNewPostForm(!showNewPostForm)}
-          className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-orange-600/20"
+          onClick={() => {
+            setShowNewPostForm(!showNewPostForm);
+            setFormError(null);
+          }}
+          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-orange-500/20"
         >
-          <PlusCircle className="w-4 h-4" />
+          <PlusCircle className="w-4 h-4 stroke-[2.5]" />
           <span>Postar Lanche</span>
         </button>
       </div>
 
-      {/* Success banner */}
-      {postCreatedSuccess && (
-        <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2 animate-fade-in">
-          <Check className="w-4 h-4 text-emerald-400" />
-          <span>Sua publicação gastronômica foi compartilhada com o bairro!</span>
+      {/* Notificação dinâmica de Sucesso / Aviso / Erro */}
+      {notification && (
+        <div
+          className={`p-3.5 rounded-2xl border text-xs flex items-center gap-2.5 animate-fade-in shadow-lg ${
+            notification.type === 'success'
+              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+              : notification.type === 'warning'
+              ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+              : 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+          }`}
+        >
+          {notification.type === 'success' && <Check className="w-4 h-4 shrink-0 text-emerald-400" />}
+          {notification.type === 'warning' && (
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+          )}
+          {notification.type === 'error' && (
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+          )}
+          <span className="flex-1 font-medium">{notification.text}</span>
+          <button
+            onClick={() => setNotification(null)}
+            className="p-1 rounded text-slate-400 hover:text-white"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
-      {/* New Post Form Drawer */}
+      {/* ============================================================ */}
+      {/* FORMULÁRIO DE NOVA PUBLICAÇÃO (FOTO DA GALERIA + TEXTO)      */}
+      {/* ============================================================ */}
       {showNewPostForm && (
         <form
-          onSubmit={handlePublishDemoPost}
-          className="p-4 rounded-2xl bg-[#131520] border border-orange-500/30 space-y-3 shadow-xl animate-slide-up"
+          onSubmit={handlePublishPost}
+          className="p-4 sm:p-5 rounded-3xl bg-[#131520] border border-orange-500/40 space-y-3.5 shadow-2xl animate-slide-up"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-orange-400 flex items-center gap-1.5">
+          <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+            <span className="text-xs font-bold text-orange-400 flex items-center gap-1.5 font-display">
               <Sparkles className="w-3.5 h-3.5" />
-              Compartilhar Recomendação no Bairro
+              Compartilhar Recomendação no Feed
             </span>
-            <span className="text-[10px] text-slate-400">Modo Demonstração</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-medium">
+              Você (Thiago)
+            </span>
           </div>
 
-          <textarea
-            value={newPostText}
-            onChange={(e) => setNewPostText(e.target.value)}
-            placeholder="Qual foi o lanche de hoje? Conta o que achou da chapa, do molho ou do atendimento..."
-            className="w-full h-24 p-3 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 resize-none"
-            required
-          />
+          {/* Campo de texto */}
+          <div>
+            <textarea
+              value={newPostText}
+              onChange={(e) => {
+                setNewPostText(e.target.value);
+                if (formError) setFormError(null);
+              }}
+              placeholder="Conta para a vizinhança: qual foi o lanche de hoje? O que achou do sabor, do ponto da carne ou do atendimento?"
+              className="w-full h-24 p-3 text-xs rounded-2xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 resize-none transition-colors"
+              required
+            />
+          </div>
 
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-[11px] text-slate-400">
-              Marcando: <strong className="text-slate-200">Lanchonete do Jorge (Mooca)</strong>
-            </span>
-            <div className="flex gap-2">
+          {/* Selecionar Estabelecimento do Bairro */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+            <label className="text-slate-400 text-[11px] font-semibold">
+              Marcar lanchonete parceira:
+            </label>
+            <select
+              value={selectedRestaurantId}
+              onChange={(e) => setSelectedRestaurantId(e.target.value)}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 text-xs focus:outline-none focus:border-orange-500"
+            >
+              {restaurants.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} ({r.neighborhoodName})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Pré-visualização da Foto Selecionada (se houver) */}
+          {newPostImage && (
+            <div className="relative rounded-2xl overflow-hidden border border-slate-700 bg-slate-950">
+              <div className="relative h-44 sm:h-56 w-full">
+                <img
+                  src={newPostImage}
+                  alt="Pré-visualização do lanche"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              </div>
+
+              {/* Barra de controle da foto anexada */}
+              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between p-2 rounded-xl bg-black/80 backdrop-blur-md border border-slate-700 text-xs">
+                <div className="flex items-center gap-1.5 text-slate-200 truncate pr-2">
+                  <ImageIcon className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <span className="truncate text-[11px]">
+                    {newPostImageName || 'Foto pronta para postar'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium transition-colors"
+                  >
+                    Substituir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemoveNewImage}
+                    className="p-1 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 transition-colors"
+                    title="Remover foto (publicar somente texto)"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mensagem de Erro de Validação de Imagem / Texto */}
+          {formError && (
+            <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
+          {/* Barra de Ações: Botão de Galeria / Foto e Botões de Envio */}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+            {/* Input oculto com trigger nativo de galeria para Android/Desktop */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleSelectNewImage}
+              className="hidden"
+            />
+
+            <button
+              type="button"
+              disabled={isCompressingNewImage}
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-1.5 rounded-xl border border-slate-700 hover:border-orange-500/50 bg-slate-900 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
+            >
+              {isCompressingNewImage ? (
+                <>
+                  <RotateCcw className="w-3.5 h-3.5 animate-spin text-orange-400" />
+                  <span>Otimizando foto...</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="w-4 h-4 text-orange-400" />
+                  <span>{newPostImage ? 'Trocar Foto' : 'Foto da Galeria (Máx 2MB)'}</span>
+                </>
+              )}
+            </button>
+
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setShowNewPostForm(false)}
-                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                onClick={() => {
+                  setShowNewPostForm(false);
+                  setNewPostImage(null);
+                  setFormError(null);
+                }}
+                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 text-xs font-bold rounded-lg bg-orange-600 hover:bg-orange-500 text-white transition-colors"
+                disabled={isCompressingNewImage}
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-orange-600 hover:bg-orange-500 text-white transition-all shadow-md shadow-orange-600/20 disabled:opacity-50"
               >
                 Publicar no Feed
               </button>
@@ -181,10 +669,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
       )}
 
       {/* Role Filter Tabs */}
-      <div className="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-2 text-xs overflow-x-auto pb-1 scrollbar-none">
         <button
           onClick={() => setFilterRole('todos')}
-          className={`px-3 py-1.5 rounded-lg border transition-colors ${
+          className={`px-3 py-1.5 rounded-xl border transition-colors whitespace-nowrap ${
             filterRole === 'todos'
               ? 'bg-orange-500/20 border-orange-500 text-orange-300 font-bold'
               : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -194,31 +682,37 @@ export const FeedView: React.FC<FeedViewProps> = ({
         </button>
         <button
           onClick={() => setFilterRole('morador')}
-          className={`px-3 py-1.5 rounded-lg border transition-colors ${
+          className={`px-3 py-1.5 rounded-xl border transition-colors whitespace-nowrap ${
             filterRole === 'morador'
               ? 'bg-orange-500/20 border-orange-500 text-orange-300 font-bold'
               : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
           }`}
         >
-          Avaliações de Moradores
+          Moradores da Região
         </button>
         <button
           onClick={() => setFilterRole('comerciante')}
-          className={`px-3 py-1.5 rounded-lg border transition-colors ${
+          className={`px-3 py-1.5 rounded-xl border transition-colors whitespace-nowrap ${
             filterRole === 'comerciante'
               ? 'bg-orange-500/20 border-orange-500 text-orange-300 font-bold'
               : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
           }`}
         >
-          Direto da Cozinha / Lojas
+          Direto das Lanchonetes
         </button>
       </div>
 
-      {/* Posts List */}
+      {/* ============================================================ */}
+      {/* LISTAGEM DE POSTAGENS DO FEED                                */}
+      {/* ============================================================ */}
       <div className="space-y-5">
         {filteredPosts.map((post) => {
-          const likeState = postLikes[post.id] || { count: post.likesCount, liked: post.isLiked || false };
+          const isLiked = Boolean(post.isLiked);
+          const likesCount = post.likesCount || 0;
           const isCommentsOpen = activeCommentPostId === post.id;
+          const userOwnsThisPost = isPostOwner(post);
+          const postComments = Array.isArray(post.comments) ? post.comments : [];
+          const commentsCount = postComments.length;
 
           return (
             <article
@@ -233,7 +727,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                   </div>
                   <div>
                     <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
-                      {post.authorName}
+                      <span>{post.authorName}</span>
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
                           post.authorRole === 'morador'
@@ -257,65 +751,96 @@ export const FeedView: React.FC<FeedViewProps> = ({
                       </span>
                       <span>·</span>
                       <span>{post.createdAt}</span>
+                      {post.editedAt && (
+                        <span className="text-amber-400/80 italic">({post.editedAt})</span>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Restaurant Tag shortcut */}
-                <button
-                  onClick={() => onSelectRestaurantById(post.restaurantId)}
-                  className="text-xs font-semibold text-slate-300 hover:text-orange-400 transition-colors text-right max-w-[130px] truncate"
-                >
-                  @{post.restaurantName}
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Restaurant Tag shortcut */}
+                  <button
+                    onClick={() => onSelectRestaurantById(post.restaurantId)}
+                    className="text-xs font-semibold text-slate-300 hover:text-orange-400 transition-colors text-right max-w-[130px] truncate"
+                  >
+                    @{post.restaurantName}
+                  </button>
+
+                  {/* ============================================================ */}
+                  {/* CONTROLES DE EDITAR E EXCLUIR (APENAS PARA O AUTOR DO POST)  */}
+                  {/* Regra de interface do protótipo: outros autores NÃO possuem */}
+                  {/* esses botões no DOM.                                         */}
+                  {/* ============================================================ */}
+                  {userOwnsThisPost && (
+                    <div className="flex items-center gap-1 pl-2 border-l border-slate-800">
+                      <button
+                        onClick={() => handleStartEdit(post)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-slate-800 transition-colors"
+                        title="Editar sua publicação"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setPostToDelete(post)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                        title="Excluir sua publicação"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Post Content */}
-              <div className="p-3.5 sm:p-4 text-xs sm:text-sm text-slate-200 leading-relaxed">
+              <div className="p-3.5 sm:p-4 text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line">
                 {post.content}
               </div>
 
-              {/* Food Image */}
-              <div className="relative h-64 sm:h-80 w-full bg-slate-900 overflow-hidden">
-                <img
-                  src={post.imageUrl}
-                  alt="Foto do lanche"
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+              {/* ============================================================ */}
+              {/* IMAGEM DA PUBLICAÇÃO (RENDERIZADA SOMENTE SE EXISTIR!)       */}
+              {/* Se o post for apenas texto, nenhum bloco vazio é exibido.    */}
+              {/* ============================================================ */}
+              {post.imageUrl && (
+                <div className="relative h-64 sm:h-80 w-full bg-slate-900 overflow-hidden">
+                  <img
+                    src={post.imageUrl}
+                    alt="Foto do lanche compartilhada"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 
-                {/* Tagged Dish Badge */}
-                {post.taggedDish && (
-                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between p-2 rounded-xl bg-black/75 backdrop-blur-md border border-slate-700/80 text-white">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="w-7 h-7 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0">
-                        <ShoppingBag className="w-3.5 h-3.5" />
+                  {/* Tagged Dish Badge */}
+                  {post.taggedDish && (
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between p-2 rounded-xl bg-black/75 backdrop-blur-md border border-slate-700/80 text-white">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <div className="w-7 h-7 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0">
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="truncate">
+                          <span className="text-[10px] text-slate-400 block uppercase tracking-wider">
+                            Prato marcado
+                          </span>
+                          <span className="text-xs font-bold text-white truncate block">
+                            {post.taggedDish.name}
+                          </span>
+                        </div>
                       </div>
-                      <div className="truncate">
-                        <span className="text-[10px] text-slate-400 block uppercase tracking-wider">
-                          Prato marcado
-                        </span>
-                        <span className="text-xs font-bold text-white truncate block">
-                          {post.taggedDish.name}
-                        </span>
-                      </div>
+
+                      <button
+                        onClick={() =>
+                          onOpenDishPreview(post.taggedDish!.name, post.restaurantName)
+                        }
+                        className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-bold shrink-0 transition-colors"
+                      >
+                        Ver no Cardápio
+                      </button>
                     </div>
-
-                    <button
-                      onClick={() =>
-                        onOpenDishPreview(
-                          post.taggedDish!.name,
-                          post.restaurantName
-                        )
-                      }
-                      className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-bold shrink-0 transition-colors"
-                    >
-                      Ver no Cardápio
-                    </button>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
 
               {/* Engagement Controls */}
               <div className="p-3 sm:p-4 flex items-center justify-between border-t border-slate-850">
@@ -324,30 +849,26 @@ export const FeedView: React.FC<FeedViewProps> = ({
                   <button
                     onClick={() => toggleLike(post.id)}
                     className={`flex items-center gap-1.5 text-xs font-semibold transition-colors ${
-                      likeState.liked
-                        ? 'text-rose-500'
-                        : 'text-slate-400 hover:text-white'
+                      isLiked ? 'text-rose-500' : 'text-slate-400 hover:text-white'
                     }`}
                   >
                     <Heart
                       className={`w-5 h-5 transition-transform ${
-                        likeState.liked ? 'fill-rose-500 scale-110' : ''
+                        isLiked ? 'fill-rose-500 scale-110' : ''
                       }`}
                     />
-                    <span className="tabular-nums">{likeState.count}</span>
+                    <span className="tabular-nums">{likesCount}</span>
                   </button>
 
                   {/* Comment Toggle */}
                   <button
                     onClick={() =>
-                      setActiveCommentPostId(
-                        isCommentsOpen ? null : post.id
-                      )
+                      setActiveCommentPostId(isCommentsOpen ? null : post.id)
                     }
                     className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-white transition-colors"
                   >
                     <MessageCircle className="w-5 h-5" />
-                    <span className="tabular-nums">{post.commentsCount}</span>
+                    <span className="tabular-nums">{commentsCount}</span>
                   </button>
                 </div>
 
@@ -362,18 +883,52 @@ export const FeedView: React.FC<FeedViewProps> = ({
               {/* Comments Section Drawer */}
               {isCommentsOpen && (
                 <div className="p-3 sm:p-4 bg-slate-900/80 border-t border-slate-800 space-y-3 animate-fade-in">
-                  <div className="text-xs font-bold text-slate-300">
-                    Comentários da vizinhança
+                  <div className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                    <span>Comentários da vizinhança</span>
+                    <span className="text-[11px] text-slate-400 font-normal">
+                      {commentsCount} {commentsCount === 1 ? 'comentário' : 'comentários'}
+                    </span>
                   </div>
 
-                  <div className="space-y-2 text-xs">
-                    <div className="p-2 rounded-xl bg-slate-850 text-slate-300">
-                      <strong className="text-white block font-medium">
-                        Marcelo Mooca
-                      </strong>
-                      Concordo 100%! O hambúrguer deles é o melhor da Zona Leste.
+                  {commentsCount === 0 ? (
+                    <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-center text-xs text-slate-400">
+                      Nenhum comentário ainda. Seja o primeiro a comentar!
                     </div>
-                  </div>
+                  ) : (
+                    <div className="space-y-2 text-xs max-h-60 overflow-y-auto pr-1">
+                      {postComments.map((comment) => (
+                        <div
+                          key={comment.id}
+                          className="p-2.5 rounded-xl bg-slate-850 text-slate-300 space-y-1"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {comment.authorAvatar ? (
+                                <img
+                                  src={comment.authorAvatar}
+                                  alt={comment.authorName}
+                                  className="w-5 h-5 rounded-full object-cover border border-slate-700"
+                                />
+                              ) : (
+                                <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[10px] text-white font-bold">
+                                  {comment.authorName.charAt(0)}
+                                </div>
+                              )}
+                              <strong className="text-white block font-medium text-[11px]">
+                                {comment.authorName}
+                              </strong>
+                            </div>
+                            <span className="text-[10px] text-slate-400">
+                              {comment.createdAt}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-200 pl-7 leading-relaxed">
+                            {comment.text}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Add comment input */}
                   <div className="flex gap-2 pt-1">
@@ -395,7 +950,9 @@ export const FeedView: React.FC<FeedViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleAddComment(post.id)}
-                      className="p-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white transition-colors"
+                      disabled={!commentInputs[post.id]?.trim()}
+                      className="p-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white transition-colors disabled:opacity-40 disabled:hover:bg-orange-600"
+                      aria-label="Enviar comentário"
                     >
                       <Send className="w-3.5 h-3.5" />
                     </button>
@@ -406,6 +963,175 @@ export const FeedView: React.FC<FeedViewProps> = ({
           );
         })}
       </div>
+
+      {/* ============================================================ */}
+      {/* MODAL DE EDIÇÃO DE PUBLICAÇÃO                                */}
+      {/* ============================================================ */}
+      {editingPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg bg-[#131520] border border-orange-500/40 rounded-3xl p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-amber-400" />
+                <h4 className="font-bold text-sm text-white font-display">
+                  Editar Sua Publicação
+                </h4>
+              </div>
+              <button
+                onClick={() => setEditingPost(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Texto da recomendação:
+                </label>
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  rows={4}
+                  className="w-full p-3 rounded-2xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 resize-none text-xs"
+                  required
+                />
+              </div>
+
+              {/* Gerenciamento da Foto na Edição */}
+              <div className="space-y-2">
+                <label className="block text-slate-300 font-semibold">
+                  Foto do Lanche:
+                </label>
+
+                {editImage ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-700 bg-slate-950">
+                    <div className="h-40 w-full overflow-hidden">
+                      <img
+                        src={editImage}
+                        alt="Foto do lanche editada"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="p-2.5 bg-black/80 flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-slate-300 truncate max-w-[200px]">
+                        {editImageName || 'Foto anexada'}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => editFileInputRef.current?.click()}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium"
+                        >
+                          Substituir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveEditImage}
+                          className="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 text-[11px] font-medium"
+                        >
+                          Remover Foto
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl border border-dashed border-slate-700 bg-slate-900 text-center space-y-2">
+                    <p className="text-slate-400 text-[11px]">
+                      Esta publicação está sem foto no momento.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={isCompressingEditImage}
+                      onClick={() => editFileInputRef.current?.click()}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-orange-400 font-semibold text-xs inline-flex items-center gap-1.5 transition-colors"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      Adicionar Foto da Galeria (Máx 2MB)
+                    </button>
+                  </div>
+                )}
+
+                <input
+                  ref={editFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleSelectEditImage}
+                  className="hidden"
+                />
+              </div>
+
+              {editFormError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{editFormError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingPost(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCompressingEditImage}
+                  className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-md shadow-orange-600/20 disabled:opacity-50"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO                             */}
+      {/* ============================================================ */}
+      {postToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-sm bg-[#131520] border border-rose-500/40 rounded-3xl p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-rose-400">
+              <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-white">
+                  Excluir Publicação?
+                </h4>
+                <span className="text-[11px] text-slate-400">Esta ação não pode ser desfeita</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-900 p-3 rounded-2xl border border-slate-800">
+              "{postToDelete.content.slice(0, 100)}
+              {postToDelete.content.length > 100 ? '...' : ''}"
+            </p>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setPostToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-semibold text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors shadow-md shadow-rose-600/20"
+              >
+                Sim, Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

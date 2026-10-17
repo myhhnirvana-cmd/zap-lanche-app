@@ -11,10 +11,10 @@ export const DemoBadge: React.FC<DemoBadgeProps> = ({ onOpenInfo }) => {
       <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
         <span className="flex items-center gap-1 font-semibold text-amber-400">
           <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-          FASE 1:
+          LANÇAMENTO GRATUITO:
         </span>
         <span className="text-slate-300 truncate">
-          Estrutura Visual e Navegação (Dados Fictícios de Demonstração)
+          Fase 1 Demonstrativa · 100% gratuito para clientes e comerciantes (sem cobranças reais)
         </span>
       </div>
       {onOpenInfo && (

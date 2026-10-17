@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
-import { ActiveTab, Restaurant, MenuItem, Neighborhood } from './types';
+import {
+  ActiveTab,
+  Restaurant,
+  MenuItem,
+  Neighborhood,
+} from './types';
 import { NEIGHBORHOODS, MOCK_RESTAURANTS, MOCK_MENU_ITEMS } from './data/mockData';
+import {
+  loadCurrentNeighborhood,
+  saveCurrentNeighborhood,
+  loadRestaurants,
+  saveRestaurants,
+  loadAllMenuItems,
+} from './data/mockData';
 import { Header } from './components/layout/Header';
 import { BottomNav } from './components/layout/BottomNav';
 import { DemoBadge } from './components/common/DemoBadge';
@@ -16,37 +28,67 @@ import { GitHubGuideModal } from './views/GitHubGuideModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('explorar');
-  const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>(NEIGHBORHOODS[0]);
+  const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>(() =>
+    loadCurrentNeighborhood()
+  );
+  const [restaurants, setRestaurants] = useState<Restaurant[]>(() => loadRestaurants());
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  const [selectedRestaurantInitialTab, setSelectedRestaurantInitialTab] = useState<'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes'>('cardapio');
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
   const [dishModalRestaurant, setDishModalRestaurant] = useState<Restaurant | undefined>(undefined);
-  
   const [isNeighborhoodModalOpen, setIsNeighborhoodModalOpen] = useState(false);
   const [isGitHubGuideOpen, setIsGitHubGuideOpen] = useState(false);
 
+  // Troca de bairro com persistência
+  const handleSelectNeighborhood = (nb: Neighborhood) => {
+    setCurrentNeighborhood(nb);
+    saveCurrentNeighborhood(nb);
+  };
+
+  // Atualização em tempo real de loja (Área do Lojista)
+  const handleUpdateRestaurant = (updated: Restaurant) => {
+    setRestaurants((prev) => {
+      const next = prev.map((r) => (r.id === updated.id ? updated : r));
+      saveRestaurants(next);
+      return next;
+    });
+    if (selectedRestaurant?.id === updated.id) {
+      setSelectedRestaurant(updated);
+    }
+  };
+
   // Navigate to restaurant details
-  const handleSelectRestaurant = (restaurant: Restaurant) => {
-    setSelectedRestaurant(restaurant);
+  const handleSelectRestaurant = (restaurant: Restaurant, initialTab: 'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes' = 'cardapio') => {
+    // Sincroniza com versão mais recente da loja
+    const current = restaurants.find((r) => r.id === restaurant.id) || restaurant;
+    setSelectedRestaurant(current);
+    setSelectedRestaurantInitialTab(initialTab);
     setActiveTab('restaurante');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Navigate to restaurant by ID (e.g. from Feed or Profile)
-  const handleSelectRestaurantById = (id: string) => {
-    const found = MOCK_RESTAURANTS.find((r) => r.id === id) || MOCK_RESTAURANTS[0];
-    handleSelectRestaurant(found);
+  const handleSelectRestaurantById = (id: string, initialTab: 'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes' = 'cardapio') => {
+    const found = restaurants.find((r) => r.id === id) || restaurants[0];
+    handleSelectRestaurant(found, initialTab);
   };
 
   // Open dish preview modal
   const handleSelectDishPreview = (dishName: string, restaurant: Restaurant) => {
-    const restItems = MOCK_MENU_ITEMS[restaurant.id] || MOCK_MENU_ITEMS['rest-jorge-mooca'];
-    const found = restItems.find((i) => i.name.toLowerCase().includes(dishName.toLowerCase())) || restItems[0];
+    const allMenus = loadAllMenuItems();
+    const restItems = allMenus[restaurant.id] || MOCK_MENU_ITEMS[restaurant.id] || [];
+    const found =
+      restItems.find((i) => i.name.toLowerCase().includes(dishName.toLowerCase())) ||
+      restItems[0];
     setSelectedMenuItem(found);
     setDishModalRestaurant(restaurant);
   };
 
   const handleOpenDishByName = (dishName: string, restaurantName: string) => {
-    const restaurant = MOCK_RESTAURANTS.find((r) => r.name.toLowerCase().includes(restaurantName.toLowerCase())) || MOCK_RESTAURANTS[0];
+    const restaurant =
+      restaurants.find((r) =>
+        r.name.toLowerCase().includes(restaurantName.toLowerCase())
+      ) || restaurants[0];
     handleSelectDishPreview(dishName, restaurant);
   };
 
@@ -71,7 +113,7 @@ export default function App() {
         {activeTab === 'explorar' && (
           <ExploreView
             currentNeighborhood={currentNeighborhood}
-            restaurants={MOCK_RESTAURANTS}
+            restaurants={restaurants}
             onSelectRestaurant={handleSelectRestaurant}
             onOpenNeighborhoodModal={() => setIsNeighborhoodModalOpen(true)}
             onSelectDishPreview={handleSelectDishPreview}
@@ -81,6 +123,7 @@ export default function App() {
         {activeTab === 'restaurante' && selectedRestaurant && (
           <RestaurantDetailView
             restaurant={selectedRestaurant}
+            initialTab={selectedRestaurantInitialTab}
             onBack={() => setActiveTab('explorar')}
             onSelectMenuItem={(item) => {
               setSelectedMenuItem(item);
@@ -91,7 +134,7 @@ export default function App() {
 
         {activeTab === 'feed' && (
           <FeedView
-            restaurants={MOCK_RESTAURANTS}
+            restaurants={restaurants}
             onSelectRestaurantById={handleSelectRestaurantById}
             onOpenDishPreview={handleOpenDishByName}
           />
@@ -106,6 +149,8 @@ export default function App() {
 
         {activeTab === 'lojista' && (
           <MerchantView
+            restaurants={restaurants}
+            onUpdateRestaurant={handleUpdateRestaurant}
             onOpenFeedWithNewPost={() => setActiveTab('feed')}
           />
         )}
@@ -131,7 +176,7 @@ export default function App() {
         isOpen={isNeighborhoodModalOpen}
         onClose={() => setIsNeighborhoodModalOpen(false)}
         currentNeighborhood={currentNeighborhood}
-        onSelectNeighborhood={(nb) => setCurrentNeighborhood(nb)}
+        onSelectNeighborhood={handleSelectNeighborhood}
       />
 
       <DishDetailModal

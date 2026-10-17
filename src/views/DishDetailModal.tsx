@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Clock, MessageCircle, Plus, Minus, Check, Sparkles } from 'lucide-react';
 import { MenuItem, Restaurant } from '../types';
+import { loadUserProfile, saveUserProfile } from '../data/mockData';
 
 interface DishDetailModalProps {
   item: MenuItem | null;
@@ -25,9 +26,37 @@ export const DishDetailModal: React.FC<DishDetailModalProps> = ({
     // Generate formatted WhatsApp message text
     const message = `🍔 Olá ${restaurant?.name || 'ZAP LANCHE'}! Vi no Zap Lanche e gostaria de pedir:\n- ${quantity}x ${item.name} (R$ ${total.toFixed(2).replace('.', ',')})\n${observacoes ? `Obs: ${observacoes}\n` : ''}Bairro: ${restaurant?.neighborhoodName || 'Meu Bairro'}\n(Modo Demonstração - Fase 1)`;
     
-    // Copy simulated message or open whatsapp intent safely without window.alert
+    // Copy simulated message safely
     navigator.clipboard?.writeText(message);
     setCopiedZap(true);
+
+    // Conectar circuito: abrir WhatsApp do restaurante
+    if (restaurant?.whatsappDemo) {
+      const cleanNumber = restaurant.whatsappDemo.replace(/\D/g, '');
+      const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+    }
+
+    // Conectar circuito: registra pedido no histórico de pedidos do perfil do usuário
+    try {
+      const user = loadUserProfile();
+      const newOrder = {
+        id: `ord-${Date.now().toString().slice(-4)}`,
+        restaurantId: restaurant?.id || 'rest-jorge-jpa',
+        restaurantName: restaurant?.name || 'Lanchonete do Bairro',
+        date: 'Hoje, pedido via Zap',
+        itemsSummary: `${quantity}x ${item.name}${observacoes ? ` (${observacoes})` : ''}`,
+        total: total,
+        status: 'Concluído' as const,
+      };
+      saveUserProfile({
+        ...user,
+        recentOrders: [newOrder, ...user.recentOrders],
+      });
+    } catch (e) {
+      console.warn('Falha ao registrar pedido no histórico', e);
+    }
+
     setTimeout(() => setCopiedZap(false), 3000);
   };
 
