@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Shield,
   MapPin,
@@ -21,6 +21,13 @@ import {
   Plus,
   Send,
   Power,
+  UserPlus,
+  Mail,
+  Copy,
+  Check,
+  ExternalLink,
+  Loader2,
+  Share2,
 } from 'lucide-react';
 import {
   AdminDemoStats,
@@ -39,12 +46,16 @@ import {
   loadAdminNotices,
   saveAdminNotices,
 } from '../data/mockData';
+import { supabase, isSupabaseConfigured, insertRestaurantToSupabase, fetchRestaurantsFromSupabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AdminViewProps {
   onOpenGitHubGuide: () => void;
+  onRestaurantAdded?: () => void;
 }
 
-export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide }) => {
+export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onRestaurantAdded }) => {
+  const { session, user } = useAuth();
   const [stats, setStats] = useState<AdminDemoStats>(MOCK_ADMIN_STATS);
   const [approvedList, setApprovedList] = useState<Record<string, 'approved' | 'rejected'>>({});
 
@@ -65,6 +76,213 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide }) => {
   const [newNoticeContent, setNewNoticeContent] = useState('');
   const [newNoticeNeighborhood, setNewNoticeNeighborhood] = useState('Todos os Bairros');
   const [showNoticeForm, setShowNoticeForm] = useState(false);
+
+  // Estados para formulário de cadastro de restaurante
+  const [showRegistrationForm, setShowRegistrationForm] = useState(false);
+  const [newRestName, setNewRestName] = useState('');
+  const [newRestNeighborhood, setNewRestNeighborhood] = useState('');
+  const [newRestWhatsapp, setNewRestWhatsapp] = useState('');
+  const [newRestAddress, setNewRestAddress] = useState('');
+  const [newRestDescription, setNewRestDescription] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Estados para formulário de convite de comerciante
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteRestaurantId, setInviteRestaurantId] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccessData, setInviteSuccessData] = useState<{
+    inviteUrl: string;
+    email: string;
+    restaurantName: string;
+    expiresAt?: string;
+    userStatus?: string;
+  } | null>(null);
+  const [hasCopiedInvite, setHasCopiedInvite] = useState(false);
+
+  // Lista de lanchonetes com seus UUIDs reais do Supabase
+  const [availableRestaurants, setAvailableRestaurants] = useState<
+    Array<{ id: string; name: string; neighborhood?: string; owner_profile_id?: string | null }>
+  >([]);
+
+  const loadAvailableRestaurants = async () => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error: restError } = await supabase
+          .from('restaurants')
+          .select('id, name, neighborhood, status, owner_profile_id')
+          .eq('status', 'ativo')
+          .order('name');
+        if (!restError && data && data.length > 0) {
+          setAvailableRestaurants(data);
+          return;
+        }
+      } catch {
+        // Fallback silencioso
+      }
+    }
+    const fallback = await fetchRestaurantsFromSupabase();
+    if (fallback && fallback.length > 0) {
+      setAvailableRestaurants(
+        fallback
+          .filter((r) => r.supabaseId)
+          .map((r) => ({
+            id: r.supabaseId!,
+            name: r.name,
+            neighborhood: r.neighborhoodName,
+            owner_profile_id: null,
+          }))
+      );
+    }
+  };
+
+  useEffect(() => {
+    loadAvailableRestaurants();
+  }, []);
+
+  const handleRegisterRestaurant = async () => {
+    if (!newRestName.trim() || !newRestNeighborhood.trim()) {
+      setError('Nome e Bairro são obrigatórios.');
+      return;
+    }
+    setIsRegistering(true);
+    setError(null);
+    const { data, error: registerError } = await insertRestaurantToSupabase({
+      name: newRestName,
+      neighborhood: newRestNeighborhood,
+      whatsapp: newRestWhatsapp,
+      address: newRestAddress,
+      description: newRestDescription
+    });
+
+    setIsRegistering(false);
+    if (registerError) {
+      setError(registerError.message);
+    } else {
+      setNewRestName('');
+      setNewRestNeighborhood('');
+      setNewRestWhatsapp('');
+      setNewRestAddress('');
+      setNewRestDescription('');
+      setShowRegistrationForm(false);
+      await loadAvailableRestaurants();
+      if (onRestaurantAdded) onRestaurantAdded();
+    }
+  };
+
+  const handleInviteMerchant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteError(null);
+    setInviteSuccessData(null);
+    setHasCopiedInvite(false);
+
+    const trimmedEmail = inviteEmail.trim().toLowerCase();
+    if (!inviteRestaurantId) {
+      setInviteError('Selecione o estabelecimento para o qual o convite será emitido.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
+      setInviteError('Informe um endereço de e-mail válido.');
+      return;
+    }
+
+    // Obtenção da sessão e token de autenticação real do Admin Master
+    let token = session?.access_token;
+    if (!token && supabase) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      token = sessionData.session?.access_token;
+    }
+
+    if (!token) {
+      setInviteError('Sessão expirada ou não autenticada. Faça login novamente como administrador.');
+      return;
+    }
+
+    setIsInviting(true);
+
+    try {
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      };
+      if (anonKey) {
+        headers['apikey'] = anonKey;
+      }
+
+      const response = await fetch('https://ortuxqmqtngkvynmgpch.supabase.co/functions/v1/invite-merchant', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          restaurant_id: inviteRestaurantId,
+          email: trimmedEmail,
+        }),
+      });
+
+      let responseData: any = null;
+      try {
+        responseData = await response.json();
+      } catch {
+        // Resposta não-JSON
+      }
+
+      if (!response.ok) {
+        const msg = responseData?.error || responseData?.message;
+        if (response.status === 401) {
+          setInviteError('Sessão expirada ou não autorizada (401). Faça login novamente como administrador.');
+        } else if (response.status === 403) {
+          setInviteError('Acesso negado (403). Apenas administradores confirmados podem convidar comerciantes.');
+        } else if (response.status === 409) {
+          setInviteError(msg ? `Conflito (409): ${msg}` : 'Conflito (409): Já existe um convite pendente ou este estabelecimento já possui proprietário.');
+        } else if (response.status === 500) {
+          setInviteError(msg ? `Erro no servidor (500): ${msg}` : 'Erro interno no servidor (500) ao emitir o convite.');
+        } else {
+          setInviteError(msg ? `Erro (${response.status}): ${msg}` : `Erro (${response.status}) ao comunicar com o servidor.`);
+        }
+        return;
+      }
+
+      // Sucesso na emissão do convite
+      const targetRest = availableRestaurants.find((r) => r.id === inviteRestaurantId);
+      const returnedInviteUrl = responseData?.invite_url || (responseData?.invitation_token ? `${window.location.origin}/?token=${responseData.invitation_token}` : '');
+
+      setInviteSuccessData({
+        inviteUrl: returnedInviteUrl,
+        email: trimmedEmail,
+        restaurantName: targetRest?.name || 'Estabelecimento Selecionado',
+        expiresAt: responseData?.expires_at,
+        userStatus: responseData?.user_status,
+      });
+
+      setInviteEmail('');
+      setInviteRestaurantId('');
+    } catch (err: any) {
+      setInviteError(err?.message ? `Falha de rede: ${err.message}` : 'Erro de conexão ao contatar a Edge Function.');
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const handleCopyInviteLink = async (url: string) => {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setHasCopiedInvite(true);
+      setTimeout(() => setHasCopiedInvite(false), 3000);
+    } catch {
+      // Falha silenciosa no clipboard
+    }
+  };
+
+  const handleShareWhatsApp = (url: string, restName: string) => {
+    const text = `Olá! Você foi convidado para gerenciar o estabelecimento "${restName}" no ZAP LANCHE.\n\nAcesse o link exclusivo abaixo para concluir seu cadastro:\n${url}`;
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const handleApproveMerchant = (id: string) => {
     setApprovedList((prev) => ({ ...prev, [id]: 'approved' }));
@@ -178,14 +396,236 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide }) => {
           </p>
         </div>
 
-        <button
-          onClick={onOpenGitHubGuide}
-          className="px-3.5 py-2 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-amber-400 flex items-center gap-1.5 transition-colors"
-        >
-          <Database className="w-3.5 h-3.5" />
-          Preparação Supabase (Fase 2)
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={onOpenGitHubGuide}
+            className="px-3.5 py-2 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-amber-400 flex items-center gap-1.5 transition-colors"
+          >
+            <Database className="w-3.5 h-3.5" />
+            Preparação Supabase (Fase 2)
+          </button>
+          <button
+            onClick={() => {
+              setShowInviteForm(!showInviteForm);
+              setShowRegistrationForm(false);
+              setInviteError(null);
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${
+              showInviteForm
+                ? 'bg-amber-400 text-black shadow-md shadow-amber-500/20'
+                : 'bg-amber-500 hover:bg-amber-400 text-black'
+            }`}
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Convidar Comerciante
+          </button>
+          <button
+            onClick={() => {
+              setShowRegistrationForm(!showRegistrationForm);
+              setShowInviteForm(false);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Novo Estabelecimento
+          </button>
+        </div>
       </div>
+
+      {/* Formulário de Convite de Comerciante */}
+      {showInviteForm && (
+        <div className="p-5 rounded-3xl bg-slate-900 border border-amber-500/40 space-y-4 animate-fade-in shadow-xl">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
+                  <UserPlus className="w-4 h-4" />
+                </span>
+                Convidar Comerciante Responsável
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Emita um convite seguro pelo Supabase Auth associado a uma lanchonete cadastrada.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowInviteForm(false);
+                setInviteError(null);
+                setInviteSuccessData(null);
+              }}
+              className="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors"
+            >
+              Fechar
+            </button>
+          </div>
+
+          {inviteSuccessData ? (
+            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-3.5 animate-fade-in">
+              <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Convite emitido com sucesso para {inviteSuccessData.email}!</span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                O convite para o estabelecimento <strong className="text-white">{inviteSuccessData.restaurantName}</strong> foi registrado com segurança no Supabase.
+              </p>
+
+              {inviteSuccessData.inviteUrl ? (
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-semibold text-slate-300">
+                    Link de Convite para o Comerciante (invite_url):
+                  </label>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={inviteSuccessData.inviteUrl}
+                      className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 font-mono text-[11px] text-amber-300 focus:outline-none select-all"
+                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyInviteLink(inviteSuccessData.inviteUrl)}
+                        className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-750"
+                      >
+                        {hasCopiedInvite ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400">Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Copiar Link</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleShareWhatsApp(inviteSuccessData.inviteUrl, inviteSuccessData.restaurantName)}
+                        className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-emerald-600/20"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span>WhatsApp</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400">
+                  O convite foi registrado no banco de dados e processado pelo Supabase Auth.
+                </p>
+              )}
+
+              <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-emerald-500/20">
+                <span className="text-[10px] text-slate-400">
+                  {inviteSuccessData.expiresAt ? `Expira em: ${new Date(inviteSuccessData.expiresAt).toLocaleString('pt-BR')}` : 'Validade de 24 horas.'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInviteSuccessData(null);
+                    setInviteError(null);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold self-end sm:self-auto"
+                >
+                  Convidar Outro Comerciante
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleInviteMerchant} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Estabelecimento Parceiro *
+                  </label>
+                  <select
+                    value={inviteRestaurantId}
+                    onChange={(e) => setInviteRestaurantId(e.target.value)}
+                    required
+                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">Selecione a lanchonete...</option>
+                    {availableRestaurants.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} {r.neighborhood ? `(${r.neighborhood})` : ''} {r.owner_profile_id ? '· [Possui Responsável]' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    E-mail do Comerciante *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      required
+                      placeholder="comerciante@email.com"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-500 placeholder:text-slate-600"
+                    />
+                    <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                  </div>
+                </div>
+              </div>
+
+              {inviteError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-300 text-xs animate-fade-in">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                  <span className="leading-relaxed">{inviteError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowInviteForm(false)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isInviting}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-md shadow-amber-500/20"
+                >
+                  {isInviting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Emitindo Convite...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Emitir Convite</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {showRegistrationForm && (
+        <div className="p-4 rounded-3xl bg-slate-900 border border-orange-500/30 space-y-4">
+          <h3 className="font-bold text-white">Cadastrar Novo Estabelecimento</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input type="text" placeholder="Nome" value={newRestName} onChange={(e) => setNewRestName(e.target.value)} className="p-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs" />
+            <input type="text" placeholder="Bairro" value={newRestNeighborhood} onChange={(e) => setNewRestNeighborhood(e.target.value)} className="p-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs" />
+            <input type="text" placeholder="WhatsApp" value={newRestWhatsapp} onChange={(e) => setNewRestWhatsapp(e.target.value)} className="p-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs" />
+            <input type="text" placeholder="Endereço" value={newRestAddress} onChange={(e) => setNewRestAddress(e.target.value)} className="p-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs" />
+          </div>
+          <textarea placeholder="Descrição" value={newRestDescription} onChange={(e) => setNewRestDescription(e.target.value)} className="w-full p-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs" />
+          {error && <p className="text-xs text-rose-400">{error}</p>}
+          <button onClick={handleRegisterRestaurant} disabled={isRegistering} className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold">
+            {isRegistering ? 'Cadastrando...' : 'Cadastrar'}
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -454,95 +894,9 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide }) => {
       </div>
 
       {/* ============================================================ */}
-      {/* 3. FILA DE APROVAÇÃO DE NOVAS LANCHONETES                    */}
-      {/* ============================================================ */}
-      <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Clock className="w-4 h-4 text-orange-400" />
-              Fila de Aprovação de Novas Lanchonetes
-            </h3>
-            <p className="text-xs text-slate-400">
-              Validar se o estabelecimento realmente opera no bairro antes de liberar o cardápio
-            </p>
-          </div>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30">
-            {stats.pendingApprovals.length} pendentes
-          </span>
-        </div>
-
-        <div className="space-y-3">
-          {stats.pendingApprovals.map((req) => {
-            const status = approvedList[req.id];
-            return (
-              <div
-                key={req.id}
-                className="p-3.5 rounded-2xl bg-slate-900/70 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-sm text-white">
-                      {req.name}
-                    </h4>
-                    <span className="text-[11px] px-2 py-0.2 rounded bg-slate-800 text-orange-400 font-medium">
-                      {req.category}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-slate-400 mt-1 flex items-center gap-2">
-                    <span className="flex items-center gap-1 text-slate-300">
-                      <MapPin className="w-3 h-3 text-orange-400" />
-                      Bairro {req.neighborhood}
-                    </span>
-                    <span>·</span>
-                    <span className="flex items-center gap-1">
-                      <Phone className="w-3 h-3 text-slate-400" />
-                      {req.whatsapp}
-                    </span>
-                    <span>·</span>
-                    <span>{req.requestedAt}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-0 border-slate-800">
-                  {status === 'approved' ? (
-                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Aprovado no Bairro (+3.000 pts Liberados)
-                    </span>
-                  ) : status === 'rejected' ? (
-                    <span className="text-xs font-bold text-rose-400 flex items-center gap-1">
-                      <XCircle className="w-4 h-4" />
-                      Recusado
-                    </span>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => handleRejectMerchant(req.id)}
-                        className="px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-semibold transition-colors"
-                      >
-                        Recusar
-                      </button>
-                      <button
-                        onClick={() => handleApproveMerchant(req.id)}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center gap-1"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Aprovar no Bairro
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ============================================================ */}
       {/* 4. PUBLICAÇÃO & GESTÃO DE AVISOS COMUNITÁRIOS (NOTICES)      */}
       {/* ============================================================ */}
+
       <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div>

@@ -26,6 +26,7 @@ export interface CategoryInfo {
 
 export interface MenuItem {
   id: string;
+  supabaseId?: string;
   restaurantId: string;
   name: string;
   description: string;
@@ -124,6 +125,7 @@ export interface RegionalHighlight {
 
 export interface Restaurant {
   id: string;
+  supabaseId?: string;
   name: string;
   ownerName?: string;
   neighborhoodId: string;

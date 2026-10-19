@@ -233,10 +233,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
               h.neighborhoodName.toLowerCase().includes(currentNeighborhood.name.toLowerCase()) ||
               currentNeighborhood.name.toLowerCase().includes(h.neighborhoodName.toLowerCase())
           );
-          const featured = matchingHl
-            ? restaurants.find((r) => r.id === matchingHl.restaurantId) ||
-              filteredRestaurants.find((r) => r.activeHighlight && r.activeHighlight.status === 'ativo')
-            : filteredRestaurants.find((r) => r.activeHighlight && r.activeHighlight.status === 'ativo');
+          const featured = matchingHl ? restaurants.find((r) => r.id === matchingHl.restaurantId) : null;
 
           if (!featured) return null;
           return (

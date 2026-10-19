@@ -54,8 +54,16 @@ const loadPostsFromStorage = (): SocialPost[] => {
         const comments = Array.isArray(p.comments)
           ? p.comments
           : defaultPost?.comments || [];
+        
+        // Migração pontual de caminhos antigos de imagens no localStorage para /images/
+        let fixedImageUrl = p.imageUrl;
+        if (fixedImageUrl && fixedImageUrl.startsWith('/src/assets/images/')) {
+          fixedImageUrl = fixedImageUrl.replace('/src/assets/images/', '/images/');
+        }
+
         return {
           ...p,
+          imageUrl: fixedImageUrl,
           comments,
           commentsCount: comments.length,
         };

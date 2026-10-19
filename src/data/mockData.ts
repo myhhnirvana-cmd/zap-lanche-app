@@ -17,10 +17,10 @@ import {
 } from '../types';
 
 // Imagens gastronômicas geradas localmente
-export const ASSET_BURGER = '/src/assets/images/brazilian_burger_1792014250928.jpg';
-export const ASSET_PIZZA = '/src/assets/images/artisan_pizza_1792014251217.jpg';
-export const ASSET_DOGAO = '/src/assets/images/brazilian_dogao_1792014252458.jpg';
-export const ASSET_STORE = '/src/assets/images/lanchonete_front_1792014252947.jpg';
+export const ASSET_BURGER = '/images/brazilian_burger_1792014250928.jpg';
+export const ASSET_PIZZA = '/images/artisan_pizza_1792014251217.jpg';
+export const ASSET_DOGAO = '/images/brazilian_dogao_1792014252458.jpg';
+export const ASSET_STORE = '/images/lanchonete_front_1792014252947.jpg';
 
 export const ANTI_FRAUD_RULES = [
   {

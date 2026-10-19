@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ActiveTab,
   Restaurant,
@@ -23,8 +23,11 @@ import { FeedView } from './views/FeedView';
 import { ProfileView } from './views/ProfileView';
 import { MerchantView } from './views/MerchantView';
 import { AdminView } from './views/AdminView';
+import { AdminGate } from './components/auth/AdminGate';
 import { DishDetailModal } from './views/DishDetailModal';
 import { GitHubGuideModal } from './views/GitHubGuideModal';
+import { AcceptInvitationModal } from './components/merchant/AcceptInvitationModal';
+import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase } from './lib/supabase';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('explorar');
@@ -38,6 +41,41 @@ export default function App() {
   const [dishModalRestaurant, setDishModalRestaurant] = useState<Restaurant | undefined>(undefined);
   const [isNeighborhoodModalOpen, setIsNeighborhoodModalOpen] = useState(false);
   const [isGitHubGuideOpen, setIsGitHubGuideOpen] = useState(false);
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
+
+  // Captura do parâmetro de convite (?convite=TOKEN ou ?token=TOKEN) e remoção segura da barra de navegação
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const token = searchParams.get('convite') || searchParams.get('token');
+      if (token && token.trim()) {
+        setPendingInviteToken(token.trim());
+        // Remove o token da URL para não permanecer no histórico nem ser copiado indevidamente
+        const cleanUrl = window.location.pathname + (window.location.hash || '');
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    } catch {
+      // Ignora erro de parsing de URL
+    }
+  }, []);
+
+  // Busca assíncrona dos restaurantes e cardápios no Supabase com fallback transparente para dados locais
+  useEffect(() => {
+    let isMounted = true;
+    async function loadFromSupabase() {
+      const restData = await fetchRestaurantsFromSupabase();
+      const currentList = restData && restData.length > 0 ? restData : restaurants;
+      if (isMounted && restData && restData.length > 0) {
+        setRestaurants(restData);
+      }
+      // Busca produtos disponíveis e correlaciona aos restaurantes pelo UUID
+      await fetchMenuItemsFromSupabase(currentList);
+    }
+    loadFromSupabase();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Troca de bairro com persistência
   const handleSelectNeighborhood = (nb: Neighborhood) => {
@@ -156,9 +194,15 @@ export default function App() {
         )}
 
         {activeTab === 'admin' && (
-          <AdminView
-            onOpenGitHubGuide={() => setIsGitHubGuideOpen(true)}
-          />
+          <AdminGate onOpenGitHubGuide={() => setIsGitHubGuideOpen(true)}>
+            <AdminView
+              onOpenGitHubGuide={() => setIsGitHubGuideOpen(true)}
+              onRestaurantAdded={async () => {
+                const restData = await fetchRestaurantsFromSupabase();
+                if (restData) setRestaurants(restData);
+              }}
+            />
+          </AdminGate>
         )}
       </main>
 
@@ -189,6 +233,25 @@ export default function App() {
         isOpen={isGitHubGuideOpen}
         onClose={() => setIsGitHubGuideOpen(false)}
       />
+
+      {/* Modal de Aceitação de Convite de Comerciante com Confirmação Explícita */}
+      {pendingInviteToken && (
+        <AcceptInvitationModal
+          token={pendingInviteToken}
+          onClose={() => setPendingInviteToken(null)}
+          onAccepted={async (restaurantId) => {
+            setPendingInviteToken(null);
+            const restData = await fetchRestaurantsFromSupabase();
+            if (restData && restData.length > 0) {
+              setRestaurants(restData);
+              const acceptedRest = restData.find((r) => r.supabaseId === restaurantId || r.id === restaurantId);
+              if (acceptedRest) setSelectedRestaurant(acceptedRest);
+            }
+            setActiveTab('lojista');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      )}
     </div>
   );
 }
