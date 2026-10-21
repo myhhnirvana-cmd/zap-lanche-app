@@ -3,8 +3,9 @@ import { Restaurant, MenuItem } from '../types';
 import { MOCK_RESTAURANTS, MOCK_MENU_ITEMS } from '../data/mockData';
 
 // Obtenção das variáveis injetadas via Vite no ambiente cliente
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
+const supabaseUrl = viteEnv.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = viteEnv.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 /**
  * Indica se as credenciais do Supabase estão devidamente configuradas no ambiente.

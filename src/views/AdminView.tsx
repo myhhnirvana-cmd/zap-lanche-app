@@ -205,7 +205,8 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
     setIsInviting(true);
 
     try {
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+      const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
+      const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY as string | undefined;
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,

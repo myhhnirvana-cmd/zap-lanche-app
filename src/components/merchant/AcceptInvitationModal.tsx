@@ -49,8 +49,9 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ortuxqmqtngkvynmgpch.supabase.co';
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
+  const supabaseUrl = viteEnv.VITE_SUPABASE_URL || 'https://ortuxqmqtngkvynmgpch.supabase.co';
+  const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY as string | undefined;
   const functionUrl = `${supabaseUrl}/functions/v1/accept-invitation-`;
 
   // 1. Carrega os dados prévios do convite com segurança para confirmação explícita
