@@ -51,7 +51,7 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ortuxqmqtngkvynmgpch.supabase.co';
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-  const functionUrl = `${supabaseUrl}/functions/v1/accept-invitation`;
+  const functionUrl = `${supabaseUrl}/functions/v1/accept-invitation-`;
 
   // 1. Carrega os dados prévios do convite com segurança para confirmação explícita
   useEffect(() => {
