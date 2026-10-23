@@ -90,12 +90,14 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
   // Estados para formulário de convite de comerciante
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteRestaurantId, setInviteRestaurantId] = useState('');
+  const [inviteMode, setInviteMode] = useState<'email' | 'manual'>('email');
   const [inviteEmail, setInviteEmail] = useState('');
   const [isInviting, setIsInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccessData, setInviteSuccessData] = useState<{
     inviteUrl: string;
-    email: string;
+    email: string | null;
+    code: string | null;
     restaurantName: string;
     expiresAt?: string;
     userStatus?: string;
@@ -184,10 +186,12 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
-      setInviteError('Informe um endereço de e-mail válido.');
-      return;
+    if (inviteMode === 'email') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
+        setInviteError('Informe um endereço de e-mail válido.');
+        return;
+      }
     }
 
     // Obtenção da sessão e token de autenticação real do Admin Master
@@ -209,7 +213,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
       const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY as string | undefined;
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${token}`
       };
       if (anonKey) {
         headers['apikey'] = anonKey;
@@ -220,7 +224,8 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
         headers,
         body: JSON.stringify({
           restaurant_id: inviteRestaurantId,
-          email: trimmedEmail,
+          mode: inviteMode,
+          email: inviteMode === 'email' ? trimmedEmail : null,
         }),
       });
 
@@ -253,7 +258,8 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
 
       setInviteSuccessData({
         inviteUrl: returnedInviteUrl,
-        email: trimmedEmail,
+        email: inviteMode === 'email' ? trimmedEmail : null,
+        code: responseData?.invitation_code || null,
         restaurantName: targetRest?.name || 'Estabelecimento Selecionado',
         expiresAt: responseData?.expires_at,
         userStatus: responseData?.user_status,
@@ -445,7 +451,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
                 Convidar Comerciante Responsável
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Emita um convite seguro pelo Supabase Auth associado a uma lanchonete cadastrada.
+                Emita um convite por e-mail ou gere um código manual seguro para compartilhar.
               </p>
             </div>
             <button
@@ -464,16 +470,53 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
             <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-3.5 animate-fade-in">
               <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Convite emitido com sucesso para {inviteSuccessData.email}!</span>
+                <span>
+                  {inviteSuccessData.email
+                    ? `Convite emitido com sucesso para ${inviteSuccessData.email}!`
+                    : 'Convite manual emitido com sucesso!'}
+                </span>
               </div>
               <p className="text-xs text-slate-300 leading-relaxed">
                 O convite para o estabelecimento <strong className="text-white">{inviteSuccessData.restaurantName}</strong> foi registrado com segurança no Supabase.
               </p>
 
+              {inviteSuccessData.code && (
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-semibold text-slate-300">
+                    Código manual (válido por 24 horas):
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={inviteSuccessData.code}
+                      className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 font-mono text-[11px] text-amber-300 focus:outline-none select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleCopyInviteLink(inviteSuccessData.code!)}
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-750"
+                    >
+                      {hasCopiedInvite ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Copiar Código</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {inviteSuccessData.inviteUrl ? (
                 <div className="space-y-2">
                   <label className="block text-[11px] font-semibold text-slate-300">
-                    Link de Convite para o Comerciante (invite_url):
+                    Link de Convite:
                   </label>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <input
@@ -557,6 +600,22 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
 
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-slate-300">
+                    Tipo de convite *
+                  </label>
+                  <select
+                    value={inviteMode}
+                    onChange={(e) => setInviteMode(e.target.value as 'email' | 'manual')}
+                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="email">Por e-mail</option>
+                    <option value="manual">Manual (sem e-mail)</option>
+                  </select>
+                </div>
+              </div>
+
+              {inviteMode === 'email' ? (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">
                     E-mail do Comerciante *
                   </label>
                   <div className="relative">
@@ -571,8 +630,11 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
                     <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                   </div>
                 </div>
-              </div>
-
+              ) : (
+                <p className="text-xs text-slate-400">
+                  Será gerado um código aleatório válido por 24 horas. Compartilhe-o somente com a pessoa que assumirá o estabelecimento.
+                </p>
+              )}
               {inviteError && (
                 <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-300 text-xs animate-fade-in">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />

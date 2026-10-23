@@ -65,32 +65,42 @@ export const NEIGHBORHOODS: Neighborhood[] = [
  * - Bairros específicos ('freguesia', 'cidade-de-deus', 'taquara'): filtram os estabelecimentos daquele bairro.
  */
 export function isRestaurantInNeighborhood(restaurant: Restaurant, neighborhoodId: string): boolean {
-  if (!neighborhoodId || neighborhoodId === 'todos' || neighborhoodId === 'all') {
+  const normalizedId = String(neighborhoodId ?? '').trim().toLowerCase();
+
+  if (!normalizedId || normalizedId === 'todos' || normalizedId === 'all') {
     return true;
   }
-  if (neighborhoodId === 'jacarepagua') {
+
+  if (normalizedId === 'jacarepagua') {
     // Todos os 4 estabelecimentos demonstrativos operam na macro-região de Jacarepaguá
     return true;
   }
-  if (neighborhoodId === 'freguesia') {
+
+  const neighborhoodName = String(restaurant.neighborhoodName ?? '').trim().toLowerCase();
+  const restaurantNeighborhoodId = String(restaurant.neighborhoodId ?? '').trim().toLowerCase();
+
+  if (normalizedId === 'freguesia') {
     return (
-      restaurant.neighborhoodId === 'freguesia' ||
-      restaurant.neighborhoodName.toLowerCase().includes('freguesia')
+      restaurantNeighborhoodId === 'freguesia' ||
+      neighborhoodName.includes('freguesia')
     );
   }
-  if (neighborhoodId === 'cidade-de-deus') {
+
+  if (normalizedId === 'cidade-de-deus') {
     return (
-      restaurant.neighborhoodId === 'cidade-de-deus' ||
-      restaurant.neighborhoodName.toLowerCase().includes('cidade de deus')
+      restaurantNeighborhoodId === 'cidade-de-deus' ||
+      neighborhoodName.includes('cidade de deus')
     );
   }
-  if (neighborhoodId === 'taquara') {
+
+  if (normalizedId === 'taquara') {
     return (
-      restaurant.neighborhoodId === 'taquara' ||
-      restaurant.neighborhoodName.toLowerCase().includes('taquara')
+      restaurantNeighborhoodId === 'taquara' ||
+      neighborhoodName.includes('taquara')
     );
   }
-  return restaurant.neighborhoodId === neighborhoodId;
+
+  return restaurantNeighborhoodId === normalizedId;
 }
 
 export const CATEGORIES: CategoryInfo[] = [
@@ -1140,13 +1150,20 @@ export function saveLoyaltyWallet(wallet: LoyaltyPointWallet): void {
 // -------------------------------------------------------------
 export const RESTAURANTS_STORAGE_KEY = 'zap_lanche_restaurants_v2';
 
+function isValidRestaurantArray(value: unknown): value is Restaurant[] {
+  return Array.isArray(value) && value.every((item) => {
+    if (!item || typeof item !== 'object') return false;
+    return typeof (item as Partial<Restaurant>).id === 'string' && typeof (item as Partial<Restaurant>).name === 'string';
+  });
+}
+
 export function loadRestaurants(): Restaurant[] {
   if (typeof window === 'undefined') return MOCK_RESTAURANTS;
   try {
     const raw = localStorage.getItem(RESTAURANTS_STORAGE_KEY);
     if (!raw) return MOCK_RESTAURANTS;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length >= 4) {
+    if (isValidRestaurantArray(parsed)) {
       return parsed;
     }
   } catch (e) {

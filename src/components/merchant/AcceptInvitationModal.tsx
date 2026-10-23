@@ -27,7 +27,7 @@ interface InvitationPreviewData {
   restaurant_id: string;
   restaurant_name: string;
   neighborhood: string;
-  invited_email: string;
+  invited_email: string | null;
   expires_at: string;
 }
 
@@ -52,7 +52,7 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
   const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
   const supabaseUrl = viteEnv.VITE_SUPABASE_URL || 'https://ortuxqmqtngkvynmgpch.supabase.co';
   const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY as string | undefined;
-  const functionUrl = `${supabaseUrl}/functions/v1/accept-invitation-`;
+  const functionUrl = `${supabaseUrl}/functions/v1/accept-invitation`;
 
   // 1. Carrega os dados prévios do convite com segurança para confirmação explícita
   useEffect(() => {
@@ -126,13 +126,18 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
   // Normalização para comparação segura de e-mails
   const userEmail = (user?.email || '').toLowerCase().trim();
   const invitedEmail = (previewData?.invited_email || '').toLowerCase().trim();
+  const isManualInvitation = previewData?.invited_email === null;
   const isEmailMatching = Boolean(userEmail && invitedEmail && userEmail === invitedEmail);
 
   // 2. Confirmação explícita e chamada de vinculação à RPC
   const handleConfirmAcceptance = async () => {
-    if (!previewData || !session?.access_token) return;
+    if (!previewData) return;
+    if (!session?.access_token) {
+      setAcceptError('Sessão expirada. Faça login novamente para aceitar o convite.');
+      return;
+    }
 
-    if (!isEmailMatching) {
+    if (!isManualInvitation && !isEmailMatching) {
       setAcceptError(`A conta conectada (${userEmail}) não corresponde ao e-mail convidado (${invitedEmail}).`);
       return;
     }
@@ -143,7 +148,7 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
+eq        'Authorization': `Bearer ${session?.access_token}`
       };
       if (anonKey) headers['apikey'] = anonKey;
 
@@ -306,8 +311,17 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
 
               <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
                 <span className="flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-slate-500" />
-                  Convidado: <strong className="text-slate-200">{previewData.invited_email}</strong>
+                  {isManualInvitation ? (
+                    <>
+                      <ShieldCheck className="w-3.5 h-3.5 text-slate-500" />
+                      Convite manual (sem e-mail)
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-3.5 h-3.5 text-slate-500" />
+                      Convidado: <strong className="text-slate-200">{previewData.invited_email}</strong>
+                    </>
+                  )}
                 </span>
                 <span className="text-[10px] text-slate-500">
                   {previewData.expires_at ? `Expira em 24h` : ''}
@@ -331,8 +345,10 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
                 <div className="flex items-start gap-2 text-amber-300">
                   <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
                   <p className="leading-relaxed">
-                    Para aceitar este convite, é necessário entrar com o e-mail convidado:{' '}
-                    <strong className="text-white underline">{previewData.invited_email}</strong>.
+                    {isManualInvitation
+                      ? 'Entre ou crie uma conta para aceitar este convite manual.'
+                      : <>Para aceitar este convite, é necessário entrar com o e-mail convidado:{' '}
+                        <strong className="text-white underline">{previewData.invited_email}</strong>.</>}
                   </p>
                 </div>
 
@@ -362,7 +378,7 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
             )}
 
             {/* Cenário B: Usuário logado com OUTRO e-mail */}
-            {user && !isEmailMatching && (
+            {user && !isManualInvitation && !isEmailMatching && (
               <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-3 text-xs">
                 <div className="flex items-start gap-2 text-rose-300">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
@@ -386,12 +402,19 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
             )}
 
             {/* Cenário C: Usuário logado com o e-mail CORRETO */}
-            {user && isEmailMatching && (
+            {user && (isManualInvitation || isEmailMatching) && (
               <div className="space-y-4">
+                {!session?.access_token && (
+                  <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs">
+                    Sessão expirada. Faça login novamente antes de aceitar o convite.
+                  </div>
+                )}
                 <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
-                    Conectado com o e-mail convidado: <strong className="text-white">{user.email}</strong>
+                    {isManualInvitation
+                      ? <>Conectado como <strong className="text-white">{user.email || 'usuário autenticado'}</strong>; este convite não exige e-mail específico.</>
+                      : <>Conectado com o e-mail convidado: <strong className="text-white">{user.email}</strong></>}
                   </span>
                 </div>
 
@@ -414,7 +437,7 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
                   </button>
                   <button
                     onClick={handleConfirmAcceptance}
-                    disabled={isAccepting}
+                    disabled={isAccepting || !session?.access_token}
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-extrabold text-xs transition-all shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {isAccepting ? (
@@ -443,7 +466,9 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
           customTitle="Entrar para Aceitar Convite"
           customSubtitle={
             previewData
-              ? `Entre com o e-mail ${previewData.invited_email} para assumir a lanchonete.`
+              ? isManualInvitation
+                ? 'Entre ou crie uma conta para assumir a lanchonete com este convite manual.'
+                : `Entre com o e-mail ${previewData.invited_email} para assumir a lanchonete.`
               : 'Faça login com seu e-mail para prosseguir.'
           }
         />

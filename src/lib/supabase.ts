@@ -196,14 +196,16 @@ export async function fetchMenuItemsFromSupabase(
  * Retorna null caso a string resultante seja vazia ou indefinida.
  */
 export function normalizeSlug(text?: string | null): string | null {
-  if (!text) return null;
-  const normalized = text
+  if (text === undefined || text === null) return null;
+
+  const normalized = String(text)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+
   return normalized || null;
 }
 
