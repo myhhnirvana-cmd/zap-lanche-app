@@ -68,8 +68,19 @@ export default function App() {
       if (isMounted && restData && restData.length > 0) {
         setRestaurants(restData);
       }
-      // Busca produtos disponíveis e correlaciona aos restaurantes pelo UUID
-      await fetchMenuItemsFromSupabase(currentList);
+      const menuData = await fetchMenuItemsFromSupabase(currentList);
+      if (isMounted && menuData && Object.keys(menuData).length > 0) {
+        const next = Object.keys(menuData).reduce<Record<string, MenuItem[]>>((acc, key) => {
+          acc[key] = menuData[key];
+          return acc;
+        }, {});
+        if (Object.keys(next).length > 0) {
+          saveRestaurants(currentList);
+          const menuMap = loadAllMenuItems();
+          const mergedMenu = { ...menuMap, ...next };
+          localStorage.setItem('zap_lanche_menu_items_v2', JSON.stringify(mergedMenu));
+        }
+      }
     }
     loadFromSupabase();
     return () => {

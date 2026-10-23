@@ -96,16 +96,23 @@ Deno.serve(async (req) => {
     );
   }
 
-  const { restaurant_id, email } = body || {};
+  const { restaurant_id, email, mode } = body || {};
+  const invitationMode = mode || (typeof email === "string" ? "email" : null);
 
-  if (!restaurant_id || typeof restaurant_id !== "string" || !email || typeof email !== "string") {
+  if (
+    !restaurant_id ||
+    typeof restaurant_id !== "string" ||
+    (invitationMode !== "email" && invitationMode !== "manual") ||
+    (invitationMode === "email" && (typeof email !== "string" || !email.trim())) ||
+    (invitationMode === "manual" && email !== null)
+  ) {
     return new Response(
-      JSON.stringify({ error: "restaurant_id e email são campos obrigatórios." }),
+      JSON.stringify({ error: "Informe restaurant_id e um e-mail válido ou selecione o modo manual." }),
       { status: 400, headers: corsHeaders }
     );
   }
 
-  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedEmail = invitationMode === "email" ? email.trim().toLowerCase() : null;
 
   // Validação do Restaurante
   const { data: rest, error: restErr } = await supabaseAdmin
@@ -136,25 +143,47 @@ Deno.serve(async (req) => {
   }
 
   // Trata convites anteriores
-  const { data: existingInv } = await supabaseAdmin
+  let existingInvitationQuery = supabaseAdmin
     .from("pending_invitations")
     .select("id, expires_at, status")
     .eq("restaurant_id", restaurant_id)
-    .eq("email", normalizedEmail)
-    .eq("status", "pending")
-    .maybeSingle();
+    .eq("status", "pending");
+
+  existingInvitationQuery = normalizedEmail === null
+    ? existingInvitationQuery.is("email", null)
+    : existingInvitationQuery.eq("email", normalizedEmail);
+
+  const { data: existingInv, error: existingInvError } = await existingInvitationQuery.maybeSingle();
+
+  if (existingInvError) {
+    return new Response(
+      JSON.stringify({ error: "Erro ao consultar convites pendentes." }),
+      { status: 500, headers: corsHeaders }
+    );
+  }
 
   if (existingInv) {
     if (new Date(existingInv.expires_at) > new Date()) {
       return new Response(
-        JSON.stringify({ error: "Já existe um convite pendente válido para este restaurante e e-mail." }),
+        JSON.stringify({
+          error: normalizedEmail === null
+            ? "Já existe um convite manual pendente válido para este restaurante."
+            : "Já existe um convite pendente válido para este restaurante e e-mail.",
+        }),
         { status: 409, headers: corsHeaders }
       );
     }
-    await supabaseAdmin
+    const { error: revokeError } = await supabaseAdmin
       .from("pending_invitations")
       .update({ status: "revoked" })
       .eq("id", existingInv.id);
+
+    if (revokeError) {
+      return new Response(
+        JSON.stringify({ error: "Erro ao revogar o convite expirado." }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
   }
 
   // Gera token seguro de 32 bytes
@@ -174,6 +203,12 @@ Deno.serve(async (req) => {
   });
 
   if (insErr) {
+    if (insErr.code === "23505" && normalizedEmail === null) {
+      return new Response(
+        JSON.stringify({ error: "Já existe um convite manual pendente válido para este restaurante." }),
+        { status: 409, headers: corsHeaders }
+      );
+    }
     return new Response(
       JSON.stringify({ error: "Erro ao registrar convite no banco de dados." }),
       { status: 500, headers: corsHeaders }
@@ -181,15 +216,18 @@ Deno.serve(async (req) => {
   }
 
   // Disparo do convite no Supabase Auth
-  let userStatus = "invited_new_user";
-  const { error: authErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(normalizedEmail, {
-    data: { invited_restaurant_id: restaurant_id },
-  });
+  let userStatus = "manual_code";
+  if (normalizedEmail !== null) {
+    userStatus = "invited_new_user";
+    const { error: authErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(normalizedEmail, {
+      data: { invited_restaurant_id: restaurant_id },
+    });
 
-  if (authErr) {
-    const msg = (authErr.message || "").toLowerCase();
-    if (msg.includes("already") || (authErr as any).code === "email_exists") {
-      userStatus = "existing_user";
+    if (authErr) {
+      const msg = (authErr.message || "").toLowerCase();
+      if (msg.includes("already") || (authErr as any).code === "email_exists") {
+        userStatus = "existing_user";
+      }
     }
   }
 
@@ -202,6 +240,7 @@ Deno.serve(async (req) => {
       message: "Convite registrado com sucesso.",
       user_status: userStatus,
       invite_url: inviteUrl,
+      invitation_code: normalizedEmail === null ? rawToken : null,
       invitation_token: rawToken,
       expires_at: expiresAt.toISOString(),
     }),

@@ -187,16 +187,8 @@ Deno.serve(async (req) => {
 
   const authenticatedUser = userData.user;
 
-  if (!authenticatedUser.email) {
-    return new Response(
-      JSON.stringify({ error: "A conta conectada não possui um endereço de e-mail válido." }),
-      { status: 400, headers: corsHeaders }
-    );
-  }
+  const normalizedUserEmail = authenticatedUser.email?.toLowerCase().trim() ?? null;
 
-  const normalizedUserEmail = authenticatedUser.email.toLowerCase().trim();
-
-  // Executa a procedure RPC com search_path seguro e bloqueios FOR UPDATE
   const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc(
     "accept_invitation_proc",
     {
