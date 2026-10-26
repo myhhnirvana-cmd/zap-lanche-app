@@ -148,7 +148,7 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-eq        'Authorization': `Bearer ${session?.access_token}`
+        'Authorization': `Bearer ${session?.access_token}`
       };
       if (anonKey) headers['apikey'] = anonKey;
 

@@ -24,12 +24,15 @@ import { ProfileView } from './views/ProfileView';
 import { MerchantView } from './views/MerchantView';
 import { AdminView } from './views/AdminView';
 import { AdminGate } from './components/auth/AdminGate';
+import { MerchantGate } from './components/auth/MerchantGate';
 import { DishDetailModal } from './views/DishDetailModal';
 import { GitHubGuideModal } from './views/GitHubGuideModal';
 import { AcceptInvitationModal } from './components/merchant/AcceptInvitationModal';
-import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase } from './lib/supabase';
+import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseConfigured } from './lib/supabase';
+import { useAuth } from './contexts/AuthContext';
 
 export default function App() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('explorar');
   const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>(() =>
     loadCurrentNeighborhood()
@@ -58,6 +61,13 @@ export default function App() {
       // Ignora erro de parsing de URL
     }
   }, []);
+
+  // Redireciona para 'explorar' se o usuário deslogar enquanto estiver na área de comerciante
+  useEffect(() => {
+    if (activeTab === 'lojista' && !user && isSupabaseConfigured) {
+      setActiveTab('explorar');
+    }
+  }, [user, activeTab]);
 
   // Busca assíncrona dos restaurantes e cardápios no Supabase com fallback transparente para dados locais
   useEffect(() => {
@@ -197,11 +207,13 @@ export default function App() {
         )}
 
         {activeTab === 'lojista' && (
-          <MerchantView
-            restaurants={restaurants}
-            onUpdateRestaurant={handleUpdateRestaurant}
-            onOpenFeedWithNewPost={() => setActiveTab('feed')}
-          />
+          <MerchantGate onBackToExplore={() => setActiveTab('explorar')}>
+            <MerchantView
+              restaurants={restaurants}
+              onUpdateRestaurant={handleUpdateRestaurant}
+              onOpenFeedWithNewPost={() => setActiveTab('feed')}
+            />
+          </MerchantGate>
         )}
 
         {activeTab === 'admin' && (

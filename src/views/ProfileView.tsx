@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   MapPin,
@@ -25,23 +25,70 @@ import {
   UserPlus,
   Shield,
   Mail,
+  ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { loadUserProfile } from '../data/mockData';
 import { AuthModal } from '../components/auth/AuthModal';
+import { fetchLoyaltyPoints } from '../lib/supabase';
 
 interface ProfileViewProps {
   onSelectRestaurantById: (id: string, initialTab?: 'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes') => void;
   onOpenGitHubGuide: () => void;
+  onBackToExplore?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
   onSelectRestaurantById,
   onOpenGitHubGuide,
+  onBackToExplore,
 }) => {
   const { user: authUser, profile, profileLoading, profileError, signOut } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [loyaltyData] = useState(() => loadUserProfile());
+  
+  const [realPoints, setRealPoints] = useState<number | null>(null);
+  const [loadingRealPoints, setLoadingRealPoints] = useState(true);
+  const [errorRealPoints, setErrorRealPoints] = useState<string | null>(null);
+
+  const handleBackToExplore = () => {
+    if (onBackToExplore) {
+      onBackToExplore();
+      return;
+    }
+    // Utiliza o mecanismo de navegação que já existe no Header e BottomNav sem recarregar a página
+    const desktopExploreBtn = Array.from(document.querySelectorAll<HTMLButtonElement>('header nav button')).find(
+      (btn) => btn.textContent?.includes('Explorar')
+    );
+    const mobileExploreBtn = document.querySelector<HTMLButtonElement>(
+      'nav[aria-label="Navegação móvel principal"] button:first-child'
+    );
+    const headerLogoBtn = document.querySelector<HTMLButtonElement>('header button');
+
+    if (desktopExploreBtn) {
+      desktopExploreBtn.click();
+    } else if (mobileExploreBtn) {
+      mobileExploreBtn.click();
+    } else if (headerLogoBtn) {
+      headerLogoBtn.click();
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    async function loadPoints() {
+      if (authUser?.id) {
+        const points = await fetchLoyaltyPoints(authUser.id);
+        if (points === null) {
+          setErrorRealPoints('Não foi possível carregar o saldo real.');
+        } else {
+          setRealPoints(points);
+        }
+      }
+      setLoadingRealPoints(false);
+    }
+    loadPoints();
+  }, [authUser]);
 
   if (!authUser) {
     return (
@@ -53,13 +100,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <h2 className="text-xl font-extrabold text-white font-display">Sua Conta ZAP LANCHE</h2>
           <p className="text-xs text-slate-400 leading-relaxed">Faça login com sua conta do Supabase Auth para acessar seu perfil pessoal e privilégios na comunidade.</p>
         </div>
-        <button
-          onClick={() => setIsAuthModalOpen(true)}
-          className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-extrabold text-xs transition-all shadow-md shadow-orange-500/20 flex items-center justify-center gap-2"
-        >
-          <LogIn className="w-4 h-4" />
-          Fazer Login ou Criar Conta
-        </button>
+        <div className="flex flex-col gap-2.5 pt-1">
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-extrabold text-xs transition-all shadow-md shadow-orange-500/20 flex items-center justify-center gap-2"
+          >
+            <LogIn className="w-4 h-4" />
+            Fazer Login ou Criar Conta
+          </button>
+          <button
+            onClick={handleBackToExplore}
+            className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors border border-slate-700/80"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Voltar para Explorar
+          </button>
+        </div>
         <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
       </div>
     );
@@ -193,6 +249,26 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Real Loyalty Points */}
+      <div className="rounded-3xl bg-[#13151f] border border-emerald-500/20 p-6 shadow-xl space-y-4">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <Award className="w-4 h-4 text-emerald-400" />
+          Meus Pontos Reais
+        </h3>
+        {loadingRealPoints ? (
+          <div className="text-xs text-slate-400 text-center py-4">Carregando saldo real...</div>
+        ) : errorRealPoints ? (
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 text-center">
+            {errorRealPoints}
+          </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 text-center">
+            <span className="text-3xl font-extrabold text-emerald-400">{realPoints}</span>
+            <span className="block text-emerald-300/60 text-[10px] uppercase font-bold mt-1">Pontos Disponíveis</span>
+          </div>
+        )}
       </div>
     </div>
   );

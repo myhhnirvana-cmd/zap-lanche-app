@@ -17,7 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   onChangeTab,
 }) => {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isMerchant, signOut } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // Extrai nome de exibição amigável
@@ -83,31 +83,35 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Zone 3: Quick Area Switches (Comerciante / Admin / Auth) */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <button
-            onClick={() => onChangeTab(activeTab === 'lojista' ? 'explorar' : 'lojista')}
-            className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1 ${
-              activeTab === 'lojista'
-                ? 'bg-amber-500/20 border-amber-400 text-amber-300'
-                : 'bg-slate-850 hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
-            }`}
-            title="Área do Comerciante"
-          >
-            <Store className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden xs:inline">Lojista</span>
-          </button>
+          {(isMerchant || isAdmin) && (
+            <button
+              onClick={() => onChangeTab(activeTab === 'lojista' ? 'explorar' : 'lojista')}
+              className={`px-2 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1 ${
+                activeTab === 'lojista'
+                  ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+                  : 'bg-slate-850 hover:bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+              }`}
+              title="Área do Comerciante"
+            >
+              <Store className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden xs:inline">Lojista</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => onChangeTab(activeTab === 'admin' ? 'explorar' : 'admin')}
-            className={`p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium rounded-lg border transition-all flex items-center gap-1 ${
-              activeTab === 'admin'
-                ? 'bg-orange-500/20 border-orange-400 text-orange-300'
-                : 'bg-slate-850 hover:bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
-            }`}
-            title={isAdmin ? "Painel Administrativo Autorizado" : "Painel Administrativo (Exige Autorização)"}
-          >
-            <Shield className={`w-3.5 h-3.5 ${isAdmin ? 'text-amber-400' : 'text-orange-400'}`} />
-            <span className="hidden md:inline">Admin</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => onChangeTab(activeTab === 'admin' ? 'explorar' : 'admin')}
+              className={`p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium rounded-lg border transition-all flex items-center gap-1 ${
+                activeTab === 'admin'
+                  ? 'bg-orange-500/20 border-orange-400 text-orange-300'
+                  : 'bg-slate-850 hover:bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+              title="Painel Administrativo Autorizado"
+            >
+              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden md:inline">Admin</span>
+            </button>
+          )}
 
           {/* Autenticação Real */}
           {user ? (

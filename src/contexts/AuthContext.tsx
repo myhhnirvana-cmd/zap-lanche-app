@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, fetchMerchantRestaurant } from '../lib/supabase';
+import { Restaurant } from '../types';
 
 export interface UserProfileRecord {
   id: string;
@@ -26,6 +27,10 @@ interface AuthContextType {
   profileError: string | null;
   loading: boolean;
   isAdmin: boolean;
+  isMerchant: boolean;
+  merchantRestaurant: Restaurant | null;
+  merchantStoreLoading: boolean;
+  refreshMerchantStore: () => Promise<void>;
   adminDiagnostic: AdminDiagnostic | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, name?: string) => Promise<{ error: string | null; message?: string }>;
@@ -46,14 +51,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [profileLoading, setProfileLoading] = useState<boolean>(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isMerchant, setIsMerchant] = useState<boolean>(false);
+  const [merchantRestaurant, setMerchantRestaurant] = useState<Restaurant | null>(null);
+  const [merchantStoreLoading, setMerchantStoreLoading] = useState<boolean>(false);
   const [adminDiagnostic, setAdminDiagnostic] = useState<AdminDiagnostic | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Busca segura da loja vinculada ao comerciante via restaurants.owner_profile_id
+  const fetchMerchantStore = async (userId: string) => {
+    if (!isSupabaseConfigured || !supabase || !userId) {
+      setMerchantRestaurant(null);
+      return;
+    }
+    setMerchantStoreLoading(true);
+    try {
+      const store = await fetchMerchantRestaurant(userId);
+      setMerchantRestaurant(store);
+    } catch (err) {
+      console.warn('Erro ao carregar loja do comerciante:', err);
+      setMerchantRestaurant(null);
+    } finally {
+      setMerchantStoreLoading(false);
+    }
+  };
+
+  const refreshMerchantStore = async () => {
+    if (user?.id) {
+      await fetchMerchantStore(user.id);
+    }
+  };
 
   // Busca segura do perfil em public.profiles e verificação de admin por ID (auth.uid())
   const fetchUserProfile = async (currentUser: User | null) => {
     if (!currentUser || !isSupabaseConfigured || !supabase) {
       setProfile(null);
       setIsAdmin(false);
+      setIsMerchant(false);
+      setMerchantRestaurant(null);
       setProfileError(null);
       setProfileLoading(false);
       setAdminDiagnostic({ isSessionActive: !!currentUser, error: 'Sem credenciais Supabase', recordFound: false, roleValue: null, isAdminResult: false });
@@ -75,15 +109,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setProfileError('Erro ao consultar perfil: ' + error.message);
         setProfile(null);
         setIsAdmin(false);
+        setIsMerchant(false);
+        setMerchantRestaurant(null);
         diagnostic.error = error.message;
       } else if (!data) {
         setProfile(null);
         setProfileError(null);
         setIsAdmin(false);
+        setIsMerchant(false);
+        setMerchantRestaurant(null);
       } else {
         const rec = data as UserProfileRecord;
         setProfile(rec);
         setIsAdmin(rec.role === 'admin');
+        const merchantRole = rec.role === 'comerciante';
+        setIsMerchant(merchantRole);
+        if (merchantRole) {
+          await fetchMerchantStore(currentUser.id);
+        } else {
+          setMerchantRestaurant(null);
+        }
         diagnostic.recordFound = true;
         diagnostic.roleValue = rec.role;
         diagnostic.isAdminResult = rec.role === 'admin';
@@ -93,6 +138,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setProfileError('Erro inesperado ao carregar perfil.');
       setProfile(null);
       setIsAdmin(false);
+      setIsMerchant(false);
+      setMerchantRestaurant(null);
       diagnostic.error = err.message || 'Erro inesperado';
     } finally {
       setAdminDiagnostic(diagnostic);
@@ -139,6 +186,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setProfile(null);
           setProfileError(null);
           setIsAdmin(false);
+          setIsMerchant(false);
+          setMerchantRestaurant(null);
           setAdminDiagnostic(null);
         }
 
@@ -198,10 +247,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const signOut = async (): Promise<void> => {
     if (!isSupabaseConfigured || !supabase) {
-      setUser(null); setSession(null); setProfile(null); setProfileError(null); setIsAdmin(false); setAdminDiagnostic(null); return;
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      setProfileError(null);
+      setIsAdmin(false);
+      setIsMerchant(false);
+      setMerchantRestaurant(null);
+      setMerchantStoreLoading(false);
+      setAdminDiagnostic(null);
+      return;
     }
     try { await supabase.auth.signOut(); } catch (err) { console.warn('Erro ao encerrar sessão:', err); }
-    finally { setUser(null); setSession(null); setProfile(null); setProfileError(null); setIsAdmin(false); setAdminDiagnostic(null); }
+    finally {
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      setProfileError(null);
+      setIsAdmin(false);
+      setIsMerchant(false);
+      setMerchantRestaurant(null);
+      setMerchantStoreLoading(false);
+      setAdminDiagnostic(null);
+    }
   };
 
   const refreshSession = async (): Promise<void> => {
@@ -217,7 +285,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, profileLoading, profileError, loading, isAdmin, adminDiagnostic, signIn, signUp, signOut, refreshSession }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        profileLoading,
+        profileError,
+        loading,
+        isAdmin,
+        isMerchant,
+        merchantRestaurant,
+        merchantStoreLoading,
+        refreshMerchantStore,
+        adminDiagnostic,
+        signIn,
+        signUp,
+        signOut,
+        refreshSession,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

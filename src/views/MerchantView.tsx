@@ -61,6 +61,8 @@ import {
   saveRestaurantRewards,
 } from '../data/mockData';
 import { optimizeImage, formatBytes } from '../utils/imageOptimizer';
+import { useAuth } from '../contexts/AuthContext';
+import { RestaurantQrCodeCard } from '../components/loyalty/RestaurantQrCodeCard';
 
 interface MerchantViewProps {
   restaurants?: Restaurant[];
@@ -73,10 +75,19 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   onUpdateRestaurant,
   onOpenFeedWithNewPost,
 }) => {
-  const allRestaurants = propRestaurants || loadRestaurants();
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(
-    () => allRestaurants[0]?.id || 'rest-jorge-jpa'
-  );
+  const { user, isAdmin, isMerchant, merchantRestaurant } = useAuth();
+
+  // Comerciante real autenticado gerencia exclusivamente a sua própria loja vinculada
+  const isRealMerchant = Boolean(isMerchant && !isAdmin && merchantRestaurant);
+  const allRestaurants = isRealMerchant && merchantRestaurant
+    ? [merchantRestaurant]
+    : (propRestaurants || loadRestaurants());
+
+  const initialStoreId = isRealMerchant && merchantRestaurant
+    ? merchantRestaurant.id
+    : (allRestaurants[0]?.id || 'rest-jorge-jpa');
+
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(initialStoreId);
 
   const [stats, setStats] = useState<MerchantDemoStats>(() => loadMerchantStats(selectedRestaurantId));
 
@@ -136,6 +147,14 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setCurrentHighlightStatus((storeHl?.status || storeStats.highlightStatus) as HighlightStatus);
     setHighlightHistory(storeStats.highlightHistory);
   };
+
+  // Garante que o comerciante permaneça sempre sincronizado com a sua própria loja
+  useEffect(() => {
+    if (isRealMerchant && merchantRestaurant) {
+      handleSelectStore(merchantRestaurant.id);
+    }
+  }, [isRealMerchant, merchantRestaurant?.id]);
+
   const [selectedDuration, setSelectedDuration] = useState('2 Horas (Exemplo: R$ 10)');
 
   // -------------------------------------------------------------
@@ -790,49 +809,76 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
       )}
 
-      {/* Ferramenta Demonstrativa de Alternância de Lojas & Aviso de Arquitetura de Permissões */}
-      <div className="p-4 rounded-3xl bg-slate-900/95 border border-amber-500/30 space-y-2.5 text-xs shadow-lg">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Banner de Identificação da Loja (Comerciante Real vs Supervisão Admin/Demonstração) */}
+      {isRealMerchant ? (
+        <div className="p-4 rounded-3xl bg-slate-900/95 border border-emerald-500/30 text-xs shadow-lg flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 text-slate-200">
-            <span className="p-2 rounded-xl bg-amber-500/15 text-amber-400 shrink-0">
+            <span className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 shrink-0">
               <Store className="w-4 h-4" />
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-white text-xs sm:text-sm">Área do Lojista Parceiro</span>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] border border-amber-500/30">
-                  Ferramenta de Teste
+                <span className="font-bold text-white text-xs sm:text-sm">Painel do Comerciante</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] border border-emerald-500/30">
+                  Loja Oficial Vinculada
                 </span>
               </div>
               <span className="text-[11px] text-slate-400">
-                Alternador de estabelecimentos ativo para testes das 4 lojas
+                Você está gerenciando exclusivamente <strong>{currentRestaurant.name}</strong> ({currentRestaurant.neighborhoodName})
               </span>
             </div>
           </div>
+        </div>
+      ) : (
+        <div className="p-4 rounded-3xl bg-slate-900/95 border border-amber-500/30 space-y-2.5 text-xs shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 text-slate-200">
+              <span className="p-2 rounded-xl bg-amber-500/15 text-amber-400 shrink-0">
+                <Store className="w-4 h-4" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white text-xs sm:text-sm">
+                    {isAdmin ? 'Supervisão Administrativa de Lojas' : 'Área do Lojista Parceiro'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] border border-amber-500/30">
+                    {isAdmin ? 'Modo Admin' : 'Ferramenta de Teste'}
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  {isAdmin
+                    ? 'Inspecione e gerencie qualquer estabelecimento da plataforma'
+                    : 'Alternador de estabelecimentos ativo para testes das 4 lojas'}
+                </span>
+              </div>
+            </div>
 
-          <div className="flex items-center gap-2 self-stretch sm:self-auto">
-            <span className="text-[11px] text-slate-400 hidden sm:inline">Loja em gestão:</span>
-            <select
-              value={selectedRestaurantId}
-              onChange={(e) => handleSelectStore(e.target.value)}
-              className="flex-1 sm:flex-none px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-medium focus:outline-none focus:border-orange-500 text-xs"
-            >
-              {allRestaurants.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} — {r.neighborhoodName}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2 self-stretch sm:self-auto">
+              <span className="text-[11px] text-slate-400 hidden sm:inline">Loja em gestão:</span>
+              <select
+                value={selectedRestaurantId}
+                onChange={(e) => handleSelectStore(e.target.value)}
+                className="flex-1 sm:flex-none px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-medium focus:outline-none focus:border-orange-500 text-xs"
+              >
+                {allRestaurants.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} — {r.neighborhoodName}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
 
-        <div className="p-3 rounded-2xl bg-black/40 border border-slate-800 text-[11px] text-slate-400 leading-relaxed flex items-start gap-2.5">
-          <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <span>
-            <strong className="text-slate-300">Separação de Papéis na Versão Real:</strong> Em produção, o comerciante terá login único e seguro, restrito estritamente ao identificador da sua própria loja. Clientes não editam lojas, e comerciantes não alteram dados de estabelecimentos vizinhos. Este seletor é uma facilidade do protótipo para demonstração.
-          </span>
+          {!isAdmin && (
+            <div className="p-3 rounded-2xl bg-black/40 border border-slate-800 text-[11px] text-slate-400 leading-relaxed flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <span>
+                <strong className="text-slate-300">Modo Demonstrativo:</strong> Em produção, o comerciante possui acesso restrito estritamente ao identificador da sua própria loja.
+              </span>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Merchant Header Card com Banner & Botão "Editar Minha Loja" */}
       <div className="rounded-3xl bg-[#131520] border border-slate-800 shadow-xl overflow-hidden">
@@ -1115,6 +1161,11 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* ============================================================ */}
+      {/* SEÇÃO OFICIAL: QR CODE DA SUA LOJA (PROGRAMA DE FIDELIDADE)  */}
+      {/* ============================================================ */}
+      <RestaurantQrCodeCard restaurant={currentRestaurant} />
 
       {/* ============================================================ */}
       {/* SEÇÃO PRINCIPAL: PRÊMIOS E FIDELIDADE DA LOJA                */}

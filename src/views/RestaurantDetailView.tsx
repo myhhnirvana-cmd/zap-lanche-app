@@ -20,7 +20,12 @@ import {
   Info,
   Lock,
   X,
+  AlertCircle,
+  Loader2,
+  Camera,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase, isSupabaseConfigured, fetchLoyaltyPoints } from '../lib/supabase';
 import { Restaurant, MenuItem, Promotion, SocialPost, LoyaltyReward, UserProfileDemo } from '../types';
 import {
   MOCK_MENU_ITEMS,
@@ -35,6 +40,8 @@ import {
   loadRestaurantRewards,
   saveRestaurantRewards,
 } from '../data/mockData';
+import { QrCodeScannerModal } from '../components/loyalty/QrCodeScannerModal';
+import { UUID_REGEX, parseAndValidateRestaurantQr } from '../utils/qrCode';
 
 interface RestaurantDetailViewProps {
   restaurant: Restaurant;
@@ -56,17 +63,164 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [showAntiFraudModal, setShowAntiFraudModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfileDemo>(() => loadUserProfile());
   const [rewardsList, setRewardsList] = useState<LoyaltyReward[]>(() => loadRestaurantRewards(restaurant.id));
-  const [showCheckinModal, setShowCheckinModal] = useState(false);
-  const [checkinMessage, setCheckinMessage] = useState<string | null>(null);
 
-  const performCheckin = () => {
+  // Estados do Leitor Real de QR Code e Feedback
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [resultModal, setResultModal] = useState<{
+    status: 'success' | 'error' | 'warning';
+    message: string;
+    pointsAwarded?: number;
+  } | null>(null);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [realTotalPoints, setRealTotalPoints] = useState<number | null>(null);
+  const [realStorePoints, setRealStorePoints] = useState<number | null>(null);
+
+  const { user } = useAuth();
+
+  // Consulta saldo de pontos real no Supabase
+  const loadRealPoints = async () => {
+    if (!isSupabaseConfigured || !user?.id || !supabase) return;
+    try {
+      const total = await fetchLoyaltyPoints(user.id);
+      setRealTotalPoints(total);
+
+      const targetUuid =
+        (restaurant.supabaseId && UUID_REGEX.test(restaurant.supabaseId) && restaurant.supabaseId) ||
+        (restaurant.id && UUID_REGEX.test(restaurant.id) && restaurant.id) ||
+        null;
+
+      if (targetUuid) {
+        const { data } = await supabase
+          .from('loyalty_transactions')
+          .select('points')
+          .eq('profile_id', user.id)
+          .eq('restaurant_id', targetUuid);
+
+        if (data) {
+          const storeSum = data.reduce((sum, item) => sum + (item.points || 0), 0);
+          setRealStorePoints(storeSum);
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar saldo real de fidelidade:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadRealPoints();
+  }, [user?.id, restaurant.id, restaurant.supabaseId]);
+
+  const handleStartCheckin = () => {
+    if (isSupabaseConfigured && !user) {
+      setResultModal({
+        status: 'warning',
+        message: 'Você precisa estar conectado como cliente para registrar seu check-in e acumular pontos reais. Faça login no sistema.',
+      });
+      return;
+    }
+    setIsScannerOpen(true);
+  };
+
+  const handleScanQr = async (scannedText: string) => {
+    // 1. Interrompe o scanner e libera a câmera imediatamente
+    setIsScannerOpen(false);
+
+    // 2. Validação rigorosa do QR Code (formato ZAPLANche://restaurant/<UUID>)
+    const parsed = parseAndValidateRestaurantQr(scannedText);
+    if (!parsed.isValid || !parsed.restaurantId) {
+      setResultModal({
+        status: 'error',
+        message: 'QR Code inválido. Aponte a câmera para o QR Code oficial do ZAP LANCHE.',
+      });
+      return;
+    }
+
+    // 3. Confirmar que o QR corresponde à loja que está sendo visualizada (quando o UUID estiver disponível)
+    const currentRestaurantUuid =
+      (restaurant.supabaseId && UUID_REGEX.test(restaurant.supabaseId) && restaurant.supabaseId) ||
+      (restaurant.id && UUID_REGEX.test(restaurant.id) && restaurant.id) ||
+      null;
+
+    if (currentRestaurantUuid && parsed.restaurantId.toLowerCase() !== currentRestaurantUuid.toLowerCase()) {
+      setResultModal({
+        status: 'error',
+        message: `Este QR Code pertence a outro estabelecimento. Aponte a câmera para o QR Code oficial de ${restaurant.name}.`,
+      });
+      return;
+    }
+
+    // 4. Execução real no Supabase quando configurado
+    if (isSupabaseConfigured && supabase) {
+      if (!user) {
+        setResultModal({
+          status: 'warning',
+          message: 'Você precisa estar conectado como cliente para registrar seu check-in e acumular pontos reais. Faça login no sistema.',
+        });
+        return;
+      }
+
+      setIsCheckingIn(true);
+      try {
+        const { data, error } = await supabase.rpc('register_restaurant_checkin', {
+          p_restaurant_id: parsed.restaurantId,
+        });
+
+        if (error) {
+          console.error('Erro na RPC register_restaurant_checkin:', error);
+          setResultModal({
+            status: 'error',
+            message: 'Não foi possível registrar o check-in. Tente novamente.',
+          });
+          return;
+        }
+
+        let result = data;
+        if (typeof result === 'string') {
+          try {
+            result = JSON.parse(result);
+          } catch {
+            // mantém resultado original se não for JSON string
+          }
+        }
+
+        if (result && result.success === true) {
+          const awarded = typeof result.points_awarded === 'number' ? result.points_awarded : 5;
+          setResultModal({
+            status: 'success',
+            message: result.message || `Check-in realizado com sucesso! 🎉\nVocê ganhou ${awarded} pontos.`,
+            pointsAwarded: awarded,
+          });
+          // Atualiza saldo real através da função de consulta oficial
+          await loadRealPoints();
+        } else {
+          setResultModal({
+            status: 'error',
+            message: result?.message || result?.reason || 'Check-in não autorizado pelo estabelecimento.',
+          });
+        }
+      } catch (err: any) {
+        console.error('Exceção ao executar check-in real:', err);
+        setResultModal({
+          status: 'error',
+          message: err?.message || 'Erro inesperado ao conectar ao servidor de fidelidade.',
+        });
+      } finally {
+        setIsCheckingIn(false);
+      }
+      return;
+    }
+
+    // 5. Fluxo demonstrativo offline (somente quando Supabase não estiver configurado)
     const today = new Date().toISOString().split('T')[0];
     const alreadyChecked = userProfile.checkinHistory.some(
       (c) => c.restaurantId === restaurant.id && c.date === today
     );
 
     if (alreadyChecked) {
-      setCheckinMessage('Você já realizou o check-in neste estabelecimento hoje!');
+      setResultModal({
+        status: 'warning',
+        message: 'Você já realizou o check-in neste estabelecimento hoje!',
+      });
       return;
     }
 
@@ -91,7 +245,11 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
 
     setUserProfile(updatedProfile);
     saveUserProfile(updatedProfile);
-    setCheckinMessage('Check-in realizado com sucesso! Você ganhou 5 pontos.');
+    setResultModal({
+      status: 'success',
+      message: 'Check-in realizado com sucesso! 🎉 Você ganhou 5 pontos. (Modo demonstrativo - offline)',
+      pointsAwarded: 5,
+    });
   };
 
   useEffect(() => {
@@ -110,8 +268,10 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const categoriesInMenu = Array.from(new Set(menuItems.map((m) => m.category)));
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('todos');
 
-  // Customer Loyalty Balances from dynamic profile
-  const customerStorePoints = userProfile.loyaltyWallet.storePoints[restaurant.id] || 0;
+  // Customer Loyalty Balances (usa saldo real do Supabase quando logado e conectado)
+  const customerStorePoints = (isSupabaseConfigured && user && realStorePoints !== null)
+    ? realStorePoints
+    : (userProfile.loyaltyWallet.storePoints[restaurant.id] || 0);
   const customerGlobalPoints = userProfile.loyaltyWallet.globalReferralPoints || 0;
 
   const filteredMenuItems =
@@ -195,10 +355,10 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
           {copiedLink ? 'Link Copiado!' : 'Compartilhar'}
         </button>
         <button
-          onClick={() => setShowCheckinModal(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 border border-orange-500 text-xs font-bold text-white hover:bg-orange-500 transition-colors shadow-md"
+          onClick={handleStartCheckin}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 border border-orange-500 text-xs font-bold text-white transition-colors shadow-md"
         >
-          <CheckCircle2 className="w-3.5 h-3.5" />
+          <Camera className="w-3.5 h-3.5" />
           Fazer check-in
         </button>
       </div>
@@ -566,6 +726,21 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Ação rápida de Check-in com Câmera */}
+              <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="text-xs text-slate-300">
+                  <span className="font-bold text-white block">Está no estabelecimento agora?</span>
+                  <span className="text-[11px] text-slate-400">Escaneie o QR Code oficial no balcão e ganhe 5 pontos a cada 24h.</span>
+                </div>
+                <button
+                  onClick={handleStartCheckin}
+                  className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md shrink-0"
+                >
+                  <Camera className="w-4 h-4" />
+                  Escanear QR Code da Loja
+                </button>
+              </div>
             </div>
 
             {/* Explanation of 70/30 Rule */}
@@ -882,48 +1057,82 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
       )}
 
       {/* ============================================================ */}
-      {/* MODAL: CHECK-IN COM QR CODE DEMONSTRATIVO                    */}
+      {/* LEITOR REAL DE QR CODE DA CÂMERA                             */}
       {/* ============================================================ */}
-      {showCheckinModal && (
+      <QrCodeScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScan={handleScanQr}
+        targetRestaurantName={restaurant.name}
+        isProcessing={isCheckingIn}
+      />
+
+      {/* ============================================================ */}
+      {/* MODAL DE RESULTADO / FEEDBACK DO CHECK-IN                    */}
+      {/* ============================================================ */}
+      {resultModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-sm bg-[#13151f] border border-orange-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white">Check-in na Loja</h3>
-            
-            {checkinMessage ? (
-                <div className="text-center space-y-3">
-                    <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-                    <p className="text-sm text-slate-300">{checkinMessage}</p>
-                    <button 
-                        onClick={() => { setShowCheckinModal(false); setCheckinMessage(null); }}
-                        className="w-full py-2.5 rounded-xl bg-slate-800 text-white font-semibold"
-                    >
-                        Fechar
-                    </button>
+            <div className="text-center space-y-3">
+              {resultModal.status === 'success' && (
+                <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
+                  <CheckCircle2 className="w-10 h-10" />
                 </div>
-            ) : (
-                <>
-                    <p className="text-xs text-slate-400">
-                        Escanear o QR Code de <strong>{restaurant.name}</strong> para ganhar 5 pontos de fidelidade.
-                    </p>
-                    <div className="w-48 h-48 bg-white rounded-2xl mx-auto flex items-center justify-center border-4 border-slate-900">
-                        <span className="text-black font-bold text-xs p-4 text-center">QR Code Demo: {restaurant.name}</span>
-                    </div>
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={() => setShowCheckinModal(false)}
-                            className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold"
-                        >
-                            Cancelar
-                        </button>
-                        <button 
-                            onClick={performCheckin}
-                            className="flex-1 py-2.5 rounded-xl bg-orange-600 text-white font-bold"
-                        >
-                            Simular Leitura
-                        </button>
-                    </div>
-                </>
-            )}
+              )}
+              {resultModal.status === 'warning' && (
+                <div className="w-16 h-16 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                  <Info className="w-10 h-10" />
+                </div>
+              )}
+              {resultModal.status === 'error' && (
+                <div className="w-16 h-16 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400">
+                  <AlertCircle className="w-10 h-10" />
+                </div>
+              )}
+
+              <h3 className="text-lg font-bold text-white font-display">
+                {resultModal.status === 'success'
+                  ? 'Check-in Confirmado!'
+                  : resultModal.status === 'warning'
+                  ? 'Atenção'
+                  : 'Check-in Não Realizado'}
+              </h3>
+
+              {resultModal.pointsAwarded && (
+                <div className="inline-block px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold text-xs border border-emerald-500/30">
+                  +{resultModal.pointsAwarded} pontos adicionados à sua carteira
+                </div>
+              )}
+
+              <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
+                {resultModal.message}
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              {resultModal.status === 'error' && (
+                <button
+                  onClick={() => {
+                    setResultModal(null);
+                    handleStartCheckin();
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  Escanear Novamente
+                </button>
+              )}
+              <button
+                onClick={() => setResultModal(null)}
+                className={`py-2.5 rounded-xl font-semibold text-xs transition-colors ${
+                  resultModal.status === 'error'
+                    ? 'flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    : 'w-full bg-slate-800 hover:bg-slate-700 text-white'
+                }`}
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}

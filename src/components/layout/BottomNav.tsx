@@ -1,6 +1,7 @@
 import React from 'react';
 import { Compass, Flame, User, Store, Shield } from 'lucide-react';
 import { ActiveTab } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface BottomNavProps {
   activeTab: ActiveTab;
@@ -8,6 +9,9 @@ interface BottomNavProps {
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onChangeTab }) => {
+  const { isAdmin, isMerchant } = useAuth();
+  const showMerchantTab = isMerchant || isAdmin;
+
   const tabs = [
     {
       id: 'explorar' as ActiveTab,
@@ -24,21 +28,36 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onChangeTab }) 
       label: 'Meu Perfil',
       icon: User,
     },
-    {
-      id: 'lojista' as ActiveTab,
-      label: 'Comerciante',
-      icon: Store,
-    },
-    {
-      id: 'admin' as ActiveTab,
-      label: 'Painel Admin',
-      icon: Shield,
-    },
+    ...(showMerchantTab
+      ? [
+          {
+            id: 'lojista' as ActiveTab,
+            label: 'Comerciante',
+            icon: Store,
+          },
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            id: 'admin' as ActiveTab,
+            label: 'Painel Admin',
+            icon: Shield,
+          },
+        ]
+      : []),
   ];
+
+  const gridColsClass =
+    tabs.length === 5
+      ? 'grid-cols-5'
+      : tabs.length === 4
+      ? 'grid-cols-4'
+      : 'grid-cols-3';
 
   return (
     <nav aria-label="Navegação móvel principal" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0d0e14]/95 backdrop-blur-lg border-t border-slate-850 px-2 py-1 safe-bottom shadow-2xl">
-      <div className="grid grid-cols-5 items-center max-w-lg mx-auto">
+      <div className={`grid ${gridColsClass} items-center max-w-lg mx-auto`}>
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive =

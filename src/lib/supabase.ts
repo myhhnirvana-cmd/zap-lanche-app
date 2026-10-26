@@ -85,6 +85,7 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
           verifiedNeighborhoodSpot: true,
           bio: row.description || '',
           popularDishes: [],
+          ownerProfileId: row.owner_profile_id || undefined,
         } as Restaurant;
       }
 
@@ -99,12 +100,84 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
         whatsappDemo: row.whatsapp || localMatch.whatsappDemo,
         bannerUrl: row.image_url || localMatch.bannerUrl,
         isOpen: row.status === 'ativo',
+        ownerProfileId: row.owner_profile_id || undefined,
       };
     });
 
     return mergedRestaurants;
   } catch (err) {
     console.warn('Falha na consulta ao Supabase, mantendo dados locais:', err);
+    return null;
+  }
+}
+
+/**
+ * Busca com segurança o restaurante associado ao comerciante autenticado via owner_profile_id.
+ */
+export async function fetchMerchantRestaurant(userId: string): Promise<Restaurant | null> {
+  if (!isSupabaseConfigured || !supabase || !userId) {
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .select('*')
+      .eq('owner_profile_id', userId)
+      .eq('status', 'ativo')
+      .maybeSingle();
+
+    if (error || !data) {
+      return null;
+    }
+
+    const localMatch = MOCK_RESTAURANTS.find(
+      (m) => m.id === data.slug || m.id === data.id
+    );
+
+    if (!localMatch) {
+      return {
+        id: data.slug || data.id,
+        supabaseId: data.id,
+        name: data.name || 'Lanchonete',
+        neighborhoodId: 'todos',
+        neighborhoodName: data.neighborhood || 'Bairro',
+        category: 'hamburguer',
+        categoryLabel: 'Lanches de Bairro',
+        rating: 4.8,
+        reviewCount: 1,
+        deliveryTime: '30-40 min',
+        distanceKm: 1.0,
+        deliveryFee: 0,
+        minOrder: 20.0,
+        priceRange: '$$',
+        bannerUrl: data.image_url || '/src/assets/images/lanchonete_front_1792014252947.jpg',
+        isOpen: data.status === 'ativo',
+        openingHours: '18h às 23h30',
+        address: data.address || '',
+        whatsappDemo: data.whatsapp || '',
+        verifiedNeighborhoodSpot: true,
+        bio: data.description || '',
+        popularDishes: [],
+        ownerProfileId: data.owner_profile_id || undefined,
+      } as Restaurant;
+    }
+
+    return {
+      ...localMatch,
+      id: data.slug || localMatch.id,
+      supabaseId: data.id,
+      name: data.name || localMatch.name,
+      bio: data.description || localMatch.bio,
+      address: data.address || localMatch.address,
+      neighborhoodName: data.neighborhood || localMatch.neighborhoodName,
+      whatsappDemo: data.whatsapp || localMatch.whatsappDemo,
+      bannerUrl: data.image_url || localMatch.bannerUrl,
+      isOpen: data.status === 'ativo',
+      ownerProfileId: data.owner_profile_id || undefined,
+    };
+  } catch (err) {
+    console.warn('Erro ao consultar restaurante do comerciante:', err);
     return null;
   }
 }
@@ -287,5 +360,31 @@ export async function insertRestaurantToSupabase(data: InsertRestaurantInput) {
   }
 
   return { data: inserted, error };
+}
+
+/**
+ * Busca os pontos de fidelidade do usuário na tabela 'public.loyalty_transactions'
+ * do Supabase. Soma o total de pontos baseado na coluna 'points'.
+ */
+export async function fetchLoyaltyPoints(userId: string): Promise<number | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('loyalty_transactions')
+      .select('points')
+      .eq('profile_id', userId);
+
+    if (error) {
+      console.error('Falha na consulta de pontos:', error);
+      return null;
+    }
+
+    // A consulta foi bem-sucedida. data é um array (pode ser vazio []).
+    return (data || []).reduce((sum, item) => sum + (item.points || 0), 0);
+  } catch (err) {
+    console.error('Erro ao consultar pontos:', err);
+    return null;
+  }
 }
 

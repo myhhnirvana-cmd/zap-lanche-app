@@ -150,6 +150,7 @@ export interface Restaurant {
   popularDishes: string[];
   activeHighlight?: RegionalHighlight;
   rewards?: LoyaltyReward[];
+  ownerProfileId?: string;
 }
 
 export interface PostComment {

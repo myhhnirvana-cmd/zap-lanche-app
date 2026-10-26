@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, User as UserIcon, LogIn, UserPlus, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -25,6 +25,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (initialMode) {
+      setMode(initialMode);
+    }
+  }, [initialMode, isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setErrorMessage(null);
+      setSuccessMessage(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -80,22 +93,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-md bg-[#13151f] border border-slate-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Botão Fechar */}
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 p-1.5 rounded-full bg-slate-800/80 hover:bg-slate-750 text-slate-400 hover:text-white transition-colors"
-          title="Fechar"
+          className="absolute top-5 right-5 p-2 rounded-full bg-slate-800/80 hover:bg-slate-750 text-slate-400 hover:text-white transition-colors border border-slate-700/60"
+          title="Fechar formulário"
+          aria-label="Fechar formulário"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Cabeçalho */}
-        <div className="text-left space-y-1 pr-6">
+        <div className="text-left space-y-1 pr-8">
           <div className="flex items-center gap-2">
             <span className="font-extrabold text-lg text-orange-400 font-display">
               {customTitle || (mode === 'login' ? 'Entrar no ZAP LANCHE' : 'Criar Nova Conta')}
@@ -109,31 +127,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </p>
         </div>
 
-        {/* Abas Alternadoras */}
-        <div className="flex rounded-xl bg-slate-900/90 p-1 border border-slate-800 text-xs font-semibold">
+        {/* Abas Alternadoras com alta visibilidade */}
+        <div className="flex rounded-2xl bg-slate-900/90 p-1.5 border border-slate-700/80 text-xs font-semibold shadow-inner">
           <button
             type="button"
             onClick={() => switchMode('login')}
-            className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
               mode === 'login'
-                ? 'bg-orange-500 text-black font-bold shadow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-black font-extrabold shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <LogIn className="w-3.5 h-3.5" />
-            Entrar
+            <LogIn className="w-4 h-4" />
+            <span>Entrar</span>
           </button>
           <button
             type="button"
             onClick={() => switchMode('signup')}
-            className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
               mode === 'signup'
-                ? 'bg-orange-500 text-black font-bold shadow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-black font-extrabold shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <UserPlus className="w-3.5 h-3.5" />
-            Criar Conta
+            <UserPlus className="w-4 h-4" />
+            <span>Criar Conta</span>
           </button>
         </div>
 
@@ -207,29 +225,67 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-extrabold text-xs transition-all shadow-md shadow-orange-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
-          >
-            {isSubmitting ? (
-              <span>Processando...</span>
-            ) : mode === 'login' ? (
-              <>
-                <LogIn className="w-4 h-4" />
-                Entrar
-              </>
-            ) : (
-              <>
-                <UserPlus className="w-4 h-4" />
-                Cadastrar Conta
-              </>
-            )}
-          </button>
+          {/* Botões de Ação com Cancelar Visível */}
+          <div className="flex gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white font-semibold text-xs transition-colors border border-slate-700/80 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex-[2] py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-extrabold text-xs transition-all shadow-md shadow-orange-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <span>Processando...</span>
+              ) : mode === 'login' ? (
+                <>
+                  <LogIn className="w-4 h-4" />
+                  Entrar
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4" />
+                  Cadastrar Conta
+                </>
+              )}
+            </button>
+          </div>
         </form>
 
+        {/* Texto de Alternância no Rodapé */}
+        <div className="text-center pt-1 text-xs text-slate-400">
+          {mode === 'login' ? (
+            <span>
+              Não tem uma conta?{' '}
+              <button
+                type="button"
+                onClick={() => switchMode('signup')}
+                className="text-orange-400 hover:text-orange-300 font-bold underline underline-offset-2 transition-colors ml-0.5"
+              >
+                Criar conta
+              </button>
+            </span>
+          ) : (
+            <span>
+              Já tem uma conta?{' '}
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
+                className="text-orange-400 hover:text-orange-300 font-bold underline underline-offset-2 transition-colors ml-0.5"
+              >
+                Entrar
+              </button>
+            </span>
+          )}
+        </div>
+
         {/* Rodapé informativo */}
-        <div className="text-center pt-2 border-t border-slate-800 text-[11px] text-slate-400">
+        <div className="text-center pt-2 border-t border-slate-800 text-[11px] text-slate-500">
           Autenticação direta e segura via Supabase Auth.
         </div>
       </div>
