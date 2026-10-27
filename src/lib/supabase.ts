@@ -483,4 +483,4 @@ export async function fetchLoyaltyPoints(
 
     return null;
   }
-        }
+}
