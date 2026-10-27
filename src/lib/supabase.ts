@@ -1,26 +1,27 @@
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Restaurant, MenuItem } from '../types';
 import { MOCK_RESTAURANTS, MOCK_MENU_ITEMS } from '../data/mockData';
 
-// Obtenção das variáveis injetadas via Vite no ambiente cliente
-const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
+// Obtenção das variáveis injetadas via Vite no ambiente cliente.
+const viteEnv =
+  typeof import.meta !== 'undefined'
+    ? ((import.meta as any).env ?? {})
+    : {};
+
 const supabaseUrl = viteEnv.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = viteEnv.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 /**
- * Indica se as credenciais do Supabase estão devidamente configuradas no ambiente.
- * Se falso, o aplicativo opera normalmente utilizando os dados de demonstração (mockData).
+ * Indica se as credenciais do Supabase estão configuradas.
  */
 export const isSupabaseConfigured = Boolean(
-  supabaseUrl &&
-  supabaseAnonKey &&
-  supabaseUrl.trim() !== '' &&
-  supabaseAnonKey.trim() !== ''
+  supabaseUrl?.trim() &&
+  supabaseAnonKey?.trim()
 );
 
 /**
  * Instância centralizada do cliente Supabase.
- * Inicializada apenas quando as variáveis de ambiente obrigatórias estiverem presentes.
  */
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!, {
@@ -32,14 +33,13 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
   : null;
 
 /**
- * Nome do bucket padrão configurado no Supabase Storage para armazenamento de imagens.
+ * Bucket padrão de imagens do Supabase Storage.
  */
 export const SUPABASE_STORAGE_BUCKET = 'Zaplanche-images';
 
 /**
- * Busca os restaurantes ativos do Supabase e converte para o tipo Restaurant do aplicativo.
- * Preserva o id antigo (slug) e completa os campos ausentes no banco com os dados locais.
- * Retorna null em caso de falha ou resposta vazia para acionar o fallback transparente.
+ * Busca os restaurantes ativos no Supabase.
+ * Retorna null quando não é possível consultar os dados reais.
  */
 export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | null> {
   if (!isSupabaseConfigured || !supabase) {
@@ -53,12 +53,15 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
       .eq('status', 'ativo');
 
     if (error || !data || data.length === 0) {
+      if (error) {
+        console.error('Falha ao consultar restaurantes:', error.message);
+      }
       return null;
     }
 
     const mergedRestaurants: Restaurant[] = data.map((row: any) => {
       const localMatch = MOCK_RESTAURANTS.find(
-        (m) => m.id === row.slug || m.id === row.id
+        (item) => item.id === row.slug || item.id === row.id
       );
 
       if (!localMatch) {
@@ -77,7 +80,9 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
           deliveryFee: 0,
           minOrder: 20.0,
           priceRange: '$$',
-          bannerUrl: row.image_url || '/src/assets/images/lanchonete_front_1792014252947.jpg',
+          bannerUrl:
+            row.image_url ||
+            '/src/assets/images/lanchonete_front_1792014252947.jpg',
           isOpen: row.status === 'ativo',
           openingHours: '18h às 23h30',
           address: row.address || '',
@@ -96,7 +101,8 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
         name: row.name || localMatch.name,
         bio: row.description || localMatch.bio,
         address: row.address || localMatch.address,
-        neighborhoodName: row.neighborhood || localMatch.neighborhoodName,
+        neighborhoodName:
+          row.neighborhood || localMatch.neighborhoodName,
         whatsappDemo: row.whatsapp || localMatch.whatsappDemo,
         bannerUrl: row.image_url || localMatch.bannerUrl,
         isOpen: row.status === 'ativo',
@@ -106,15 +112,20 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
 
     return mergedRestaurants;
   } catch (err) {
-    console.warn('Falha na consulta ao Supabase, mantendo dados locais:', err);
+    console.warn(
+      'Falha na consulta ao Supabase, mantendo dados locais:',
+      err
+    );
     return null;
   }
 }
 
 /**
- * Busca com segurança o restaurante associado ao comerciante autenticado via owner_profile_id.
+ * Busca o restaurante associado ao comerciante autenticado.
  */
-export async function fetchMerchantRestaurant(userId: string): Promise<Restaurant | null> {
+export async function fetchMerchantRestaurant(
+  userId: string
+): Promise<Restaurant | null> {
   if (!isSupabaseConfigured || !supabase || !userId) {
     return null;
   }
@@ -128,11 +139,17 @@ export async function fetchMerchantRestaurant(userId: string): Promise<Restauran
       .maybeSingle();
 
     if (error || !data) {
+      if (error) {
+        console.error(
+          'Falha ao consultar restaurante do comerciante:',
+          error.message
+        );
+      }
       return null;
     }
 
     const localMatch = MOCK_RESTAURANTS.find(
-      (m) => m.id === data.slug || m.id === data.id
+      (item) => item.id === data.slug || item.id === data.id
     );
 
     if (!localMatch) {
@@ -151,7 +168,9 @@ export async function fetchMerchantRestaurant(userId: string): Promise<Restauran
         deliveryFee: 0,
         minOrder: 20.0,
         priceRange: '$$',
-        bannerUrl: data.image_url || '/src/assets/images/lanchonete_front_1792014252947.jpg',
+        bannerUrl:
+          data.image_url ||
+          '/src/assets/images/lanchonete_front_1792014252947.jpg',
         isOpen: data.status === 'ativo',
         openingHours: '18h às 23h30',
         address: data.address || '',
@@ -170,14 +189,18 @@ export async function fetchMerchantRestaurant(userId: string): Promise<Restauran
       name: data.name || localMatch.name,
       bio: data.description || localMatch.bio,
       address: data.address || localMatch.address,
-      neighborhoodName: data.neighborhood || localMatch.neighborhoodName,
+      neighborhoodName:
+        data.neighborhood || localMatch.neighborhoodName,
       whatsappDemo: data.whatsapp || localMatch.whatsappDemo,
       bannerUrl: data.image_url || localMatch.bannerUrl,
       isOpen: data.status === 'ativo',
       ownerProfileId: data.owner_profile_id || undefined,
     };
   } catch (err) {
-    console.warn('Erro ao consultar restaurante do comerciante:', err);
+    console.warn(
+      'Erro ao consultar restaurante do comerciante:',
+      err
+    );
     return null;
   }
 }
@@ -188,11 +211,7 @@ export async function fetchMerchantRestaurant(userId: string): Promise<Restauran
 export let supabaseMenuCache: Record<string, MenuItem[]> | null = null;
 
 /**
- * Busca produtos ativos da tabela 'public.menu_items' do Supabase.
- * - Filtra por 'available = true'.
- * - Relaciona 'restaurant_id' (UUID) ao restaurante pelo seu 'supabaseId', mantendo o slug em 'restaurantId'.
- * - Completa campos não existentes na tabela com os dados locais quando houver correspondência por nome.
- * - Mantém fallback dos produtos locais caso a consulta falhe ou retorne vazia.
+ * Busca os produtos disponíveis no Supabase e os agrupa por restaurante.
  */
 export async function fetchMenuItemsFromSupabase(
   restaurants: Restaurant[]
@@ -208,30 +227,35 @@ export async function fetchMenuItemsFromSupabase(
       .eq('available', true);
 
     if (error || !data || data.length === 0) {
+      if (error) {
+        console.error('Falha ao consultar produtos:', error.message);
+      }
       return null;
     }
 
-    // Mapa de correspondência UUID -> slug estável do restaurante
     const uuidToSlugMap = new Map<string, string>();
-    for (const r of restaurants) {
-      if (r.supabaseId) {
-        uuidToSlugMap.set(r.supabaseId, r.id);
+
+    for (const restaurant of restaurants) {
+      if (restaurant.supabaseId) {
+        uuidToSlugMap.set(restaurant.supabaseId, restaurant.id);
       }
     }
 
     const groupedMenu: Record<string, MenuItem[]> = {};
 
     for (const row of data) {
-      const restaurantSlug = uuidToSlugMap.get(row.restaurant_id) || row.restaurant_id;
+      const restaurantSlug =
+        uuidToSlugMap.get(row.restaurant_id) || row.restaurant_id;
 
       if (!groupedMenu[restaurantSlug]) {
         groupedMenu[restaurantSlug] = [];
       }
 
-      // Busca correspondência com produto local para preservar campos complementares que não estão na tabela
       const localList = MOCK_MENU_ITEMS[restaurantSlug] || [];
       const localMatch = localList.find(
-        (m) => m.name.trim().toLowerCase() === String(row.name || '').trim().toLowerCase()
+        (item) =>
+          item.name.trim().toLowerCase() ===
+          String(row.name || '').trim().toLowerCase()
       );
 
       const item: MenuItem = {
@@ -240,7 +264,10 @@ export async function fetchMenuItemsFromSupabase(
         restaurantId: restaurantSlug,
         name: row.name || localMatch?.name || 'Produto',
         description: row.description || localMatch?.description || '',
-        price: typeof row.price === 'number' ? row.price : parseFloat(row.price) || (localMatch?.price ?? 0),
+        price:
+          typeof row.price === 'number'
+            ? row.price
+            : parseFloat(row.price) || (localMatch?.price ?? 0),
         originalPrice: localMatch?.originalPrice,
         imageUrl: row.image_url || localMatch?.imageUrl || '',
         category: localMatch?.category || 'Lanches',
@@ -254,22 +281,27 @@ export async function fetchMenuItemsFromSupabase(
     }
 
     supabaseMenuCache = groupedMenu;
-    // Sincroniza em memória com MOCK_MENU_ITEMS para que os componentes existentes consumam sem persistência no localStorage
+
+    // Mantém a compatibilidade com os componentes existentes.
     Object.assign(MOCK_MENU_ITEMS, groupedMenu);
 
     return groupedMenu;
   } catch (err) {
-    console.warn('Falha na consulta de menu_items no Supabase, mantendo dados locais:', err);
+    console.warn(
+      'Falha na consulta de menu_items no Supabase, mantendo dados locais:',
+      err
+    );
     return null;
   }
 }
 
 /**
- * Normaliza uma sequência de texto para formato slug consistente (kebab-case, minúsculas, sem acentos).
- * Retorna null caso a string resultante seja vazia ou indefinida.
+ * Normaliza texto para slug: minúsculas, sem acentos e com hífens.
  */
 export function normalizeSlug(text?: string | null): string | null {
-  if (text === undefined || text === null) return null;
+  if (text === undefined || text === null) {
+    return null;
+  }
 
   const normalized = String(text)
     .normalize('NFD')
@@ -294,26 +326,33 @@ export interface InsertRestaurantInput {
 }
 
 /**
- * Insere um novo restaurante no Supabase.
- * - ID gerado exclusivamente pelo banco (DEFAULT gen_random_uuid()).
- * - Não associa automaticamente a nenhum proprietário sem indicação explícita.
- * - Normaliza o slug e trata conflitos de unicidade reutilizando a permissão de valor NULL.
- * - Retorna a resposta real do Supabase para validação no frontend.
+ * Insere um restaurante no Supabase.
  */
-export async function insertRestaurantToSupabase(data: InsertRestaurantInput) {
+export async function insertRestaurantToSupabase(
+  data: InsertRestaurantInput
+) {
   if (!isSupabaseConfigured || !supabase) {
-    return { data: null, error: new Error('Supabase não configurado') };
+    return {
+      data: null,
+      error: new Error('Supabase não configurado'),
+    };
   }
 
   const trimmedName = data.name?.trim();
   const trimmedNeighborhood = data.neighborhood?.trim();
 
   if (!trimmedName || !trimmedNeighborhood) {
-    return { data: null, error: new Error('Nome e bairro são obrigatórios para cadastro') };
+    return {
+      data: null,
+      error: new Error(
+        'Nome e bairro são obrigatórios para cadastro'
+      ),
+    };
   }
 
-  // Gera slug a partir do valor informado ou a partir do nome; mantém null se não for possível
-  const baseSlug = data.slug ? normalizeSlug(data.slug) : normalizeSlug(trimmedName);
+  const baseSlug = data.slug
+    ? normalizeSlug(data.slug)
+    : normalizeSlug(trimmedName);
 
   const payload = {
     name: trimmedName,
@@ -333,29 +372,48 @@ export async function insertRestaurantToSupabase(data: InsertRestaurantInput) {
     .select()
     .single();
 
-  // Tratamento de conflito na restrição UNIQUE da coluna 'slug' (código PostgreSQL 23505)
-  if (error && (error.code === '23505' || error.message?.toLowerCase().includes('slug')) && payload.slug) {
-    // 1. Tenta sufixo aleatório curto para preservar o slug
+  if (
+    error &&
+    (error.code === '23505' ||
+      error.message?.toLowerCase().includes('slug')) &&
+    payload.slug
+  ) {
     const suffix = Math.random().toString(36).substring(2, 6);
+
     const retryWithSuffix = await supabase
       .from('restaurants')
-      .insert([{ ...payload, slug: `${payload.slug}-${suffix}` }])
+      .insert([
+        {
+          ...payload,
+          slug: `${payload.slug}-${suffix}`,
+        },
+      ])
       .select()
       .single();
 
     if (!retryWithSuffix.error) {
-      return { data: retryWithSuffix.data, error: null };
+      return {
+        data: retryWithSuffix.data,
+        error: null,
+      };
     }
 
-    // 2. Como a coluna 'slug' aceita NULL, envia null sem criar slug forçado
     const retryWithNull = await supabase
       .from('restaurants')
-      .insert([{ ...payload, slug: null }])
+      .insert([
+        {
+          ...payload,
+          slug: null,
+        },
+      ])
       .select()
       .single();
 
     if (!retryWithNull.error) {
-      return { data: retryWithNull.data, error: null };
+      return {
+        data: retryWithNull.data,
+        error: null,
+      };
     }
   }
 
@@ -363,11 +421,28 @@ export async function insertRestaurantToSupabase(data: InsertRestaurantInput) {
 }
 
 /**
- * Busca os pontos de fidelidade do usuário na tabela 'public.loyalty_transactions'
- * do Supabase. Soma o total de pontos baseado na coluna 'points'.
+ * Consulta e soma os pontos reais do usuário autenticado.
+ *
+ * Retorna:
+ * - número, incluindo zero, quando a consulta funciona;
+ * - null quando ocorre erro ou o Supabase não está configurado.
+ *
+ * Os logs ajudam a distinguir erro de consulta de uma resposta vazia.
  */
-export async function fetchLoyaltyPoints(userId: string): Promise<number | null> {
-  if (!isSupabaseConfigured || !supabase) return null;
+export async function fetchLoyaltyPoints(
+  userId: string
+): Promise<number | null> {
+  if (!isSupabaseConfigured || !supabase) {
+    console.error(
+      'PONTOS REAIS: Supabase não está configurado neste ambiente.'
+    );
+    return null;
+  }
+
+  if (!userId?.trim()) {
+    console.error('PONTOS REAIS: userId está vazio.');
+    return null;
+  }
 
   try {
     const { data, error } = await supabase
@@ -376,15 +451,36 @@ export async function fetchLoyaltyPoints(userId: string): Promise<number | null>
       .eq('profile_id', userId);
 
     if (error) {
-      console.error('Falha na consulta de pontos:', error);
+      console.error('FALHA REAL loyalty_transactions:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+        userId,
+      });
+
       return null;
     }
 
-    // A consulta foi bem-sucedida. data é um array (pode ser vazio []).
-    return (data || []).reduce((sum, item) => sum + (item.points || 0), 0);
+    const rows = data ?? [];
+    const total = rows.reduce(
+      (sum, item) => sum + (Number(item.points) || 0),
+      0
+    );
+
+    console.info('SUCESSO loyalty_transactions:', {
+      userId,
+      quantidade: rows.length,
+      total,
+    });
+
+    return total;
   } catch (err) {
-    console.error('Erro ao consultar pontos:', err);
+    console.error('EXCEÇÃO ao consultar pontos reais:', {
+      userId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+
     return null;
   }
-}
-
+        }
