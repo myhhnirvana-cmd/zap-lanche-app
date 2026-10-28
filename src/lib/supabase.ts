@@ -420,6 +420,130 @@ export async function insertRestaurantToSupabase(
   return { data: inserted, error };
 }
 
+export let lastLoyaltyError: {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+} | null = null;
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function mapDbRowToMenuItem(row: any, originalInput?: Partial<MenuItem>): MenuItem {
+  return {
+    id: row.id,
+    supabaseId: row.id,
+    restaurantId: originalInput?.restaurantId || row.restaurant_id,
+    name: row.name || originalInput?.name || 'Produto',
+    description: row.description ?? originalInput?.description ?? '',
+    price:
+      typeof row.price === 'number'
+        ? row.price
+        : parseFloat(row.price) || (originalInput?.price ?? 0),
+    originalPrice: originalInput?.originalPrice,
+    imageUrl: row.image_url ?? originalInput?.imageUrl ?? '',
+    category: originalInput?.category || 'Lanches',
+    isAvailable: row.available ?? originalInput?.isAvailable ?? true,
+    isPopular: originalInput?.isPopular,
+    badge: originalInput?.badge,
+    prepTimeMinutes: originalInput?.prepTimeMinutes ?? 20,
+  };
+}
+
+/**
+ * Cria um item de cardápio no Supabase.
+ * A tabela public.menu_items contém exclusivamente as colunas:
+ * id, restaurant_id, name, description, price, image_url, available, created_at.
+ */
+export async function insertMenuItem(item: Omit<MenuItem, 'id'> & { restaurantId: string }) {
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
+
+  let resolvedRestaurantId = item.restaurantId;
+
+  // Se o identificador passado for um slug, busca o UUID real da loja
+  if (!UUID_REGEX.test(resolvedRestaurantId)) {
+    try {
+      const { data: rest } = await supabase
+        .from('restaurants')
+        .select('id')
+        .or(`slug.eq.${resolvedRestaurantId},id.eq.${resolvedRestaurantId}`)
+        .maybeSingle();
+
+      if (rest?.id) {
+        resolvedRestaurantId = rest.id;
+      }
+    } catch {
+      // Mantém resolvedRestaurantId original em caso de falha de consulta
+    }
+  }
+
+  const payload = {
+    restaurant_id: resolvedRestaurantId,
+    name: item.name.trim(),
+    description: item.description?.trim() || null,
+    price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price)) || 0,
+    image_url: item.imageUrl?.trim() || null,
+    available: item.isAvailable ?? true,
+  };
+
+  const { data, error } = await supabase
+    .from('menu_items')
+    .insert([payload])
+    .select()
+    .single();
+
+  if (error || !data) {
+    return { data: null, error };
+  }
+
+  return { data: mapDbRowToMenuItem(data, item), error: null };
+}
+
+/**
+ * Atualiza um item de cardápio no Supabase.
+ * Envia exclusivamente as colunas reais da tabela public.menu_items.
+ */
+export async function updateMenuItem(item: MenuItem) {
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
+
+  const targetId = item.supabaseId || item.id;
+
+  const payload = {
+    name: item.name.trim(),
+    description: item.description?.trim() || null,
+    price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price)) || 0,
+    image_url: item.imageUrl?.trim() || null,
+    available: item.isAvailable ?? true,
+  };
+
+  const { data, error } = await supabase
+    .from('menu_items')
+    .update(payload)
+    .eq('id', targetId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    return { data: null, error };
+  }
+
+  return { data: mapDbRowToMenuItem(data, item), error: null };
+}
+
+/**
+ * Exclui um item de cardápio no Supabase.
+ */
+export async function deleteMenuItem(itemId: string) {
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
+
+  const { error } = await supabase
+    .from('menu_items')
+    .delete()
+    .eq('id', itemId);
+
+  return { error };
+}
+
 /**
  * Consulta e soma os pontos reais do usuário autenticado.
  *
@@ -432,7 +556,10 @@ export async function insertRestaurantToSupabase(
 export async function fetchLoyaltyPoints(
   userId: string
 ): Promise<number | null> {
+  lastLoyaltyError = null;
+
   if (!isSupabaseConfigured || !supabase) {
+    lastLoyaltyError = { message: 'Supabase não está configurado neste ambiente.' };
     console.error(
       'PONTOS REAIS: Supabase não está configurado neste ambiente.'
     );
@@ -440,6 +567,7 @@ export async function fetchLoyaltyPoints(
   }
 
   if (!userId?.trim()) {
+    lastLoyaltyError = { message: 'userId está vazio.' };
     console.error('PONTOS REAIS: userId está vazio.');
     return null;
   }
@@ -451,6 +579,13 @@ export async function fetchLoyaltyPoints(
       .eq('profile_id', userId);
 
     if (error) {
+      lastLoyaltyError = {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      };
+
       console.error('FALHA REAL loyalty_transactions:', {
         message: error.message,
         details: error.details,
@@ -476,9 +611,12 @@ export async function fetchLoyaltyPoints(
 
     return total;
   } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    lastLoyaltyError = { message: errMessage };
+
     console.error('EXCEÇÃO ao consultar pontos reais:', {
       userId,
-      message: err instanceof Error ? err.message : String(err),
+      message: errMessage,
     });
 
     return null;

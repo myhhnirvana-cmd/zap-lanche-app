@@ -152,7 +152,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0c0d12] text-slate-100 flex flex-col font-sans selection:bg-orange-500/30 selection:text-orange-200">
+    <div className="min-h-screen bg-bg-primary text-text-primary flex flex-col font-sans selection:bg-orange-500/30 selection:text-orange-200">
       {/* Phase 1 Demonstration Badge */}
       <DemoBadge onOpenInfo={() => setIsGitHubGuideOpen(true)} />
 

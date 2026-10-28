@@ -9,7 +9,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
-import { fetchLoyaltyPoints } from '../lib/supabase';
+import { fetchLoyaltyPoints, lastLoyaltyError } from '../lib/supabase';
+import { ThemeSelector } from '../components/common/ThemeSelector';
+import { GuideSection } from '../components/common/GuideSection';
 
 interface ProfileViewProps {
   onSelectRestaurantById: (
@@ -99,9 +101,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
       if (points === null) {
         setRealPoints(null);
-        setErrorRealPoints(
-          'Não foi possível carregar o saldo real.'
-        );
+        if (lastLoyaltyError) {
+          if (lastLoyaltyError.code === '42501') {
+            setErrorRealPoints(
+              'Erro 42501 (Permissão negada): A tabela public.loyalty_transactions precisa do comando SQL: GRANT SELECT ON public.loyalty_transactions TO authenticated; no painel do Supabase.'
+            );
+          } else {
+            const codeStr = lastLoyaltyError.code ? `[Cod: ${lastLoyaltyError.code}] ` : '';
+            const msgStr = lastLoyaltyError.message || 'Erro desconhecido';
+            const detailsStr = lastLoyaltyError.details ? ` (${lastLoyaltyError.details})` : '';
+            setErrorRealPoints(`Não foi possível carregar o saldo real. ${codeStr}${msgStr}${detailsStr}`);
+          }
+        } else {
+          setErrorRealPoints(
+            'Não foi possível carregar o saldo real.'
+          );
+        }
       } else {
         // Zero é um saldo real válido e deve ser exibido normalmente.
         setRealPoints(points);
@@ -310,9 +325,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       </div>
 
       {/* Pontos reais */}
-      <div className="rounded-3xl bg-[#13151f] border border-emerald-500/20 p-6 shadow-xl space-y-4">
+      <div className="rounded-3xl bg-bg-surface border border-emerald-500/20 p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
             <Award className="w-4 h-4 text-emerald-400" />
             Meus Pontos
           </h3>
@@ -323,7 +338,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
 
         {loadingRealPoints ? (
-          <div className="text-xs text-slate-400 text-center py-6">
+          <div className="text-xs text-text-secondary text-center py-6">
             Carregando saldo...
           </div>
         ) : errorRealPoints ? (
@@ -343,6 +358,34 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Aparência */}
+      <div className="rounded-3xl bg-bg-surface border border-border-muted p-6 shadow-xl space-y-4">
+        <ThemeSelector />
+      </div>
+
+      {/* Guia de Orientação por Perfil */}
+      {profile.role === 'comerciante' ? (
+        <GuideSection
+          title="Como gerenciar no ZAP LANCHE"
+          steps={[
+            "Gerencie seu estabelecimento pelo painel do comerciante.",
+            "Atualize cardápio, produtos e promoções pelas funções disponíveis.",
+            "Acompanhe sua presença e informações no ZAP LANCHE.",
+            "Use o aplicativo para manter seu comércio atualizado para os clientes."
+          ]}
+        />
+      ) : (
+        <GuideSection
+          title="Como aproveitar o ZAP LANCHE"
+          steps={[
+            "Explore os bairros e encontre seus lanches favoritos.",
+            "Acumule pontos reais fazendo check-in e consumindo.",
+            "Troque seus pontos por recompensas exclusivas na loja.",
+            "Apoie os negócios da sua vizinhança."
+          ]}
+        />
+      )}
     </div>
   );
 };

@@ -63,6 +63,9 @@ import {
 import { optimizeImage, formatBytes } from '../utils/imageOptimizer';
 import { useAuth } from '../contexts/AuthContext';
 import { RestaurantQrCodeCard } from '../components/loyalty/RestaurantQrCodeCard';
+import { GuideSection } from '../components/common/GuideSection';
+import { CheckInQrSection } from '../components/merchant/CheckInQrSection';
+import { insertMenuItem, updateMenuItem, deleteMenuItem } from '../lib/supabase';
 
 interface MerchantViewProps {
   restaurants?: Restaurant[];
@@ -394,7 +397,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   };
 
   // Salvar Produto (Criar ou Editar)
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!prodName.trim()) {
@@ -409,30 +412,32 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
     const parsedOrig = prodOriginalPrice ? parseFloat(prodOriginalPrice.replace(',', '.')) : undefined;
 
-    let updatedList: MenuItem[];
-
     if (editingProduct) {
-      updatedList = menuItems.map((item) =>
-        item.id === editingProduct.id
-          ? {
-              ...item,
-              name: prodName.trim(),
-              description: prodDescription.trim(),
-              price: parsedPrice,
-              originalPrice: parsedOrig && parsedOrig > parsedPrice ? parsedOrig : undefined,
-              category: prodCategory,
-              badge: prodBadge.trim() || undefined,
-              prepTimeMinutes: parseInt(prodPrepTime) || 20,
-              isAvailable: prodIsAvailable,
-              imageUrl: prodImageUrl || item.imageUrl,
-            }
-          : item
-      );
+      const updatedItem: MenuItem = {
+        ...editingProduct,
+        name: prodName.trim(),
+        description: prodDescription.trim(),
+        price: parsedPrice,
+        originalPrice: parsedOrig && parsedOrig > parsedPrice ? parsedOrig : undefined,
+        category: prodCategory,
+        badge: prodBadge.trim() || undefined,
+        prepTimeMinutes: parseInt(prodPrepTime) || 20,
+        isAvailable: prodIsAvailable,
+        imageUrl: prodImageUrl || editingProduct.imageUrl,
+      };
+
+      const { data, error } = await updateMenuItem(updatedItem);
+      if (error || !data) {
+        setProdFormError('Erro ao atualizar produto: ' + (error?.message || 'Falha ao atualizar'));
+        return;
+      }
+      
+      const updatedList = menuItems.map((item) => (item.id === editingProduct.id ? data : item));
+      setMenuItems(updatedList);
       showToast(`Produto "${prodName.trim()}" atualizado no cardápio!`);
     } else {
-      const newItem: MenuItem = {
-        id: `m-${Date.now()}`,
-        restaurantId: selectedRestaurantId,
+      const newItem = {
+        restaurantId: currentRestaurant.supabaseId || selectedRestaurantId,
         name: prodName.trim(),
         description: prodDescription.trim(),
         price: parsedPrice,
@@ -442,38 +447,57 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         prepTimeMinutes: parseInt(prodPrepTime) || 20,
         isAvailable: prodIsAvailable,
         imageUrl: prodImageUrl || currentRestaurant.bannerUrl,
-        isPopular: false,
       };
-      updatedList = [newItem, ...menuItems];
+
+      const { data, error } = await insertMenuItem(newItem);
+      if (error || !data) {
+        setProdFormError('Erro ao adicionar produto: ' + (error?.message || 'Falha ao adicionar'));
+        return;
+      }
+      
+      const updatedList = [data, ...menuItems];
+      setMenuItems(updatedList);
       showToast(`Novo produto "${prodName.trim()}" adicionado com sucesso!`);
     }
 
-    setMenuItems(updatedList);
-    saveRestaurantMenu(selectedRestaurantId, updatedList);
     setIsProductModalOpen(false);
   };
 
   // Excluir Produto do Cardápio
-  const handleConfirmDeleteProduct = () => {
+  const handleConfirmDeleteProduct = async () => {
     if (!deletingProduct) return;
+    
+    const { error } = await deleteMenuItem(deletingProduct.supabaseId || deletingProduct.id);
+    if (error) {
+      showToast('Erro ao excluir produto: ' + error.message, 'error');
+      setDeletingProduct(null);
+      return;
+    }
+    
     const remaining = menuItems.filter((i) => i.id !== deletingProduct.id);
     setMenuItems(remaining);
-    saveRestaurantMenu(selectedRestaurantId, remaining);
     showToast(`Item "${deletingProduct.name}" excluído do cardápio.`);
     setDeletingProduct(null);
   };
 
   // Toggle Rápido de Disponibilidade na Chapa
-  const toggleItemAvailability = (id: string) => {
+  const toggleItemAvailability = async (id: string) => {
+    const itemToToggle = menuItems.find(i => i.id === id);
+    if (!itemToToggle) return;
+
+    const updatedItem = { ...itemToToggle, isAvailable: !itemToToggle.isAvailable };
+    
+    const { data, error } = await updateMenuItem(updatedItem);
+    if (error || !data) {
+      showToast('Erro ao atualizar disponibilidade: ' + (error?.message || 'Falha ao atualizar'), 'error');
+      return;
+    }
+    
     const updated = menuItems.map((item) =>
-      item.id === id ? { ...item, isAvailable: !item.isAvailable } : item
+      item.id === id ? data : item
     );
     setMenuItems(updated);
-    saveRestaurantMenu(selectedRestaurantId, updated);
-    const toggled = updated.find((i) => i.id === id);
-    if (toggled) {
-      showToast(`"${toggled.name}" ${toggled.isAvailable ? 'ativado para pedidos' : 'pausado na chapa'}.`);
-    }
+    showToast(`"${data.name}" ${data.isAvailable ? 'ativado para pedidos' : 'pausado na chapa'}.`);
   };
 
   const handleConfirmOrder = (orderId: string) => {
@@ -1022,6 +1046,19 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
       </div>
 
+      {/* Guia do Comerciante */}
+      <GuideSection
+        title="Como gerenciar sua loja"
+        steps={[
+          "Mantenha o cardápio atualizado com fotos reais e preços.",
+          "Controle o status do balcão (aberto/pausado) para receber pedidos.",
+          "Gerencie o programa de fidelidade criando prêmios atraentes.",
+          "Monitore o desempenho da sua loja e interaja no feed."
+        ]}
+      />
+
+      <CheckInQrSection restaurant={currentRestaurant} />
+
       {/* ============================================================ */}
       {/* SEÇÃO PRINCIPAL: GERENCIAR CARDÁPIO & PRODUTOS DA LOJA       */}
       {/* ============================================================ */}
@@ -1162,10 +1199,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         )}
       </div>
 
-      {/* ============================================================ */}
-      {/* SEÇÃO OFICIAL: QR CODE DA SUA LOJA (PROGRAMA DE FIDELIDADE)  */}
-      {/* ============================================================ */}
-      <RestaurantQrCodeCard restaurant={currentRestaurant} />
 
       {/* ============================================================ */}
       {/* SEÇÃO PRINCIPAL: PRÊMIOS E FIDELIDADE DA LOJA                */}

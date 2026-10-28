@@ -3,13 +3,32 @@
 @theme {
   --font-display: "Outfit", system-ui, -apple-system, sans-serif;
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --color-bg-primary: #0c0d12;
+  --color-text-primary: #f1f5f9;
+}
+
+:root {
+  --color-bg-primary: #ffffff;
+  --color-bg-surface: #f1f5f9;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-border-muted: #e2e8f0;
+}
+
+.dark {
+  --color-bg-primary: #0c0d12;
+  --color-bg-surface: #1e293b;
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-border-muted: #334155;
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: #0c0d12;
-  color: #f1f5f9;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
   -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.3s, color 0.3s;
 }
 
 /* Custom scrollbars */
