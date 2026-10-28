@@ -622,3 +622,84 @@ export async function fetchLoyaltyPoints(
     return null;
   }
 }
+export interface FeedComment {
+  id: string;
+  post_id: string;
+  profile_id: string;
+  author_name: string;
+  author_avatar: string | null;
+  text: string;
+  created_at: string;
+}
+
+export async function fetchComments(postId: string) {
+  if (!supabase) {
+    return { data: null, error: new Error('Supabase não configurado') };
+  }
+
+  return await supabase
+    .from('comments')
+    .select('*')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: true });
+}
+
+export async function insertComment(
+  postId: string,
+  text: string
+) {
+  if (!supabase) {
+    return { data: null, error: new Error('Supabase não configurado') };
+  }
+
+  const { data: authData, error: authError } =
+    await supabase.auth.getUser();
+
+  if (authError || !authData.user) {
+    return {
+      data: null,
+      error: authError || new Error('Faça login para comentar.'),
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('comments')
+    .insert({
+      post_id: postId,
+      profile_id: authData.user.id,
+      author_name: '',
+      author_avatar: null,
+      text: text.trim(),
+    })
+    .select()
+    .single();
+
+  return { data, error };
+}
+
+export async function updateComment(
+  commentId: string,
+  text: string
+) {
+  if (!supabase) {
+    return { data: null, error: new Error('Supabase não configurado') };
+  }
+
+  return await supabase
+    .from('comments')
+    .update({ text: text.trim() })
+    .eq('id', commentId)
+    .select()
+    .single();
+}
+
+export async function deleteComment(commentId: string) {
+  if (!supabase) {
+    return { error: new Error('Supabase não configurado') };
+  }
+
+  return await supabase
+    .from('comments')
+    .delete()
+    .eq('id', commentId);
+}
