@@ -20,7 +20,12 @@ import {
 } from 'lucide-react';
 import { SocialPost, Restaurant, PostComment } from '../types';
 import { MOCK_POSTS, MOCK_USER_PROFILE } from '../data/mockData';
-
+import {
+  fetchComments,
+  insertComment,
+  updateComment,
+  deleteComment,
+} from '../lib/supabase';
 interface FeedViewProps {
   restaurants: Restaurant[];
   onSelectRestaurantById: (id: string) => void;
