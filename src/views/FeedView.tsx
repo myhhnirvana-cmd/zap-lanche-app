@@ -491,35 +491,62 @@ useEffect(() => {
     savePostsToStorage(updatedPosts);
   };
 
-const handleAddComment = async (postId: string) => {
+
+  const handleAddComment = async (postId: string) => {
     const text = commentInputs[postId]?.trim();
     if (!text) return;
 
+    const { data, error } = await insertComment(postId, text);
+
+    if (error || !data) {
+      setNotification({
+        type: 'error',
+        text: error?.message || 'Não foi possível salvar o comentário.',
+      });
+      return;
+    }
+
     const newComment: PostComment = {
-      id: `comm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      authorName: CURRENT_USER_NAME,
-      authorAvatar: CURRENT_USER_AVATAR,
-      text,
-      createdAt: 'Agora mesmo',
+      id: data.id,
+      authorName: data.author_name,
+      authorAvatar: data.author_avatar || '',
+      text: data.text,
+      createdAt: new Date(data.created_at).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
     };
 
     const updatedPosts = posts.map((p) => {
       if (p.id === postId) {
-        const existingComments = Array.isArray(p.comments) ? p.comments : [];
+        const existingComments = Array.isArray(p.comments)
+          ? p.comments
+          : [];
+
         const updatedComments = [...existingComments, newComment];
+
         return {
           ...p,
           comments: updatedComments,
           commentsCount: updatedComments.length,
         };
       }
+
       return p;
     });
 
     setPosts(updatedPosts);
     savePostsToStorage(updatedPosts);
     setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
+
+    setNotification({
+      type: 'success',
+      text: 'Comentário salvo no Supabase!',
+    });
   };
+
 
   const filteredPosts = posts.filter((p) => {
     if (filterRole === 'todos') return true;
