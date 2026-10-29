@@ -169,6 +169,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const [filterRole, setFilterRole] = useState<'todos' | 'morador' | 'comerciante'>('todos');
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [commentRefresh, setCommentRefresh] = useState(0);
 
   // Estado do formulário de criação
   const [showNewPostForm, setShowNewPostForm] = useState(false);
