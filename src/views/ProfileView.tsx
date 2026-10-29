@@ -6,9 +6,13 @@ import {
   LogIn,
   LogOut,
   ArrowLeft,
+  Pencil,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
+import { AvatarGalleryModal } from '../components/profile/AvatarGalleryModal';
+import { getAvatarById, DEFAULT_AVATAR_ID } from '../data/avatars';
 import { fetchLoyaltyPoints, lastLoyaltyError } from '../lib/supabase';
 import { ThemeSelector } from '../components/common/ThemeSelector';
 import { GuideSection } from '../components/common/GuideSection';
@@ -33,9 +37,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     profileLoading,
     profileError,
     signOut,
+    updateUserAvatar,
   } = useAuth();
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
   const [realPoints, setRealPoints] = useState<number | null>(null);
   const [loadingRealPoints, setLoadingRealPoints] = useState(true);
@@ -269,6 +275,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       })
     : 'Recente';
 
+  const userAvatarId =
+    (authUser.user_metadata?.avatar_id as string | undefined) ||
+    (typeof window !== 'undefined' && authUser.id ? localStorage.getItem(`zap_lanche_avatar_${authUser.id}`) : null) ||
+    DEFAULT_AVATAR_ID;
+
+  const currentAvatarData = getAvatarById(userAvatarId);
+
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-16 animate-fade-in">
       {/* Dados da conta */}
@@ -277,12 +290,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 p-0.5 shadow-lg">
-              <div className="w-full h-full rounded-2xl bg-slate-900 overflow-hidden flex items-center justify-center">
-                <span className="font-extrabold text-2xl text-orange-400 font-display">
-                  {displayName.charAt(0).toUpperCase()}
-                </span>
+            {/* Avatar do Usuário com Ação de Troca */}
+            <div className="relative group shrink-0">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 p-0.5 shadow-lg">
+                <div className="w-full h-full rounded-2xl bg-slate-900 overflow-hidden flex items-center justify-center">
+                  <img
+                    src={currentAvatarData.dataUrl}
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsAvatarModalOpen(true)}
+                className="absolute -bottom-1 -right-1 p-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black shadow-md shadow-orange-500/30 transition-transform active:scale-95 flex items-center justify-center"
+                title="Escolher avatar da galeria"
+              >
+                <Pencil className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
             </div>
 
             <div className="space-y-1">
@@ -300,10 +326,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 {authUser.email}
               </p>
 
-              <div className="flex items-center gap-3 text-[11px] text-slate-400 pt-1">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 pt-1">
                 <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 font-semibold border border-orange-500/30">
                   Cargo: {profile.role || 'cliente'}
                 </span>
+
+                <button
+                  type="button"
+                  onClick={() => setIsAvatarModalOpen(true)}
+                  className="px-2 py-0.5 rounded-full bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 font-semibold border border-orange-500/30 flex items-center gap-1 transition-colors text-[10px]"
+                >
+                  <Sparkles className="w-3 h-3 text-orange-400" />
+                  Trocar Avatar
+                </button>
 
                 <span>·</span>
 
@@ -386,6 +421,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           ]}
         />
       )}
+
+      {/* Modal da Galeria de Avatares */}
+      <AvatarGalleryModal
+        isOpen={isAvatarModalOpen}
+        onClose={() => setIsAvatarModalOpen(false)}
+        currentAvatarId={userAvatarId}
+        onSaveAvatar={updateUserAvatar}
+      />
     </div>
   );
 };

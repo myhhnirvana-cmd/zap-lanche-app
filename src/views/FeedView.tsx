@@ -19,29 +19,23 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { SocialPost, Restaurant, PostComment } from '../types';
-import { MOCK_POSTS, MOCK_USER_PROFILE } from '../data/mockData';
+import { MOCK_POSTS } from '../data/mockData';
+import { useAuth } from '../contexts/AuthContext';
+import { getAvatarUrl, DEFAULT_AVATAR_URL } from '../data/avatars';
 import {
+  isSupabaseConfigured,
   fetchComments,
   insertComment,
   updateComment,
   deleteComment,
+  UUID_REGEX,
 } from '../lib/supabase';
+
 interface FeedViewProps {
   restaurants: Restaurant[];
   onSelectRestaurantById: (id: string) => void;
   onOpenDishPreview: (dishName: string, restaurantName: string) => void;
 }
-
-// -------------------------------------------------------------
-// IDENTIFICADOR ESTÁVEL DO USUÁRIO ATUAL (PROTÓTIPO)
-// Regra de interface para o protótipo: controle visual de autoria.
-// Em produção (Fase 2 / Supabase), a autoria será validada via JWT e RLS.
-// -------------------------------------------------------------
-const CURRENT_USER_ID = MOCK_USER_PROFILE.id || 'usr-thiago-jpa';
-const CURRENT_USER_NAME = 'Você (Thiago da Silva)';
-const CURRENT_USER_AVATAR =
-  MOCK_USER_PROFILE.avatarUrl ||
-  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
 
 const STORAGE_KEY = 'zap_lanche_feed_posts_v2';
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -164,12 +158,38 @@ export const FeedView: React.FC<FeedViewProps> = ({
   onSelectRestaurantById,
   onOpenDishPreview,
 }) => {
+  const { user, profile } = useAuth();
+
+  // Identificação do usuário autenticado a partir do Supabase Auth e public.profiles
+  const authenticatedAuthorName =
+    profile?.full_name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    user?.user_metadata?.name?.trim() ||
+    user?.email?.split('@')[0] ||
+    'Morador';
+
+  const currentUserId = user?.id || 'usr-anon';
+
+  const userAvatarChoice =
+    (user?.user_metadata?.avatar_id as string | undefined) ||
+    (user?.user_metadata?.avatar_url as string | undefined) ||
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_url_${user.id}`) : null) ||
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_${user.id}`) : null);
+
+  const currentAvatar = getAvatarUrl(userAvatarChoice);
+
+  const currentAuthorRole: 'morador' | 'comerciante' | 'critico_do_bairro' =
+    profile?.role === 'comerciante'
+      ? 'comerciante'
+      : profile?.role === 'admin'
+      ? 'critico_do_bairro'
+      : 'morador';
+
   // Estado inicial carregado de forma resiliente do localStorage
   const [posts, setPosts] = useState<SocialPost[]>(() => loadPostsFromStorage());
   const [filterRole, setFilterRole] = useState<'todos' | 'morador' | 'comerciante'>('todos');
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
-  const [commentRefresh, setCommentRefresh] = useState(0);
 
   // Estado do formulário de criação
   const [showNewPostForm, setShowNewPostForm] = useState(false);
@@ -199,6 +219,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
     text: string;
   } | null>(null);
 
+  const [editingComment, setEditingComment] = useState<{postId: string, commentId: string, text: string} | null>(null);
+  const [commentToDelete, setCommentToDelete] = useState<{postId: string, commentId: string, text: string} | null>(null);
+  const [isDeletingComment, setIsDeletingComment] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -206,58 +230,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
   useEffect(() => {
     savePostsToStorage(posts);
   }, [posts]);
-  
-useEffect(() => {
-  if (!activeCommentPostId) return;
-
-  let cancelled = false;
-
-  const loadComments = async () => {
-    const { data, error } = await fetchComments(activeCommentPostId);
-
-    if (cancelled) return;
-
-    if (error) {
-      setNotification({
-        type: 'error',
-        text: 'Não foi possível carregar os comentários salvos.',
-      });
-      return;
-    }
-
-    const loadedComments: PostComment[] = (data || []).map((comment) => ({
-      id: comment.id,
-      authorName: comment.author_name,
-      authorAvatar: comment.author_avatar || '',
-      text: comment.text,
-      createdAt: new Date(comment.created_at).toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    }));
-
-    setPosts((currentPosts) =>
-      currentPosts.map((post) =>
-        post.id === activeCommentPostId
-          ? {
-              ...post,
-              comments: loadedComments,
-              commentsCount: loadedComments.length,
-            }
-          : post
-      )
-    );
-  };
-
-  loadComments();
-
-  return () => {
-    cancelled = true;
-  };
-}, [activeCommentPostId, commentRefresh]);
-  
 
   // Limpar notificação após tempo determinado
   useEffect(() => {
@@ -266,10 +238,61 @@ useEffect(() => {
     return () => clearTimeout(timer);
   }, [notification]);
 
+  // Sincroniza comentários reais do Supabase na inicialização
+  useEffect(() => {
+    let isMounted = true;
+    async function syncSupabaseComments() {
+      if (!isSupabaseConfigured) return;
+      const { data: dbComments, error } = await fetchComments();
+      if (error || !dbComments || !isMounted) return;
+
+      setPosts((prevPosts) => {
+        return prevPosts.map((post) => {
+          const postDbComments = dbComments.filter((c) => c.post_id === post.id);
+          if (postDbComments.length === 0) return post;
+
+          const formattedDbComments: PostComment[] = postDbComments.map((c) => ({
+            id: c.id,
+            profile_id: c.profile_id,
+            authorId: c.profile_id,
+            authorName: c.author_name,
+            authorAvatar: c.author_avatar || DEFAULT_AVATAR_URL,
+            text: c.text,
+            createdAt: new Date(c.created_at).toLocaleDateString('pt-BR') + ' às ' + new Date(c.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            postId: c.post_id,
+          }));
+
+          // Preserva comentários locais/mock que ainda não estão no Supabase
+          const localOnlyComments = (post.comments || []).filter(
+            (lc) => !postDbComments.some((dc) => dc.id === lc.id)
+          );
+
+          const merged = [...localOnlyComments, ...formattedDbComments];
+          return {
+            ...post,
+            comments: merged,
+            commentsCount: merged.length,
+          };
+        });
+      });
+    }
+
+    syncSupabaseComments();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Identificação do proprietário usando o ID real da sessão autenticada (auth.users.id)
+  const isCommentOwner = (comment: PostComment): boolean => {
+    if (!user?.id) return false;
+    return comment.profile_id === user.id || comment.authorId === user.id;
+  };
+
   // Função para verificar se a publicação pertence ao usuário atual
-  // Regra de interface para o protótipo (não substitui autenticação no servidor)
   const isPostOwner = (post: SocialPost): boolean => {
-    return post.authorId === CURRENT_USER_ID || post.isOwnPost === true;
+    if (user?.id && post.authorId === user.id) return true;
+    return post.isOwnPost === true;
   };
 
   // -------------------------------------------------------------
@@ -326,10 +349,10 @@ useEffect(() => {
       restaurantName: targetRestaurant?.name || 'Lanchonete do Jorge',
       restaurantCategory: targetRestaurant?.categoryLabel || 'Lanches de Chapa',
       neighborhood: targetRestaurant?.neighborhoodName || 'Freguesia (Jacarepaguá)',
-      authorId: CURRENT_USER_ID, // Identificador estável do autor
-      authorName: CURRENT_USER_NAME,
-      authorAvatar: CURRENT_USER_AVATAR,
-      authorRole: 'morador',
+      authorId: currentUserId,
+      authorName: authenticatedAuthorName,
+      authorAvatar: currentAvatar,
+      authorRole: currentAuthorRole,
       content: newPostText.trim(),
       imageUrl: newPostImage || undefined, // Somente foto própria; sem fallback forçado para ASSET_BURGER!
       likesCount: 1,
@@ -491,62 +514,220 @@ useEffect(() => {
     savePostsToStorage(updatedPosts);
   };
 
-
   const handleAddComment = async (postId: string) => {
     const text = commentInputs[postId]?.trim();
     if (!text) return;
 
-    const { data, error } = await insertComment(postId, text);
-
-    if (error || !data) {
+    if (!user?.id) {
       setNotification({
-        type: 'error',
-        text: error?.message || 'Não foi possível salvar o comentário.',
+        type: 'warning',
+        text: 'Você precisa entrar na sua conta para publicar um comentário.',
       });
       return;
     }
 
-    const newComment: PostComment = {
-      id: data.id,
-      authorName: data.author_name,
-      authorAvatar: data.author_avatar || '',
-      text: data.text,
-      createdAt: new Date(data.created_at).toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    };
+    const realProfileId = user.id;
 
-    const updatedPosts = posts.map((p) => {
-      if (p.id === postId) {
-        const existingComments = Array.isArray(p.comments)
-          ? p.comments
-          : [];
+    if (isSupabaseConfigured) {
+      const { data: dbComment, error } = await insertComment({
+        post_id: postId,
+        profile_id: realProfileId,
+        author_name: authenticatedAuthorName,
+        author_avatar: currentAvatar,
+        text,
+      });
 
-        const updatedComments = [...existingComments, newComment];
-
-        return {
-          ...p,
-          comments: updatedComments,
-          commentsCount: updatedComments.length,
-        };
+      if (error || !dbComment) {
+        setNotification({
+          type: 'error',
+          text: `Falha ao salvar comentário no Supabase: ${error?.message || 'Erro de comunicação.'}`,
+        });
+        return;
       }
 
+      const newComment: PostComment = {
+        id: dbComment.id,
+        profile_id: dbComment.profile_id,
+        authorId: dbComment.profile_id,
+        authorName: dbComment.author_name,
+        authorAvatar: dbComment.author_avatar || currentAvatar,
+        text: dbComment.text,
+        createdAt: 'Agora mesmo',
+        postId,
+      };
+
+      const updatedPosts = posts.map((p) => {
+        if (p.id === postId) {
+          const existingComments = Array.isArray(p.comments) ? p.comments : [];
+          const updatedComments = [...existingComments, newComment];
+          return {
+            ...p,
+            comments: updatedComments,
+            commentsCount: updatedComments.length,
+          };
+        }
+        return p;
+      });
+
+      setPosts(updatedPosts);
+      savePostsToStorage(updatedPosts);
+      setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
+      setNotification({
+        type: 'success',
+        text: 'Comentário publicado com sucesso!',
+      });
+    } else {
+      const newComment: PostComment = {
+        id: `comm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        profile_id: realProfileId,
+        authorId: realProfileId,
+        authorName: authenticatedAuthorName,
+        authorAvatar: currentAvatar,
+        text,
+        createdAt: 'Agora mesmo',
+        postId,
+      };
+
+      const updatedPosts = posts.map((p) => {
+        if (p.id === postId) {
+          const existingComments = Array.isArray(p.comments) ? p.comments : [];
+          const updatedComments = [...existingComments, newComment];
+          return {
+            ...p,
+            comments: updatedComments,
+            commentsCount: updatedComments.length,
+          };
+        }
+        return p;
+      });
+
+      setPosts(updatedPosts);
+      savePostsToStorage(updatedPosts);
+      setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
+      setNotification({
+        type: 'success',
+        text: 'Comentário publicado localmente!',
+      });
+    }
+  };
+
+  const handleSaveCommentEdit = async () => {
+    if (!editingComment) return;
+    const newText = editingComment.text.trim();
+    if (!newText) {
+      setNotification({
+        type: 'warning',
+        text: 'O texto do comentário não pode ficar vazio.',
+      });
+      return;
+    }
+
+    const targetPost = posts.find((p) => p.id === editingComment.postId);
+    const targetComment = targetPost?.comments?.find((c) => c.id === editingComment.commentId);
+
+    if (!targetComment || !isCommentOwner(targetComment)) {
+      setNotification({
+        type: 'error',
+        text: 'Você só pode editar os seus próprios comentários.',
+      });
+      setEditingComment(null);
+      return;
+    }
+
+    const isDbComment = UUID_REGEX.test(targetComment.id);
+
+    if (isSupabaseConfigured && isDbComment) {
+      const { data, error } = await updateComment(targetComment.id, newText);
+      if (error || !data) {
+        setNotification({
+          type: 'error',
+          text: `Erro ao atualizar comentário no Supabase: ${error?.message || 'Falha de comunicação.'}`,
+        });
+        return;
+      }
+    }
+
+    const updatedPosts = posts.map((p) => {
+      if (p.id === editingComment.postId) {
+        const updatedComments = (p.comments || []).map((c) =>
+          c.id === editingComment.commentId ? { ...c, text: newText } : c
+        );
+        return { ...p, comments: updatedComments };
+      }
       return p;
     });
 
     setPosts(updatedPosts);
     savePostsToStorage(updatedPosts);
-    setCommentInputs((prev) => ({ ...prev, [postId]: '' }));
-
+    setEditingComment(null);
     setNotification({
       type: 'success',
-      text: 'Comentário salvo no Supabase!',
+      text: 'Comentário atualizado com sucesso!',
     });
   };
 
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    const targetPost = posts.find((p) => p.id === postId);
+    const targetComment = targetPost?.comments?.find((c) => c.id === commentId);
+
+    if (!targetComment || !isCommentOwner(targetComment)) {
+      setNotification({
+        type: 'error',
+        text: 'Você só pode excluir os seus próprios comentários.',
+      });
+      return false;
+    }
+
+    const isDbComment = UUID_REGEX.test(targetComment.id);
+
+    if (isSupabaseConfigured && isDbComment) {
+      const { error } = await deleteComment(targetComment.id);
+      if (error) {
+        setNotification({
+          type: 'error',
+          text: `Erro ao excluir comentário no Supabase: ${error.message}`,
+        });
+        return false;
+      }
+    }
+
+    const updatedPosts = posts.map((p) => {
+      if (p.id === postId) {
+        const updatedComments = (p.comments || []).filter((c) => c.id !== commentId);
+        return {
+          ...p,
+          comments: updatedComments,
+          commentsCount: Math.max(0, updatedComments.length),
+        };
+      }
+      return p;
+    });
+
+    setPosts(updatedPosts);
+    savePostsToStorage(updatedPosts);
+    setNotification({
+      type: 'success',
+      text: 'Comentário excluído com sucesso!',
+    });
+    return true;
+  };
+
+  const handleConfirmDeleteComment = async () => {
+    if (!commentToDelete || isDeletingComment) return;
+    setIsDeletingComment(true);
+
+    try {
+      const success = await handleDeleteComment(
+        commentToDelete.postId,
+        commentToDelete.commentId
+      );
+      if (success) {
+        setCommentToDelete(null);
+      }
+    } finally {
+      setIsDeletingComment(false);
+    }
+  };
 
   const filteredPosts = posts.filter((p) => {
     if (filterRole === 'todos') return true;
@@ -621,7 +802,7 @@ useEffect(() => {
               Compartilhar Recomendação no Feed
             </span>
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 font-medium">
-              Você (Thiago)
+              {authenticatedAuthorName}
             </span>
           </div>
 
@@ -1018,6 +1199,35 @@ useEffect(() => {
                           <p className="text-xs text-slate-200 pl-7 leading-relaxed">
                             {comment.text}
                           </p>
+                          {isCommentOwner(comment) && (
+                            <div className="flex gap-2 justify-end pt-1">
+                              <button
+                                onClick={() =>
+                                  setEditingComment({
+                                    postId: post.id,
+                                    commentId: comment.id,
+                                    text: comment.text,
+                                  })
+                                }
+                                className="text-[10px] text-slate-400 hover:text-amber-300 transition-colors"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setCommentToDelete({
+                                    postId: post.id,
+                                    commentId: comment.id,
+                                    text: comment.text,
+                                  })
+                                }
+                                className="text-[10px] text-rose-400 hover:text-rose-300 transition-colors"
+                              >
+                                Excluir
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1220,6 +1430,88 @@ useEffect(() => {
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors shadow-md shadow-rose-600/20"
               >
                 Sim, Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ============================================================ */}
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE COMENTÁRIO              */}
+      {/* ============================================================ */}
+      {commentToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-sm bg-[#131520] border border-rose-500/40 rounded-3xl p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5 text-rose-400">
+              <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-white">
+                  Excluir Comentário?
+                </h4>
+                <span className="text-[11px] text-slate-400">Esta ação não pode ser desfeita</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-900 p-3 rounded-2xl border border-slate-800 break-words">
+              "{commentToDelete.text.slice(0, 120)}
+              {commentToDelete.text.length > 120 ? '...' : ''}"
+            </p>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                disabled={isDeletingComment}
+                onClick={() => setCommentToDelete(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-semibold text-xs disabled:opacity-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingComment}
+                onClick={handleConfirmDeleteComment}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors shadow-md shadow-rose-600/20 disabled:opacity-50"
+              >
+                {isDeletingComment ? 'Excluindo...' : 'Confirmar exclusão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {editingComment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#131520] p-4 rounded-2xl border border-orange-500/40 w-full max-w-sm space-y-3 shadow-2xl">
+            <h4 className="text-sm font-bold text-white flex items-center gap-2">
+              <Pencil className="w-3.5 h-3.5 text-orange-400" />
+              Editar comentário
+            </h4>
+            <input
+              type="text"
+              value={editingComment.text}
+              onChange={(e) =>
+                setEditingComment({ ...editingComment, text: e.target.value })
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveCommentEdit();
+              }}
+              autoFocus
+              className="w-full p-2.5 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500"
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setEditingComment(null)}
+                className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCommentEdit}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white transition-colors shadow-md shadow-orange-600/20"
+              >
+                Salvar
               </button>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { MapPin, ChevronDown, Store, Shield, LogIn, LogOut, User as UserIcon } f
 import { Neighborhood, ActiveTab } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../auth/AuthModal';
+import { getAvatarUrl } from '../../data/avatars';
 
 interface HeaderProps {
   currentNeighborhood: Neighborhood;
@@ -22,6 +23,12 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Extrai nome de exibição amigável
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || '';
+  const userAvatarChoice =
+    (user?.user_metadata?.avatar_id as string | undefined) ||
+    (user?.user_metadata?.avatar_url as string | undefined) ||
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_url_${user.id}`) : null) ||
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_${user.id}`) : null);
+  const avatarUrl = getAvatarUrl(userAvatarChoice);
 
   return (
     <header className="sticky top-0 z-30 bg-[#0f1117]/95 backdrop-blur-md border-b border-slate-800/80 px-2.5 sm:px-4 py-2.5 sm:py-3">
@@ -116,13 +123,21 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Autenticação Real */}
           {user ? (
             <div className="flex items-center gap-1 pl-1 border-l border-slate-800">
-              <div
-                className="hidden lg:flex items-center gap-1 text-[11px] text-slate-300 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg max-w-[130px] truncate"
-                title={user.email || ''}
+              <button
+                type="button"
+                onClick={() => onChangeTab('perfil')}
+                className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-750 px-2 py-1 rounded-lg max-w-[150px] truncate transition-colors text-left"
+                title={`Meu perfil (${user.email || ''})`}
               >
-                <UserIcon className="w-3 h-3 text-orange-400 shrink-0" />
+                <div className="w-4 h-4 rounded-full overflow-hidden shrink-0 border border-orange-500/40">
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
                 <span className="truncate">{displayName}</span>
-              </div>
+              </button>
               <button
                 onClick={() => signOut()}
                 className="px-2 py-1.5 text-xs font-medium rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-rose-300 transition-colors flex items-center gap-1"

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured, fetchMerchantRestaurant } from '../lib/supabase';
 import { Restaurant } from '../types';
+import { getAvatarById } from '../data/avatars';
 
 export interface UserProfileRecord {
   id: string;
@@ -36,6 +37,8 @@ interface AuthContextType {
   signUp: (email: string, password: string, name?: string) => Promise<{ error: string | null; message?: string }>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  updateOwnerProfile: (fullName: string) => Promise<{ error: string | null }>;
+  updateUserAvatar: (avatarId: string) => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -281,7 +284,87 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setSession(refreshedSession);
         setUser(refreshedSession.user);
       }
-    } catch (e) { console.warn('Erro ao atualizar sessão:', e); }
+    } catch (e) {
+      console.warn('Erro ao atualizar sessão:', e);
+    }
+  };
+
+  const updateOwnerProfile = async (fullName: string): Promise<{ error: string | null }> => {
+    const trimmed = fullName.trim();
+    if (!user?.id || !isSupabaseConfigured || !supabase) {
+      return { error: 'Usuário não autenticado ou serviço Supabase indisponível.' };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ full_name: trimmed })
+        .eq('id', user.id)
+        .select('id, full_name, username, role, created_at')
+        .maybeSingle();
+
+      if (error) {
+        console.error('Erro ao atualizar perfil no Supabase:', error.message);
+        return { error: error.message };
+      }
+
+      try {
+        await supabase.auth.updateUser({
+          data: { full_name: trimmed, name: trimmed },
+        });
+      } catch (authErr) {
+        console.warn('Erro ao atualizar metadata do usuário:', authErr);
+      }
+
+      if (data) {
+        setProfile(data as UserProfileRecord);
+      } else {
+        setProfile((prev) => (prev ? { ...prev, full_name: trimmed } : null));
+      }
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: err.message || 'Erro inesperado ao atualizar perfil.' };
+    }
+  };
+
+  const updateUserAvatar = async (avatarId: string): Promise<{ error: string | null }> => {
+    if (!user?.id || !isSupabaseConfigured || !supabase) {
+      return { error: 'Usuário não autenticado ou serviço indisponível.' };
+    }
+
+    const selected = getAvatarById(avatarId);
+    try {
+      // 1. Atualiza nos metadados do Supabase Auth (auth.users.raw_user_meta_data)
+      const { data: updatedAuth, error: authErr } = await supabase.auth.updateUser({
+        data: {
+          avatar_id: selected.id,
+          avatar_url: selected.dataUrl,
+          picture: selected.dataUrl,
+        },
+      });
+
+      if (authErr) {
+        console.warn('Erro ao atualizar avatar nos metadados do usuário:', authErr.message);
+        return { error: authErr.message };
+      }
+
+      if (updatedAuth?.user) {
+        setUser(updatedAuth.user);
+      }
+
+      // 2. Cache local resiliente por usuário
+      try {
+        localStorage.setItem(`zap_lanche_avatar_${user.id}`, selected.id);
+        localStorage.setItem(`zap_lanche_avatar_url_${user.id}`, selected.dataUrl);
+      } catch {
+        // Silencioso
+      }
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: err.message || 'Erro inesperado ao salvar avatar.' };
+    }
   };
 
   return (
@@ -303,6 +386,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         signUp,
         signOut,
         refreshSession,
+        updateOwnerProfile,
+        updateUserAvatar,
       }}
     >
       {children}

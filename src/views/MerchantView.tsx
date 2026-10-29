@@ -65,7 +65,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { RestaurantQrCodeCard } from '../components/loyalty/RestaurantQrCodeCard';
 import { GuideSection } from '../components/common/GuideSection';
 import { CheckInQrSection } from '../components/merchant/CheckInQrSection';
-import { insertMenuItem, updateMenuItem, deleteMenuItem } from '../lib/supabase';
+import {
+  insertMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+  updateRestaurantInSupabase,
+  uploadRestaurantImage,
+} from '../lib/supabase';
 
 interface MerchantViewProps {
   restaurants?: Restaurant[];
@@ -78,7 +84,15 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   onUpdateRestaurant,
   onOpenFeedWithNewPost,
 }) => {
-  const { user, isAdmin, isMerchant, merchantRestaurant } = useAuth();
+  const {
+    user,
+    isAdmin,
+    isMerchant,
+    merchantRestaurant,
+    profile,
+    updateOwnerProfile,
+    refreshMerchantStore,
+  } = useAuth();
 
   // Comerciante real autenticado gerencia exclusivamente a sua própria loja vinculada
   const isRealMerchant = Boolean(isMerchant && !isAdmin && merchantRestaurant);
@@ -165,7 +179,15 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   // -------------------------------------------------------------
   const [isEditStoreModalOpen, setIsEditStoreModalOpen] = useState(false);
   const [storeFormName, setStoreFormName] = useState(currentRestaurant.name);
-  const [storeFormOwner, setStoreFormOwner] = useState(currentRestaurant.ownerName || stats.ownerName);
+  const [storeFormOwner, setStoreFormOwner] = useState(
+    profile?.full_name || currentRestaurant.ownerName || stats.ownerName
+  );
+
+  useEffect(() => {
+    if (profile?.full_name) {
+      setStoreFormOwner(profile.full_name);
+    }
+  }, [profile?.full_name]);
   const [storeFormBio, setStoreFormBio] = useState(currentRestaurant.bio);
   const [storeFormNeighborhoodId, setStoreFormNeighborhoodId] = useState(currentRestaurant.neighborhoodId);
   const [storeFormAddress, setStoreFormAddress] = useState(currentRestaurant.address);
@@ -192,7 +214,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const [prodCategory, setProdCategory] = useState('Hambúrgueres');
   const [prodBadge, setProdBadge] = useState('');
   const [prodPrepTime, setProdPrepTime] = useState('20');
-  const [prodIsAvailable, setProdIsAvailable] = useState(true);
   const [prodImageUrl, setProdImageUrl] = useState('');
   const [isOptimizingProdImage, setIsOptimizingProdImage] = useState(false);
   const [prodOptimizationInfo, setProdOptimizationInfo] = useState<string | null>(null);
@@ -236,8 +257,9 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
   // Abertura do Modal de Edição da Loja
   const handleOpenEditStore = () => {
+    const activeOwner = profile?.full_name || currentRestaurant.ownerName || stats.ownerName;
     setStoreFormName(currentRestaurant.name);
-    setStoreFormOwner(currentRestaurant.ownerName || stats.ownerName);
+    setStoreFormOwner(activeOwner);
     setStoreFormBio(currentRestaurant.bio);
     setStoreFormNeighborhoodId(currentRestaurant.neighborhoodId);
     setStoreFormAddress(currentRestaurant.address);
@@ -250,7 +272,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setIsEditStoreModalOpen(true);
   };
 
-  // Upload e Otimização do Banner
+  // Upload e Otimização do Banner no Supabase Storage
   const handleBannerFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -260,17 +282,56 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setStoreFormError(null);
       const result = await optimizeImage(file, 1600, 0.8);
       setStoreFormBannerUrl(result.dataUrl);
+
+      const restUuid = currentRestaurant.supabaseId || currentRestaurant.id;
+      const { publicUrl, error: uploadErr } = await uploadRestaurantImage(restUuid, result.dataUrl, 'banner');
+      if (uploadErr || !publicUrl) {
+        const errorMsg = uploadErr?.message || 'Falha ao enviar capa para o Storage.';
+        setStoreFormError(errorMsg);
+        showToast(errorMsg, 'error');
+        return;
+      }
+
+      setStoreFormBannerUrl(publicUrl);
+
+      // Persiste imediatamente a URL da capa no Supabase (public.restaurants.image_url)
+      const { data: updatedRest, error: dbErr } = await updateRestaurantInSupabase({
+        id: restUuid,
+        image_url: publicUrl,
+      });
+
+      if (dbErr || !updatedRest) {
+        const errorMsg = dbErr?.message || 'Falha ao gravar a capa no banco de dados Supabase (nenhuma linha atualizada).';
+        setStoreFormError(errorMsg);
+        showToast(errorMsg, 'error');
+        return;
+      }
+
+      const updatedRestaurant: Restaurant = {
+        ...currentRestaurant,
+        bannerUrl: publicUrl,
+      };
+      updateSingleRestaurant(updatedRestaurant);
+      onUpdateRestaurant?.(updatedRestaurant);
+      try {
+        await refreshMerchantStore();
+      } catch {
+        // Ignora erro eventual de refresh
+      }
+
       setBannerOptimizationInfo(
-        `Banner otimizado: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor, ${result.format.toUpperCase()})`
+        `Capa salva no Storage e banco: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor)`
       );
+      showToast('Capa atualizada e gravada com sucesso!');
     } catch (err: any) {
       setStoreFormError(err.message || 'Erro ao processar imagem de capa.');
+      showToast(err.message || 'Erro ao processar imagem de capa.', 'error');
     } finally {
       setIsOptimizingBanner(false);
     }
   };
 
-  // Upload e Otimização da Logo/Avatar
+  // Upload e Otimização da Logo no Supabase Storage
   const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -280,18 +341,57 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setStoreFormError(null);
       const result = await optimizeImage(file, 800, 0.8);
       setStoreFormLogoUrl(result.dataUrl);
+
+      const restUuid = currentRestaurant.supabaseId || currentRestaurant.id;
+      const { publicUrl, error: uploadErr } = await uploadRestaurantImage(restUuid, result.dataUrl, 'logo');
+      if (uploadErr || !publicUrl) {
+        const errorMsg = uploadErr?.message || 'Falha ao enviar logo para o Storage.';
+        setStoreFormError(errorMsg);
+        showToast(errorMsg, 'error');
+        return;
+      }
+
+      setStoreFormLogoUrl(publicUrl);
+
+      // Persiste imediatamente a URL do logo no Supabase (public.restaurants.logo_url)
+      const { data: updatedRest, error: dbErr } = await updateRestaurantInSupabase({
+        id: restUuid,
+        logo_url: publicUrl,
+      });
+
+      if (dbErr || !updatedRest) {
+        const errorMsg = dbErr?.message || 'Falha ao gravar o logo no banco de dados Supabase (nenhuma linha atualizada).';
+        setStoreFormError(errorMsg);
+        showToast(errorMsg, 'error');
+        return;
+      }
+
+      const updatedRestaurant: Restaurant = {
+        ...currentRestaurant,
+        logoUrl: publicUrl,
+      };
+      updateSingleRestaurant(updatedRestaurant);
+      onUpdateRestaurant?.(updatedRestaurant);
+      try {
+        await refreshMerchantStore();
+      } catch {
+        // Ignora erro eventual de refresh
+      }
+
       setLogoOptimizationInfo(
-        `Logo otimizada: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor, ${result.format.toUpperCase()})`
+        `Logo salva no Storage e banco: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor)`
       );
+      showToast('Logo atualizado e gravado com sucesso!');
     } catch (err: any) {
       setStoreFormError(err.message || 'Erro ao processar logo da loja.');
+      showToast(err.message || 'Erro ao processar logo da loja.', 'error');
     } finally {
       setIsOptimizingLogo(false);
     }
   };
 
-  // Salvar Edição da Loja
-  const handleSaveStore = (e: React.FormEvent) => {
+  // Salvar Edição da Loja com persistência no Supabase e Storage
+  const handleSaveStore = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!storeFormName.trim()) {
@@ -311,35 +411,98 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       return;
     }
 
+    const restUuid = currentRestaurant.supabaseId || currentRestaurant.id;
+    let persistentBannerUrl = storeFormBannerUrl;
+    let persistentLogoUrl = storeFormLogoUrl.trim();
+
+    // Se ainda estiver em base64 (DataURL), realiza o upload para o Supabase Storage
+    if (persistentBannerUrl.startsWith('data:')) {
+      const { publicUrl, error: uploadErr } = await uploadRestaurantImage(restUuid, persistentBannerUrl, 'banner');
+      if (uploadErr || !publicUrl) {
+        const errorMsg = uploadErr?.message || 'Falha ao enviar capa para o Storage.';
+        setStoreFormError(errorMsg);
+        showToast(errorMsg, 'error');
+        return;
+      }
+      persistentBannerUrl = publicUrl;
+      setStoreFormBannerUrl(publicUrl);
+    }
+
+    if (persistentLogoUrl.startsWith('data:')) {
+      const { publicUrl, error: uploadErr } = await uploadRestaurantImage(restUuid, persistentLogoUrl, 'logo');
+      if (uploadErr || !publicUrl) {
+        const errorMsg = uploadErr?.message || 'Falha ao enviar logo para o Storage.';
+        setStoreFormError(errorMsg);
+        showToast(errorMsg, 'error');
+        return;
+      }
+      persistentLogoUrl = publicUrl;
+      setStoreFormLogoUrl(publicUrl);
+    }
+
     const nbObj = NEIGHBORHOODS.find((n) => n.id === storeFormNeighborhoodId) || NEIGHBORHOODS[1] || NEIGHBORHOODS[0];
+    const trimmedOwnerName = storeFormOwner.trim();
+
+    // 1. Persistência do nome do proprietário no Supabase (public.profiles)
+    if (updateOwnerProfile && trimmedOwnerName) {
+      const { error: profileSaveError } = await updateOwnerProfile(trimmedOwnerName);
+      if (profileSaveError) {
+        console.warn('Aviso ao persistir nome no perfil do Supabase:', profileSaveError);
+      }
+    }
+
+    // 2. Persistência dos dados da loja no Supabase (public.restaurants)
+    if (restUuid) {
+      const { data: updatedRest, error: restUpdateErr } = await updateRestaurantInSupabase({
+        id: restUuid,
+        name: storeFormName.trim(),
+        description: storeFormBio.trim(),
+        address: storeFormAddress.trim(),
+        whatsapp: storeFormWhatsapp.trim(),
+        neighborhood: nbObj.name,
+        image_url: persistentBannerUrl,
+        logo_url: persistentLogoUrl || undefined,
+      });
+      if (restUpdateErr || !updatedRest) {
+        const errorMsg = restUpdateErr?.message || 'Falha ao salvar dados da loja no Supabase (nenhuma linha atualizada).';
+        setStoreFormError(errorMsg);
+        showToast(errorMsg, 'error');
+        return;
+      }
+    }
 
     const updatedRestaurant: Restaurant = {
       ...currentRestaurant,
       name: storeFormName.trim(),
-      ownerName: storeFormOwner.trim(),
+      ownerName: trimmedOwnerName,
       bio: storeFormBio.trim(),
       neighborhoodId: storeFormNeighborhoodId,
       neighborhoodName: nbObj.name,
       address: storeFormAddress.trim(),
       whatsappDemo: storeFormWhatsapp.trim(),
-      bannerUrl: storeFormBannerUrl,
-      logoUrl: storeFormLogoUrl.trim() || undefined,
+      bannerUrl: persistentBannerUrl,
+      logoUrl: persistentLogoUrl || undefined,
     };
 
     updateSingleRestaurant(updatedRestaurant);
     onUpdateRestaurant?.(updatedRestaurant);
+    try {
+      await refreshMerchantStore();
+    } catch {
+      // Ignora erro eventual de refresh
+    }
 
     const updatedStats: MerchantDemoStats = {
       ...stats,
       restaurantName: updatedRestaurant.name,
-      ownerName: updatedRestaurant.ownerName || storeFormOwner.trim(),
+      ownerName: trimmedOwnerName,
       neighborhood: updatedRestaurant.neighborhoodName,
     };
     setStats(updatedStats);
     saveMerchantStats(updatedStats);
 
     setIsEditStoreModalOpen(false);
-    showToast(`Loja "${updatedRestaurant.name}" atualizada com sucesso!`);
+    showToast(`Loja "${updatedRestaurant.name}" e responsável salvos com sucesso!`);
   };
 
   // Abertura do Modal de Adicionar Produto
@@ -352,7 +515,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setProdCategory('Hambúrgueres');
     setProdBadge('');
     setProdPrepTime('20');
-    setProdIsAvailable(true);
     setProdImageUrl(currentRestaurant.bannerUrl);
     setProdOptimizationInfo(null);
     setProdFormError(null);
@@ -369,7 +531,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setProdCategory(item.category);
     setProdBadge(item.badge || '');
     setProdPrepTime(item.prepTimeMinutes ? item.prepTimeMinutes.toString() : '20');
-    setProdIsAvailable(item.isAvailable);
     setProdImageUrl(item.imageUrl);
     setProdOptimizationInfo(null);
     setProdFormError(null);
@@ -422,7 +583,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         category: prodCategory,
         badge: prodBadge.trim() || undefined,
         prepTimeMinutes: parseInt(prodPrepTime) || 20,
-        isAvailable: prodIsAvailable,
+        isAvailable: editingProduct.isAvailable ?? true,
         imageUrl: prodImageUrl || editingProduct.imageUrl,
       };
 
@@ -434,6 +595,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       
       const updatedList = menuItems.map((item) => (item.id === editingProduct.id ? data : item));
       setMenuItems(updatedList);
+      saveRestaurantMenu(selectedRestaurantId, updatedList);
+      if (currentRestaurant.supabaseId && currentRestaurant.supabaseId !== selectedRestaurantId) {
+        saveRestaurantMenu(currentRestaurant.supabaseId, updatedList);
+      }
       showToast(`Produto "${prodName.trim()}" atualizado no cardápio!`);
     } else {
       const newItem = {
@@ -445,7 +610,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         category: prodCategory,
         badge: prodBadge.trim() || undefined,
         prepTimeMinutes: parseInt(prodPrepTime) || 20,
-        isAvailable: prodIsAvailable,
+        isAvailable: true,
         imageUrl: prodImageUrl || currentRestaurant.bannerUrl,
       };
 
@@ -457,6 +622,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       
       const updatedList = [data, ...menuItems];
       setMenuItems(updatedList);
+      saveRestaurantMenu(selectedRestaurantId, updatedList);
+      if (currentRestaurant.supabaseId && currentRestaurant.supabaseId !== selectedRestaurantId) {
+        saveRestaurantMenu(currentRestaurant.supabaseId, updatedList);
+      }
       showToast(`Novo produto "${prodName.trim()}" adicionado com sucesso!`);
     }
 
@@ -476,6 +645,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     
     const remaining = menuItems.filter((i) => i.id !== deletingProduct.id);
     setMenuItems(remaining);
+    saveRestaurantMenu(selectedRestaurantId, remaining);
+    if (currentRestaurant.supabaseId && currentRestaurant.supabaseId !== selectedRestaurantId) {
+      saveRestaurantMenu(currentRestaurant.supabaseId, remaining);
+    }
     showToast(`Item "${deletingProduct.name}" excluído do cardápio.`);
     setDeletingProduct(null);
   };
@@ -497,6 +670,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       item.id === id ? data : item
     );
     setMenuItems(updated);
+    saveRestaurantMenu(selectedRestaurantId, updated);
+    if (currentRestaurant.supabaseId && currentRestaurant.supabaseId !== selectedRestaurantId) {
+      saveRestaurantMenu(currentRestaurant.supabaseId, updated);
+    }
     showToast(`"${data.name}" ${data.isAvailable ? 'ativado para pedidos' : 'pausado na chapa'}.`);
   };
 
@@ -948,7 +1125,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Responsável: <strong className="text-slate-300">{currentRestaurant.ownerName || stats.ownerName}</strong> · Bairro {currentRestaurant.neighborhoodName}
+                Responsável: <strong className="text-slate-300">{profile?.full_name || currentRestaurant.ownerName || stats.ownerName}</strong> · Bairro {currentRestaurant.neighborhoodName}
               </p>
               <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
                 <Phone className="w-3 h-3 text-emerald-400" />
@@ -2014,13 +2191,13 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               {/* Descrição */}
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">
-                  Descrição dos ingredientes:
+                  Descrição do produto:
                 </label>
                 <textarea
                   value={prodDescription}
                   onChange={(e) => setProdDescription(e.target.value)}
-                  rows={2}
-                  placeholder="Ex: 2 smash burgers 100g de fraldinha, queijo cheddar derretido, bacon crocante e maionese artesanal..."
+                  rows={3}
+                  placeholder="Ex: 2 smash burgers 100g de fraldinha, queijo cheddar derretido, bacon crocante no pão brioche."
                   className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition-colors resize-none"
                 />
               </div>
@@ -2088,35 +2265,19 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 </div>
               </div>
 
-              {/* Tempo de Preparo e Disponibilidade */}
-              <div className="grid grid-cols-2 gap-3 items-center">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    Preparo médio (minutos):
-                  </label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="120"
-                    value={prodPrepTime}
-                    onChange={(e) => setProdPrepTime(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition-colors font-mono"
-                  />
-                </div>
-
-                <div className="pt-4">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={prodIsAvailable}
-                      onChange={(e) => setProdIsAvailable(e.target.checked)}
-                      className="w-4 h-4 rounded text-orange-500 focus:ring-0 bg-slate-900 border-slate-700"
-                    />
-                    <span className="text-xs font-semibold text-white">
-                      Disponível na chapa
-                    </span>
-                  </label>
-                </div>
+              {/* Tempo de Preparo */}
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Preparo médio (minutos):
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max="120"
+                  value={prodPrepTime}
+                  onChange={(e) => setProdPrepTime(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition-colors font-mono"
+                />
               </div>
 
               {/* Botões de Ação */}

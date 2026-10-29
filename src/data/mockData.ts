@@ -633,6 +633,8 @@ export const MOCK_POSTS: SocialPost[] = [
     comments: [
       {
         id: 'comm-1',
+        authorId: 'usr-marcelo-freguesia',
+        profile_id: 'usr-marcelo-freguesia',
         authorName: 'Marcelo (Morador da Freguesia)',
         authorAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
         text: 'Muito bom ver mais fotos reais aqui no feed da região!',

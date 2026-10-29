@@ -155,10 +155,13 @@ export interface Restaurant {
 
 export interface PostComment {
   id: string;
+  authorId: string;
+  profile_id?: string;
   authorName: string;
   authorAvatar: string;
   text: string;
   createdAt: string;
+  postId?: string;
 }
 
 export interface SocialPost {
