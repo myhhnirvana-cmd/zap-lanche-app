@@ -206,6 +206,58 @@ export const FeedView: React.FC<FeedViewProps> = ({
   useEffect(() => {
     savePostsToStorage(posts);
   }, [posts]);
+  
+useEffect(() => {
+  if (!activeCommentPostId) return;
+
+  let cancelled = false;
+
+  const loadComments = async () => {
+    const { data, error } = await fetchComments(activeCommentPostId);
+
+    if (cancelled) return;
+
+    if (error) {
+      setNotification({
+        type: 'error',
+        text: 'Não foi possível carregar os comentários salvos.',
+      });
+      return;
+    }
+
+    const loadedComments: PostComment[] = (data || []).map((comment) => ({
+      id: comment.id,
+      authorName: comment.author_name,
+      authorAvatar: comment.author_avatar || '',
+      text: comment.text,
+      createdAt: new Date(comment.created_at).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    }));
+
+    setPosts((currentPosts) =>
+      currentPosts.map((post) =>
+        post.id === activeCommentPostId
+          ? {
+              ...post,
+              comments: loadedComments,
+              commentsCount: loadedComments.length,
+            }
+          : post
+      )
+    );
+  };
+
+  loadComments();
+
+  return () => {
+    cancelled = true;
+  };
+}, [activeCommentPostId, commentRefresh]);
+  
 
   // Limpar notificação após tempo determinado
   useEffect(() => {
