@@ -438,7 +438,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
     savePostsToStorage(updatedPosts);
   };
 
-  const handleAddComment = (postId: string) => {
+const handleAddComment = async (postId: string) => {
     const text = commentInputs[postId]?.trim();
     if (!text) return;
 
