@@ -25,7 +25,13 @@ import {
   Camera,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase, isSupabaseConfigured, fetchLoyaltyPoints } from '../lib/supabase';
+import {
+  supabase,
+  isSupabaseConfigured,
+  fetchLoyaltyPoints,
+  redeemRewardInSupabase,
+  fetchRewardsFromSupabase,
+} from '../lib/supabase';
 import { Restaurant, MenuItem, Promotion, SocialPost, LoyaltyReward, UserProfileDemo } from '../types';
 import {
   MOCK_MENU_ITEMS,
@@ -60,6 +66,13 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedZap, setCopiedZap] = useState(false);
   const [redeemedReward, setRedeemedReward] = useState<LoyaltyReward | null>(null);
+  const [redemptionVoucherResult, setRedemptionVoucherResult] = useState<{
+    voucherCode: string;
+    pointsDeducted: number;
+    rewardTitle: string;
+  } | null>(null);
+  const [isRedeeming, setIsRedeeming] = useState(false);
+  const [redemptionError, setRedemptionError] = useState<string | null>(null);
   const [showAntiFraudModal, setShowAntiFraudModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfileDemo>(() => loadUserProfile());
   const [rewardsList, setRewardsList] = useState<LoyaltyReward[]>(() => loadRestaurantRewards(restaurant.id));
@@ -253,11 +266,31 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   };
 
   useEffect(() => {
-    setRewardsList(loadRestaurantRewards(restaurant.id));
+    let isMounted = true;
+    const initialRewards = loadRestaurantRewards(restaurant.id);
+    setRewardsList(initialRewards);
+
+    const targetUuid =
+      (restaurant.supabaseId && UUID_REGEX.test(restaurant.supabaseId) && restaurant.supabaseId) ||
+      (restaurant.id && UUID_REGEX.test(restaurant.id) && restaurant.id) ||
+      null;
+
+    if (isSupabaseConfigured && targetUuid) {
+      fetchRewardsFromSupabase(targetUuid).then((dbRewards) => {
+        if (isMounted && dbRewards && dbRewards.length > 0) {
+          setRewardsList(dbRewards);
+        }
+      });
+    }
+
     if (initialTab) {
       setActiveTab(initialTab);
     }
-  }, [restaurant.id, initialTab]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [restaurant.id, restaurant.supabaseId, initialTab]);
 
   const menuItems = loadRestaurantMenu(restaurant.id);
   const promotions = MOCK_PROMOTIONS[restaurant.id] || MOCK_PROMOTIONS['rest-jorge-jpa'] || Object.values(MOCK_PROMOTIONS)[0] || [];
@@ -291,8 +324,32 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
     setTimeout(() => setCopiedZap(false), 2500);
   };
 
-  const handleCompleteRedemption = () => {
+  const handleCompleteRedemption = async () => {
     if (!redeemedReward) return;
+    setIsRedeeming(true);
+    setRedemptionError(null);
+
+    // Se estiver conectado no Supabase e o prêmio tiver UUID real
+    if (isSupabaseConfigured && user && UUID_REGEX.test(redeemedReward.id)) {
+      const res = await redeemRewardInSupabase(redeemedReward.id);
+      setIsRedeeming(false);
+      if (!res.success) {
+        setRedemptionError(res.message);
+        return;
+      }
+
+      setRedemptionVoucherResult({
+        voucherCode: res.voucherCode || `ZAP-VOUCH-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+        pointsDeducted: res.pointsDeducted || redeemedReward.pointsCost,
+        rewardTitle: redeemedReward.title,
+      });
+      setRedeemedReward(null);
+      await loadRealPoints();
+      return;
+    }
+
+    // Modo demonstrativo offline / fallback
+    const mockVoucher = `ZAP-RESGATE-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Date.now().toString().slice(-4)}`;
 
     // Atualiza estoque do prêmio desta loja
     const currentRewards = loadRestaurantRewards(restaurant.id);
@@ -331,6 +388,13 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
       };
       saveUserProfile(updated);
       return updated;
+    });
+
+    setIsRedeeming(false);
+    setRedemptionVoucherResult({
+      voucherCode: mockVoucher,
+      pointsDeducted: redeemedReward.pointsCost,
+      rewardTitle: redeemedReward.title,
     });
     setRedeemedReward(null);
   };
@@ -619,6 +683,13 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
         {/* Tab 2: Promoções */}
         {activeTab === 'promocoes' && (
           <div className="mt-5 space-y-4">
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
+              <span className="font-semibold">Ofertas e Combos Especiais</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 font-bold border border-amber-500/30">
+                Demonstrativo de Lançamento
+              </span>
+            </div>
+
             {promotions.length === 0 ? (
               <div className="text-center py-10 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-xs">
                 Nenhuma promoção ativa no momento para esta lanchonete.
@@ -948,26 +1019,29 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
         )}
       </div>
 
-      {/* Simulated Reward Redemption Modal */}
+      {/* Modal de Confirmação do Resgate */}
       {redeemedReward && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md bg-[#13151f] border border-amber-500/40 rounded-2xl p-5 space-y-4 shadow-2xl">
+          <div className="w-full max-w-md bg-[#13151f] border border-amber-500/40 rounded-3xl p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Gift className="w-5 h-5 text-amber-400" />
                 <h4 className="font-bold text-base text-white">
-                  Resgate de Recompensa (Demonstração)
+                  Confirmar Resgate de Recompensa
                 </h4>
               </div>
               <button
-                onClick={() => setRedeemedReward(null)}
+                onClick={() => {
+                  setRedeemedReward(null);
+                  setRedemptionError(null);
+                }}
                 className="p-1 rounded-lg text-slate-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2 text-xs">
+            <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2 text-xs">
               <div className="font-bold text-white text-sm">
                 {redeemedReward.title}
               </div>
@@ -980,28 +1054,105 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-center space-y-1">
-              <span className="text-[11px] text-slate-400 block uppercase tracking-wider">
-                Código Demonstrativo de Resgate
-              </span>
-              <span className="font-mono font-extrabold text-lg text-amber-300">
-                #ZAP-RESGATE-7492
-              </span>
-              <p className="text-[10px] text-slate-400 mt-1">
-                Apresente este código ao comerciante ou informe na mensagem do WhatsApp.
+            {/* Regra 70/30 Info */}
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300/90 space-y-1">
+              <span className="font-bold block">Regra de Segurança 70/30:</span>
+              <p className="text-[11px] text-slate-300">
+                Mínimo de {redeemedReward.minStorePointsRequired} pontos da casa + até {redeemedReward.maxGlobalPointsAllowed} pontos globais de indicação.
               </p>
             </div>
 
-            <p className="text-[11px] text-slate-400 text-center italic">
-              * Operação simulada em modo de demonstração. Nenhum ponto real foi transferido.
-            </p>
+            {redemptionError && (
+              <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{redemptionError}</span>
+              </div>
+            )}
 
-            <button
-              onClick={handleCompleteRedemption}
-              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition-colors"
-            >
-              Concluir e Debitar Pontos
-            </button>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => {
+                  setRedeemedReward(null);
+                  setRedemptionError(null);
+                }}
+                disabled={isRedeeming}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold transition-colors"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={handleCompleteRedemption}
+                disabled={isRedeeming}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 shadow-md"
+              >
+                {isRedeeming ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Processando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Confirmar Resgate
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Voucher Gerado com Sucesso */}
+      {redemptionVoucherResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md bg-[#13151f] border border-emerald-500/50 rounded-3xl p-6 space-y-4 shadow-2xl text-center">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-1">
+              <h4 className="font-extrabold text-lg text-white font-display">
+                Voucher de Resgate Gerado! 🎉
+              </h4>
+              <p className="text-xs text-slate-300">
+                {redemptionVoucherResult.rewardTitle} ({redemptionVoucherResult.pointsDeducted} pontos debitados)
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/40 space-y-2">
+              <span className="text-[10px] text-emerald-300 uppercase font-bold tracking-wider block">
+                Seu Código de Validação no Balcão
+              </span>
+              <div className="text-xl font-mono font-black text-emerald-400 tracking-wider select-all py-1">
+                {redemptionVoucherResult.voucherCode}
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Apresente este código presencialmente na lanchonete ou informe na mensagem do seu pedido no WhatsApp!
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(redemptionVoucherResult.voucherCode);
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 2000);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-white text-xs font-bold transition-colors"
+              >
+                {copiedLink ? 'Código Copiado!' : 'Copiar Código'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRedemptionVoucherResult(null)}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors"
+              >
+                Concluir
+              </button>
+            </div>
           </div>
         </div>
       )}

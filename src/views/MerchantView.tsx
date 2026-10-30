@@ -71,7 +71,13 @@ import {
   deleteMenuItem,
   updateRestaurantInSupabase,
   uploadRestaurantImage,
+  fetchRewardsFromSupabase,
+  insertRewardToSupabase,
+  updateRewardInSupabase,
+  deleteRewardFromSupabase,
+  isSupabaseConfigured,
 } from '../lib/supabase';
+import { UUID_REGEX } from '../utils/qrCode';
 
 interface MerchantViewProps {
   restaurants?: Restaurant[];
@@ -155,6 +161,19 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
     const storeRewards = loadRestaurantRewards(storeId);
     setRewardsList(storeRewards);
+
+    const targetUuid =
+      (store.supabaseId && UUID_REGEX.test(store.supabaseId) && store.supabaseId) ||
+      (store.id && UUID_REGEX.test(store.id) && store.id) ||
+      null;
+
+    if (isSupabaseConfigured && targetUuid) {
+      fetchRewardsFromSupabase(targetUuid).then((dbRewards) => {
+        if (dbRewards && dbRewards.length > 0) {
+          setRewardsList(dbRewards);
+        }
+      });
+    }
 
     const storeStats = loadMerchantStats(storeId);
     setStats(storeStats);
@@ -731,7 +750,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     }
   };
 
-  const handleSaveReward = (e: React.FormEvent) => {
+  const handleSaveReward = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rewardTitle.trim()) {
       setRewardFormError('O nome do prêmio é obrigatório.');
@@ -758,8 +777,38 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     const minStore = points - maxGlobal;
     const maxPerUser = parseInt(rewardMaxPerUser) || 1;
 
+    let persistentRewardImg = rewardImageUrl || currentRestaurant.bannerUrl;
+
+    const targetRestUuid =
+      (currentRestaurant.supabaseId && UUID_REGEX.test(currentRestaurant.supabaseId) && currentRestaurant.supabaseId) ||
+      (selectedRestaurantId && UUID_REGEX.test(selectedRestaurantId) && selectedRestaurantId) ||
+      null;
+
+    if (targetRestUuid && persistentRewardImg.startsWith('data:')) {
+      const { publicUrl } = await uploadRestaurantImage(targetRestUuid, persistentRewardImg, 'reward');
+      if (publicUrl) {
+        persistentRewardImg = publicUrl;
+      }
+    }
+
     let updatedList: LoyaltyReward[];
     if (editingReward) {
+      if (isSupabaseConfigured && UUID_REGEX.test(editingReward.id)) {
+        await updateRewardInSupabase({
+          id: editingReward.id,
+          title: rewardTitle.trim(),
+          description: rewardDescription.trim(),
+          points_cost: points,
+          stock,
+          status: finalStatus,
+          is_available: isAvail,
+          max_global_points_allowed: maxGlobal,
+          min_store_points_required: minStore,
+          max_redemptions_per_user: maxPerUser,
+          image_url: persistentRewardImg,
+        });
+      }
+
       updatedList = rewardsList.map((r) =>
         r.id === editingReward.id
           ? {
@@ -773,14 +822,34 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               maxGlobalPointsAllowed: maxGlobal,
               minStorePointsRequired: minStore,
               maxRedemptionsPerUser: maxPerUser,
-              imageUrl: rewardImageUrl || r.imageUrl,
+              imageUrl: persistentRewardImg,
             }
           : r
       );
       showToast(`Prêmio "${rewardTitle.trim()}" atualizado com sucesso!`);
     } else {
+      let createdId = `rew-${Date.now()}`;
+      if (isSupabaseConfigured && targetRestUuid) {
+        const { data: dbReward } = await insertRewardToSupabase({
+          restaurant_id: targetRestUuid,
+          title: rewardTitle.trim(),
+          description: rewardDescription.trim(),
+          points_cost: points,
+          stock,
+          status: finalStatus,
+          is_available: isAvail,
+          max_global_points_allowed: maxGlobal,
+          min_store_points_required: minStore,
+          max_redemptions_per_user: maxPerUser,
+          image_url: persistentRewardImg,
+        });
+        if (dbReward?.id) {
+          createdId = dbReward.id;
+        }
+      }
+
       const newReward: LoyaltyReward = {
-        id: `rew-${Date.now()}`,
+        id: createdId,
         restaurantId: selectedRestaurantId,
         restaurantName: currentRestaurant.name,
         title: rewardTitle.trim(),
@@ -792,7 +861,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         maxGlobalPointsAllowed: maxGlobal,
         minStorePointsRequired: minStore,
         maxRedemptionsPerUser: maxPerUser,
-        imageUrl: rewardImageUrl || currentRestaurant.bannerUrl,
+        imageUrl: persistentRewardImg,
       };
       updatedList = [newReward, ...rewardsList];
       showToast(`Novo prêmio "${rewardTitle.trim()}" cadastrado com sucesso!`);
@@ -803,35 +872,50 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setIsRewardModalOpen(false);
   };
 
-  const toggleRewardStatus = (rewardId: string) => {
+  const toggleRewardStatus = async (rewardId: string) => {
+    const target = rewardsList.find((r) => r.id === rewardId);
+    if (!target) return;
+
+    if (target.stock <= 0) {
+      showToast(`O prêmio "${target.title}" está com estoque zerado e permanece esgotado.`);
+      return;
+    }
+
+    const nextStatus: RewardStatus = target.status === 'ativo' ? 'pausado' : 'ativo';
+    const nextAvail = nextStatus === 'ativo';
+
+    if (isSupabaseConfigured && UUID_REGEX.test(rewardId)) {
+      await updateRewardInSupabase({
+        id: rewardId,
+        status: nextStatus,
+        is_available: nextAvail,
+      });
+    }
+
     const updated = rewardsList.map((r) => {
       if (r.id === rewardId) {
-        if (r.stock <= 0) {
-          return { ...r, status: 'esgotado' as RewardStatus, isAvailable: false };
-        }
-        const nextStatus: RewardStatus = r.status === 'ativo' ? 'pausado' : 'ativo';
         return {
           ...r,
           status: nextStatus,
-          isAvailable: nextStatus === 'ativo',
+          isAvailable: nextAvail,
         };
       }
       return r;
     });
     setRewardsList(updated);
     saveRestaurantRewards(selectedRestaurantId, updated);
-    const item = updated.find((r) => r.id === rewardId);
-    if (item) {
-      showToast(
-        item.stock <= 0
-          ? `O prêmio "${item.title}" está com estoque zerado e permanece esgotado.`
-          : `Prêmio "${item.title}" ${item.status === 'ativo' ? 'ativado para resgates' : 'pausado temporariamente'}.`
-      );
-    }
+    showToast(
+      `Prêmio "${target.title}" ${nextStatus === 'ativo' ? 'ativado para resgates' : 'pausado temporariamente'}.`
+    );
   };
 
-  const handleConfirmDeleteReward = () => {
+  const handleConfirmDeleteReward = async () => {
     if (!deletingReward) return;
+
+    if (isSupabaseConfigured && UUID_REGEX.test(deletingReward.id)) {
+      await deleteRewardFromSupabase(deletingReward.id);
+    }
+
     const remaining = rewardsList.filter((r) => r.id !== deletingReward.id);
     setRewardsList(remaining);
     saveRestaurantRewards(selectedRestaurantId, remaining);
@@ -1168,69 +1252,78 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
       </div>
 
-      {/* Analytics KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-            <span>Visitas no Cardápio</span>
-            <Eye className="w-4 h-4 text-orange-400" />
-          </div>
-          <span className="text-xl font-extrabold text-white tabular-nums">
-            {stats.viewsThisWeek}
-          </span>
-          <span className="text-[10px] text-emerald-400 block mt-0.5">
-            +18% nesta semana
+      {/* Analytics KPI strip com transparência */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-xs px-1">
+          <span className="text-slate-400 font-semibold">Desempenho Comercial</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+            Estimativas Demonstrativas
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-            <span>Cliques p/ WhatsApp</span>
-            <MessageCircle className="w-4 h-4 text-emerald-400" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
+            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+              <span>Visitas no Cardápio</span>
+              <Eye className="w-4 h-4 text-orange-400" />
+            </div>
+            <span className="text-xl font-extrabold text-white tabular-nums">
+              {stats.viewsThisWeek}
+            </span>
+            <span className="text-[10px] text-emerald-400 block mt-0.5">
+              +18% nesta semana
+            </span>
           </div>
-          <span className="text-xl font-extrabold text-emerald-400 tabular-nums">
-            {stats.zapClicksThisWeek}
-          </span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">
-            Pedidos direcionados
-          </span>
-        </div>
 
-        <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-            <span>Interações no Feed</span>
-            <Flame className="w-4 h-4 text-amber-400" />
+          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
+            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+              <span>Cliques p/ WhatsApp</span>
+              <MessageCircle className="w-4 h-4 text-emerald-400" />
+            </div>
+            <span className="text-xl font-extrabold text-emerald-400 tabular-nums">
+              {stats.zapClicksThisWeek}
+            </span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">
+              Pedidos direcionados
+            </span>
           </div>
-          <span className="text-xl font-extrabold text-amber-400 tabular-nums">
-            {stats.feedInteractions}
-          </span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">
-            Curtidas e comentários
-          </span>
-        </div>
 
-        <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-          <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-            <span>Prato Campeão</span>
-            <Sparkles className="w-4 h-4 text-yellow-400" />
+          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
+            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+              <span>Interações no Feed</span>
+              <Flame className="w-4 h-4 text-amber-400" />
+            </div>
+            <span className="text-xl font-extrabold text-amber-400 tabular-nums">
+              {stats.feedInteractions}
+            </span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">
+              Curtidas e comentários
+            </span>
           </div>
-          <span className="text-sm font-bold text-white truncate block">
-            {menuItems[0]?.name || stats.topDishName}
-          </span>
-          <span className="text-[10px] text-orange-400 font-semibold block mt-0.5">
-            {stats.topDishOrders} pedidos no mês
-          </span>
+
+          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
+            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
+              <span>Prato Campeão</span>
+              <Sparkles className="w-4 h-4 text-yellow-400" />
+            </div>
+            <span className="text-sm font-bold text-white truncate block">
+              {menuItems[0]?.name || stats.topDishName}
+            </span>
+            <span className="text-[10px] text-orange-400 font-semibold block mt-0.5">
+              {stats.topDishOrders} pedidos no mês
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Guia do Comerciante */}
       <GuideSection
-        title="Como gerenciar sua loja"
+        title="Guia de Gestão da Sua Loja"
         steps={[
-          "Mantenha o cardápio atualizado com fotos reais e preços.",
-          "Controle o status do balcão (aberto/pausado) para receber pedidos.",
-          "Gerencie o programa de fidelidade criando prêmios atraentes.",
-          "Monitore o desempenho da sua loja e interaja no feed."
+          "Mantenha o cardápio atualizado com fotos reais e preços em dia.",
+          "Crie Recompensas de Fidelidade com estoque e controle de 70% de pontos da sua loja.",
+          "Exiba seu QR Code oficial no balcão para os clientes pontuarem presencialmente.",
+          "Receba clientes direto no WhatsApp oficial, sem intermediários nem comissão sobre o pedido."
         ]}
       />
 
@@ -1795,20 +1888,25 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
       </div>
 
-      {/* Simulated Live Zap Orders Queue */}
+      {/* Simulated Live Zap Orders Queue com transparência */}
       <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <MessageCircle className="w-4 h-4 text-emerald-400" />
-              Pedidos Chegando no WhatsApp (Simulação)
-            </h3>
-            <p className="text-xs text-slate-400">
-              Notificação direta para o comerciante sem intermediários nem comissão
+              <h3 className="text-sm font-bold text-white">
+                Simulador de Atendimento WhatsApp
+              </h3>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30">
+                Simulador
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+              Os pedidos reais dos clientes chegam diretamente no aplicativo WhatsApp do seu estabelecimento. Este painel demonstra o fluxo de conferência ágil.
             </p>
           </div>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-bold border border-orange-500/30">
-            {mockIncomingOrders.length} novos
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-bold border border-orange-500/30 self-start sm:self-auto shrink-0">
+            {mockIncomingOrders.length} na fila
           </span>
         </div>
 

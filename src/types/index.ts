@@ -190,6 +190,7 @@ export interface SocialPost {
   };
   hasPhotoValidation?: boolean; // Avaliação acompanhada de foto auditada
   isModerated?: boolean;
+  is_demo?: boolean; // Sinalizador de post demonstrativo vs real
 }
 
 export interface UserProfileDemo {

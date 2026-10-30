@@ -1,0 +1,5 @@
+{
+  "summary":  "Refined migration file with correct creation order, secure merchant RLS, safe structural ALTER TABLE, robust referral uniqueness with retry loops, transactional referral advisory locks, strict cancellation safeguards, consistent deadlock-free advisory locks, and JSONb global FIFO 70/30 allocation.",
+  "updatedAt":  "2026-10-30T02:39:17.922407334Z",
+  "userFacing":  true
+}

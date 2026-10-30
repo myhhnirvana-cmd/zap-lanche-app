@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Restaurant, MenuItem } from '../types';
+import { Restaurant, MenuItem, LoyaltyReward } from '../types';
 import { MOCK_RESTAURANTS, MOCK_MENU_ITEMS } from '../data/mockData';
 
 // Obtenção das variáveis injetadas via Vite no ambiente cliente.
@@ -577,7 +577,7 @@ export async function updateRestaurantInSupabase(input: UpdateRestaurantInput) {
 export async function uploadRestaurantImage(
   restaurantId: string,
   dataUrlOrFile: string | File | Blob,
-  imageType: 'banner' | 'logo'
+  imageType: 'banner' | 'logo' | 'reward'
 ): Promise<{ publicUrl: string | null; error: Error | null }> {
   if (!isSupabaseConfigured || !supabase) {
     return { publicUrl: null, error: new Error('Supabase não configurado') };
@@ -1026,5 +1026,611 @@ export async function deleteComment(
     return { error: null };
   } catch (err: any) {
     return { error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+// ==============================================================================
+// 1. FEED COMPARTILHADO: PUBLICAÇÕES E CURTIDAS REAIS
+// ==============================================================================
+
+export interface DbPostRow {
+  id: string;
+  restaurant_id: string;
+  restaurant_name: string;
+  restaurant_category: string;
+  neighborhood: string;
+  profile_id: string;
+  author_name: string;
+  author_avatar?: string | null;
+  author_role: 'morador' | 'comerciante' | 'critico_do_bairro';
+  content: string;
+  image_url?: string | null;
+  is_demo: boolean;
+  created_at: string;
+  edited_at?: string | null;
+}
+
+export interface InsertPostInput {
+  restaurant_id: string;
+  restaurant_name: string;
+  restaurant_category: string;
+  neighborhood: string;
+  profile_id: string;
+  author_name: string;
+  author_avatar?: string | null;
+  author_role?: 'morador' | 'comerciante' | 'critico_do_bairro';
+  content: string;
+  image_url?: string | null;
+  is_demo?: boolean;
+}
+
+export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error('Supabase não configurado') };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data: (data as DbPostRow[]) || [], error: null };
+  } catch (err: any) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+export async function insertPostToSupabase(input: InsertPostInput): Promise<{ data: DbPostRow | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error('Supabase não configurado') };
+  }
+
+  try {
+    const payload = {
+      restaurant_id: input.restaurant_id,
+      restaurant_name: input.restaurant_name,
+      restaurant_category: input.restaurant_category,
+      neighborhood: input.neighborhood,
+      profile_id: input.profile_id,
+      author_name: input.author_name.trim(),
+      author_avatar: input.author_avatar || null,
+      author_role: input.author_role || 'morador',
+      content: input.content.trim(),
+      image_url: input.image_url || null,
+      is_demo: Boolean(input.is_demo),
+    };
+
+    const { data, error } = await supabase
+      .from('posts')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data: data as DbPostRow, error: null };
+  } catch (err: any) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+export async function updatePostInSupabase(
+  postId: string,
+  content: string,
+  imageUrl?: string | null
+): Promise<{ data: DbPostRow | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error('Supabase não configurado') };
+  }
+
+  try {
+    const payload: Record<string, any> = {
+      content: content.trim(),
+      edited_at: new Date().toISOString(),
+    };
+    if (imageUrl !== undefined) {
+      payload.image_url = imageUrl;
+    }
+
+    const { data, error } = await supabase
+      .from('posts')
+      .update(payload)
+      .eq('id', postId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data: data as DbPostRow, error: null };
+  } catch (err: any) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+export async function deletePostInSupabase(postId: string): Promise<{ error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { error: new Error('Supabase não configurado') };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('posts')
+      .delete()
+      .eq('id', postId)
+      .select();
+
+    if (error) {
+      return { error: new Error(error.message) };
+    }
+
+    if (!data || data.length === 0) {
+      return { error: new Error('Nenhuma publicação foi excluída. Verifique se você é o autor.') };
+    }
+
+    return { error: null };
+  } catch (err: any) {
+    return { error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+export async function fetchPostLikesFromSupabase(): Promise<{ data: { post_id: string; profile_id: string }[] | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error('Supabase não configurado') };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('post_likes')
+      .select('post_id, profile_id');
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data: data || [], error: null };
+  } catch (err: any) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+export async function togglePostLikeInSupabase(
+  postId: string,
+  profileId: string,
+  currentlyLiked: boolean
+): Promise<{ isLiked: boolean; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { isLiked: !currentlyLiked, error: null };
+  }
+
+  try {
+    if (currentlyLiked) {
+      const { error } = await supabase
+        .from('post_likes')
+        .delete()
+        .eq('post_id', postId)
+        .eq('profile_id', profileId);
+
+      if (error) return { isLiked: true, error: new Error(error.message) };
+      return { isLiked: false, error: null };
+    } else {
+      const { error } = await supabase
+        .from('post_likes')
+        .insert([{ post_id: postId, profile_id: profileId }]);
+
+      if (error && error.code !== '23505') {
+        return { isLiked: false, error: new Error(error.message) };
+      }
+      return { isLiked: true, error: null };
+    }
+  } catch (err: any) {
+    return { isLiked: currentlyLiked, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+// ==============================================================================
+// 2. QUADRO DE PONTOS POR ESTABELECIMENTO
+// ==============================================================================
+
+export interface StorePointBreakdown {
+  restaurantId: string;
+  restaurant_id: string;
+  restaurantName: string;
+  restaurant_name: string;
+  points: number;
+  balance: number;
+  transactionsCount: number;
+  transactions_count: number;
+}
+
+export async function fetchStoreLoyaltyBreakdown(
+  userId: string
+): Promise<{ data: StorePointBreakdown[] | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase || !userId) {
+    return { data: null, error: new Error('Supabase não configurado ou usuário ausente') };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('loyalty_transactions')
+      .select('restaurant_id, points')
+      .eq('profile_id', userId)
+      .not('restaurant_id', 'is', null);
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    const map = new Map<string, { points: number; count: number }>();
+    for (const row of data || []) {
+      const rId = String(row.restaurant_id);
+      const pts = Number(row.points) || 0;
+      const current = map.get(rId) || { points: 0, count: 0 };
+      map.set(rId, { points: current.points + pts, count: current.count + 1 });
+    }
+
+    const result: StorePointBreakdown[] = Array.from(map.entries()).map(([restaurantId, stat]) => {
+      const matched = MOCK_RESTAURANTS.find((r) => r.id === restaurantId || r.supabaseId === restaurantId);
+      const name = matched?.name || `Lanchonete (${restaurantId.slice(0, 8)})`;
+      return {
+        restaurantId,
+        restaurant_id: restaurantId,
+        restaurantName: name,
+        restaurant_name: name,
+        points: stat.points,
+        balance: stat.points,
+        transactionsCount: stat.count,
+        transactions_count: stat.count,
+      };
+    });
+
+    return { data: result, error: null };
+  } catch (err: any) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+// ==============================================================================
+// 3. INDICAÇÃO DE AMIGOS COM BÔNUS REAL
+// ==============================================================================
+
+export async function fetchUserProfileReferralCode(
+  userId: string
+): Promise<string | null> {
+  if (!isSupabaseConfigured || !supabase || !userId) return null;
+
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('referral_code')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (data?.referral_code) {
+      return data.referral_code;
+    }
+
+    // Se ainda não tiver código, gera um baseado no ID
+    const fallbackCode = 'ZAP-' + userId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
+    await supabase
+      .from('profiles')
+      .update({ referral_code: fallbackCode })
+      .eq('id', userId);
+
+    return fallbackCode;
+  } catch {
+    return 'ZAP-' + userId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
+  }
+}
+
+export async function applyReferralCode(
+  code: string
+): Promise<{ success: boolean; message: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, message: 'Serviço de indicação indisponível.' };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('register_referral_code', {
+      p_code: code.trim(),
+    });
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    const res = typeof data === 'string' ? JSON.parse(data) : data;
+    return {
+      success: Boolean(res?.success),
+      message: res?.message || (res?.success ? 'Código aplicado com sucesso!' : 'Código inválido.'),
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Falha ao aplicar código de indicação.' };
+  }
+}
+
+export interface ReferralRecord {
+  id: string;
+  status: string;
+  created_at: string;
+  rewarded_at?: string | null;
+  referred_name?: string;
+}
+
+export async function fetchUserReferralsList(
+  userId: string
+): Promise<ReferralRecord[]> {
+  if (!isSupabaseConfigured || !supabase || !userId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('referrals')
+      .select('id, status, created_at, rewarded_at')
+      .eq('referrer_profile_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+    return data.map((item, index) => ({
+      ...item,
+      referred_name: `Amigo indicado #${index + 1}`,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// ==============================================================================
+// 4. PRÊMIOS DE FIDELIDADE PERSISTENTES E RESGATE REAL
+// ==============================================================================
+
+export async function fetchRewardsFromSupabase(
+  restaurantId?: string
+): Promise<LoyaltyReward[] | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  try {
+    let query = supabase.from('loyalty_rewards').select('*');
+    if (restaurantId) {
+      query = query.eq('restaurant_id', restaurantId);
+    }
+
+    const { data, error } = await query;
+    if (error || !data) return null;
+
+    return data.map((r: any) => ({
+      id: r.id,
+      restaurantId: r.restaurant_id,
+      restaurantName: '',
+      title: r.title,
+      description: r.description,
+      pointsCost: r.points_cost,
+      stock: r.stock,
+      status: r.status,
+      isAvailable: r.status === 'ativo' && r.stock > 0,
+      maxGlobalPointsAllowed: Math.round(r.points_cost * 0.3),
+      minStorePointsRequired: Math.round(r.points_cost * 0.7),
+      maxRedemptionsPerUser: r.max_redemptions_per_user || 1,
+      imageUrl: r.image_url || '',
+    }));
+  } catch {
+    return null;
+  }
+}
+
+export async function insertRewardToSupabase(
+  reward: {
+    restaurantId?: string;
+    restaurant_id?: string;
+    title: string;
+    description: string;
+    pointsCost?: number;
+    points_cost?: number;
+    stock: number;
+    status: 'ativo' | 'pausado' | 'esgotado';
+    imageUrl?: string | null;
+    image_url?: string | null;
+    maxRedemptionsPerUser?: number;
+    max_redemptions_per_user?: number;
+    max_global_points_allowed?: number;
+    min_store_points_required?: number;
+    is_available?: boolean;
+  }
+): Promise<{ data: LoyaltyReward | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error('Supabase não configurado') };
+  }
+
+  try {
+    const pointsCost = reward.pointsCost ?? reward.points_cost ?? 100;
+    const rId = reward.restaurantId || reward.restaurant_id || '';
+    const imgUrl = reward.imageUrl || reward.image_url || null;
+    const maxUser = reward.maxRedemptionsPerUser || reward.max_redemptions_per_user || 1;
+
+    const payload = {
+      restaurant_id: rId,
+      title: reward.title.trim(),
+      description: reward.description.trim(),
+      points_cost: pointsCost,
+      stock: reward.stock,
+      status: reward.status,
+      image_url: imgUrl,
+      max_redemptions_per_user: maxUser,
+    };
+
+    const { data, error } = await supabase
+      .from('loyalty_rewards')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error || !data) {
+      return { data: null, error: new Error(error?.message || 'Falha ao inserir prêmio') };
+    }
+
+    const mapped: LoyaltyReward = {
+      id: data.id,
+      restaurantId: data.restaurant_id,
+      restaurantName: '',
+      title: data.title,
+      description: data.description,
+      pointsCost: data.points_cost,
+      stock: data.stock,
+      status: data.status,
+      isAvailable: data.status === 'ativo' && data.stock > 0,
+      maxGlobalPointsAllowed: Math.round(data.points_cost * 0.3),
+      minStorePointsRequired: Math.round(data.points_cost * 0.7),
+      maxRedemptionsPerUser: data.max_redemptions_per_user || 1,
+      imageUrl: data.image_url || '',
+    };
+
+    return { data: mapped, error: null };
+  } catch (err: any) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+export async function updateRewardInSupabase(
+  reward: {
+    id: string;
+    title?: string;
+    description?: string;
+    pointsCost?: number;
+    points_cost?: number;
+    stock?: number;
+    status?: 'ativo' | 'pausado' | 'esgotado';
+    isAvailable?: boolean;
+    is_available?: boolean;
+    imageUrl?: string | null;
+    image_url?: string | null;
+    maxRedemptionsPerUser?: number;
+    max_redemptions_per_user?: number;
+    maxGlobalPointsAllowed?: number;
+    max_global_points_allowed?: number;
+    minStorePointsRequired?: number;
+    min_store_points_required?: number;
+    restaurantName?: string;
+  }
+): Promise<{ data: LoyaltyReward | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error('Supabase não configurado') };
+  }
+
+  try {
+    const payload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (reward.title !== undefined) payload.title = reward.title.trim();
+    if (reward.description !== undefined) payload.description = reward.description.trim();
+    if (reward.pointsCost !== undefined) payload.points_cost = reward.pointsCost;
+    if (reward.points_cost !== undefined) payload.points_cost = reward.points_cost;
+    if (reward.stock !== undefined) {
+      payload.stock = reward.stock;
+      if (reward.stock <= 0) payload.status = 'esgotado';
+    }
+    if (reward.status !== undefined && (reward.stock === undefined || reward.stock > 0)) {
+      payload.status = reward.status;
+    }
+    if (reward.imageUrl !== undefined) payload.image_url = reward.imageUrl;
+    if (reward.image_url !== undefined) payload.image_url = reward.image_url;
+    if (reward.maxRedemptionsPerUser !== undefined) payload.max_redemptions_per_user = reward.maxRedemptionsPerUser;
+    if (reward.max_redemptions_per_user !== undefined) payload.max_redemptions_per_user = reward.max_redemptions_per_user;
+
+    const { data, error } = await supabase
+      .from('loyalty_rewards')
+      .update(payload)
+      .eq('id', reward.id)
+      .select()
+      .single();
+
+    if (error || !data) {
+      return { data: null, error: new Error(error?.message || 'Falha ao atualizar prêmio') };
+    }
+
+    const mapped: LoyaltyReward = {
+      id: data.id,
+      restaurantId: data.restaurant_id,
+      restaurantName: reward.restaurantName || '',
+      title: data.title,
+      description: data.description,
+      pointsCost: data.points_cost,
+      stock: data.stock,
+      status: data.status,
+      isAvailable: data.status === 'ativo' && data.stock > 0,
+      maxGlobalPointsAllowed: Math.round(data.points_cost * 0.3),
+      minStorePointsRequired: Math.round(data.points_cost * 0.7),
+      maxRedemptionsPerUser: data.max_redemptions_per_user || 1,
+      imageUrl: data.image_url || '',
+    };
+
+    return { data: mapped, error: null };
+  } catch (err: any) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+export async function deleteRewardFromSupabase(
+  rewardId: string
+): Promise<{ error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { error: new Error('Supabase não configurado') };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('loyalty_rewards')
+      .delete()
+      .eq('id', rewardId);
+
+    if (error) {
+      return { error: new Error(error.message) };
+    }
+
+    return { error: null };
+  } catch (err: any) {
+    return { error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+export async function redeemRewardInSupabase(
+  rewardId: string
+): Promise<{ success: boolean; voucherCode?: string; pointsDeducted?: number; message: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, message: 'Serviço de resgate indisponível.' };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('redeem_loyalty_reward', {
+      p_reward_id: rewardId,
+    });
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    const res = typeof data === 'string' ? JSON.parse(data) : data;
+    if (res?.success) {
+      return {
+        success: true,
+        voucherCode: res.voucher_code,
+        pointsDeducted: res.points_deducted,
+        message: res.message || 'Prêmio resgatado com sucesso!',
+      };
+    }
+
+    return {
+      success: false,
+      message: res?.message || 'Não foi possível concluir o resgate.',
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Falha ao processar resgate no servidor.' };
   }
 }

@@ -29,6 +29,12 @@ import {
   updateComment,
   deleteComment,
   UUID_REGEX,
+  fetchPostsFromSupabase,
+  insertPostToSupabase,
+  updatePostInSupabase,
+  deletePostInSupabase,
+  fetchPostLikesFromSupabase,
+  togglePostLikeInSupabase,
 } from '../lib/supabase';
 
 interface FeedViewProps {
@@ -238,20 +244,31 @@ export const FeedView: React.FC<FeedViewProps> = ({
     return () => clearTimeout(timer);
   }, [notification]);
 
-  // Sincroniza comentários reais do Supabase na inicialização
+  // Sincroniza publicações compartilhadas, curtidas e comentários do Supabase
   useEffect(() => {
     let isMounted = true;
-    async function syncSupabaseComments() {
+    async function syncSupabaseFeed() {
       if (!isSupabaseConfigured) return;
-      const { data: dbComments, error } = await fetchComments();
-      if (error || !dbComments || !isMounted) return;
 
-      setPosts((prevPosts) => {
-        return prevPosts.map((post) => {
-          const postDbComments = dbComments.filter((c) => c.post_id === post.id);
-          if (postDbComments.length === 0) return post;
+      try {
+        const [postsRes, likesRes, commentsRes] = await Promise.all([
+          fetchPostsFromSupabase(),
+          fetchPostLikesFromSupabase(),
+          fetchComments(),
+        ]);
 
-          const formattedDbComments: PostComment[] = postDbComments.map((c) => ({
+        if (!isMounted) return;
+
+        const dbPosts = postsRes.data || [];
+        const dbLikes = likesRes.data || [];
+        const dbComments = commentsRes.data || [];
+
+        // Mapear posts do banco de dados compartilhado
+        const mappedDbPosts: SocialPost[] = dbPosts.map((p) => {
+          const postLikes = dbLikes.filter((l) => l.post_id === p.id);
+          const postComments = dbComments.filter((c) => c.post_id === p.id);
+
+          const formattedComments: PostComment[] = postComments.map((c) => ({
             id: c.id,
             profile_id: c.profile_id,
             authorId: c.profile_id,
@@ -262,26 +279,70 @@ export const FeedView: React.FC<FeedViewProps> = ({
             postId: c.post_id,
           }));
 
-          // Preserva comentários locais/mock que ainda não estão no Supabase
-          const localOnlyComments = (post.comments || []).filter(
-            (lc) => !postDbComments.some((dc) => dc.id === lc.id)
-          );
-
-          const merged = [...localOnlyComments, ...formattedDbComments];
           return {
-            ...post,
-            comments: merged,
-            commentsCount: merged.length,
+            id: p.id,
+            restaurantId: p.restaurant_id,
+            restaurantName: p.restaurant_name,
+            restaurantCategory: p.restaurant_category,
+            neighborhood: p.neighborhood,
+            authorId: p.profile_id,
+            authorName: p.author_name,
+            authorAvatar: p.author_avatar || DEFAULT_AVATAR_URL,
+            authorRole: p.author_role,
+            content: p.content,
+            imageUrl: p.image_url || undefined,
+            likesCount: postLikes.length,
+            isLiked: user?.id ? postLikes.some((l) => l.profile_id === user.id) : false,
+            commentsCount: formattedComments.length,
+            comments: formattedComments,
+            createdAt: new Date(p.created_at).toLocaleDateString('pt-BR') + ' às ' + new Date(p.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            editedAt: p.edited_at ? 'Editado recentemente' : undefined,
+            isOwnPost: user?.id ? p.profile_id === user.id : false,
+            hasPhotoValidation: Boolean(p.image_url),
+            is_demo: p.is_demo,
           };
         });
-      });
+
+        // Posts demonstrativos padrão identificados com selo de demonstração
+        const demoPostsWithComments: SocialPost[] = MOCK_POSTS.map((mp) => {
+          const postComments = dbComments.filter((c) => c.post_id === mp.id);
+          const postLikes = dbLikes.filter((l) => l.post_id === mp.id);
+          const formattedComments: PostComment[] = postComments.map((c) => ({
+            id: c.id,
+            profile_id: c.profile_id,
+            authorId: c.profile_id,
+            authorName: c.author_name,
+            authorAvatar: c.author_avatar || DEFAULT_AVATAR_URL,
+            text: c.text,
+            createdAt: new Date(c.created_at).toLocaleDateString('pt-BR'),
+            postId: c.post_id,
+          }));
+
+          return {
+            ...mp,
+            is_demo: true,
+            comments: [...(mp.comments || []), ...formattedComments],
+            commentsCount: (mp.comments || []).length + formattedComments.length,
+            likesCount: (mp.likesCount || 0) + postLikes.length,
+            isLiked: user?.id ? postLikes.some((l) => l.profile_id === user.id) : mp.isLiked,
+          };
+        });
+
+        if (mappedDbPosts.length > 0) {
+          setPosts([...mappedDbPosts, ...demoPostsWithComments]);
+        } else {
+          setPosts(demoPostsWithComments);
+        }
+      } catch (err) {
+        console.warn('Erro ao sincronizar feed com o Supabase:', err);
+      }
     }
 
-    syncSupabaseComments();
+    syncSupabaseFeed();
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [user?.id]);
 
   // Identificação do proprietário usando o ID real da sessão autenticada (auth.users.id)
   const isCommentOwner = (comment: PostComment): boolean => {
@@ -316,7 +377,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
       setNewPostImageName(null);
     } finally {
       setIsCompressingNewImage(false);
-      // Reset input para permitir selecionar o mesmo arquivo novamente se desejar
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -329,59 +389,87 @@ export const FeedView: React.FC<FeedViewProps> = ({
   };
 
   // -------------------------------------------------------------
-  // CRIAÇÃO DE NOVA POSTAGEM
-  // Correção fundamental: se o usuário não escolheu foto, publica
-  // sem imagem (imageUrl: undefined). Nunca reutiliza ASSET_BURGER!
+  // CRIAÇÃO DE NOVA POSTAGEM COM PERSISTÊNCIA COMPARTILHADA
   // -------------------------------------------------------------
-  const handlePublishPost = (e: React.FormEvent) => {
+  const handlePublishPost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPostText.trim()) {
       setFormError('Escreva uma mensagem ou comentário para compartilhar no feed.');
       return;
     }
 
+    if (!user?.id) {
+      setNotification({
+        type: 'warning',
+        text: 'Entre na sua conta para publicar uma recomendação compartilhada no feed.',
+      });
+      return;
+    }
+
     const targetRestaurant =
       restaurants.find((r) => r.id === selectedRestaurantId) || restaurants[0];
 
+    const restaurantIdToUse = targetRestaurant?.supabaseId || targetRestaurant?.id || 'rest-jorge-jpa';
+
+    let createdId = `post-user-${Date.now()}`;
+
+    if (isSupabaseConfigured) {
+      const { data: dbPost, error: postErr } = await insertPostToSupabase({
+        restaurant_id: restaurantIdToUse,
+        restaurant_name: targetRestaurant?.name || 'Lanchonete do Jorge',
+        restaurant_category: targetRestaurant?.categoryLabel || 'Lanches de Chapa',
+        neighborhood: targetRestaurant?.neighborhoodName || 'Freguesia (Jacarepaguá)',
+        profile_id: user.id,
+        author_name: authenticatedAuthorName,
+        author_avatar: currentAvatar,
+        author_role: currentAuthorRole,
+        content: newPostText.trim(),
+        image_url: newPostImage || null,
+        is_demo: false,
+      });
+
+      if (postErr || !dbPost) {
+        setNotification({
+          type: 'error',
+          text: `Falha ao salvar publicação no banco: ${postErr?.message || 'Erro de conexão.'}`,
+        });
+        return;
+      }
+
+      createdId = dbPost.id;
+    }
+
     const newPost: SocialPost = {
-      id: `post-user-${Date.now()}`,
+      id: createdId,
       restaurantId: targetRestaurant?.id || 'rest-jorge-jpa',
       restaurantName: targetRestaurant?.name || 'Lanchonete do Jorge',
       restaurantCategory: targetRestaurant?.categoryLabel || 'Lanches de Chapa',
       neighborhood: targetRestaurant?.neighborhoodName || 'Freguesia (Jacarepaguá)',
-      authorId: currentUserId,
+      authorId: user.id,
       authorName: authenticatedAuthorName,
       authorAvatar: currentAvatar,
       authorRole: currentAuthorRole,
       content: newPostText.trim(),
-      imageUrl: newPostImage || undefined, // Somente foto própria; sem fallback forçado para ASSET_BURGER!
-      likesCount: 1,
-      isLiked: true,
+      imageUrl: newPostImage || undefined,
+      likesCount: 0,
+      isLiked: false,
       commentsCount: 0,
       comments: [],
       createdAt: 'Agora mesmo',
       isOwnPost: true,
       hasPhotoValidation: Boolean(newPostImage),
+      is_demo: false,
     };
 
     const updatedPosts = [newPost, ...posts];
     setPosts(updatedPosts);
+    savePostsToStorage(updatedPosts);
 
-    // Tentar persistir
-    const saved = savePostsToStorage(updatedPosts);
-    if (saved) {
-      setNotification({
-        type: 'success',
-        text: 'Sua publicação foi compartilhada e salva no feed do bairro!',
-      });
-    } else {
-      setNotification({
-        type: 'warning',
-        text: 'Publicação exibida na sessão, mas o armazenamento local do navegador está cheio.',
-      });
-    }
+    setNotification({
+      type: 'success',
+      text: 'Sua publicação foi compartilhada com todos os moradores do bairro!',
+    });
 
-    // Limpar formulário
     setNewPostText('');
     setNewPostImage(null);
     setNewPostImageName(null);
@@ -393,7 +481,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   // EDIÇÃO DE PUBLICAÇÃO PRÓPRIA
   // -------------------------------------------------------------
   const handleStartEdit = (post: SocialPost) => {
-    if (!isPostOwner(post)) return; // Bloqueia edição de outros autores
+    if (!isPostOwner(post)) return;
     setEditingPost(post);
     setEditText(post.content);
     setEditImage(post.imageUrl || null);
@@ -427,7 +515,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
     if (editFileInputRef.current) editFileInputRef.current.value = '';
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPost) return;
     if (!isPostOwner(editingPost)) {
@@ -437,6 +525,18 @@ export const FeedView: React.FC<FeedViewProps> = ({
     if (!editText.trim()) {
       setEditFormError('O texto da publicação não pode ficar vazio.');
       return;
+    }
+
+    if (isSupabaseConfigured && editingPost.id.startsWith('post-')) {
+      const { error: updateErr } = await updatePostInSupabase(
+        editingPost.id,
+        editText.trim(),
+        editImage || null
+      );
+      if (updateErr) {
+        setEditFormError(`Erro ao atualizar no servidor: ${updateErr.message}`);
+        return;
+      }
     }
 
     const updatedPosts = posts.map((p) => {
@@ -453,19 +553,12 @@ export const FeedView: React.FC<FeedViewProps> = ({
     });
 
     setPosts(updatedPosts);
-    const saved = savePostsToStorage(updatedPosts);
+    savePostsToStorage(updatedPosts);
 
-    if (saved) {
-      setNotification({
-        type: 'success',
-        text: 'Publicação atualizada com sucesso!',
-      });
-    } else {
-      setNotification({
-        type: 'warning',
-        text: 'Alterações aplicadas na sessão, mas houve falha ao gravar no armazenamento local.',
-      });
-    }
+    setNotification({
+      type: 'success',
+      text: 'Publicação atualizada com sucesso!',
+    });
 
     setEditingPost(null);
   };
@@ -473,7 +566,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   // -------------------------------------------------------------
   // EXCLUSÃO DE PUBLICAÇÃO PRÓPRIA (COM CONFIRMAÇÃO)
   // -------------------------------------------------------------
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!postToDelete) return;
     if (!isPostOwner(postToDelete)) {
       setNotification({
@@ -482,6 +575,18 @@ export const FeedView: React.FC<FeedViewProps> = ({
       });
       setPostToDelete(null);
       return;
+    }
+
+    if (isSupabaseConfigured && postToDelete.id.startsWith('post-')) {
+      const { error: delErr } = await deletePostInSupabase(postToDelete.id);
+      if (delErr) {
+        setNotification({
+          type: 'error',
+          text: `Erro ao excluir no servidor: ${delErr.message}`,
+        });
+        setPostToDelete(null);
+        return;
+      }
     }
 
     const updatedPosts = posts.filter((p) => p.id !== postToDelete.id);
@@ -495,23 +600,33 @@ export const FeedView: React.FC<FeedViewProps> = ({
     setPostToDelete(null);
   };
 
-  // Curtidas persistidas diretamente no post
-  const toggleLike = (postId: string) => {
-    const updatedPosts = posts.map((p) => {
-      if (p.id === postId) {
-        const isLiked = !p.isLiked;
-        const currentCount = p.likesCount || 0;
-        const likesCount = isLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
-        return {
-          ...p,
-          isLiked,
-          likesCount,
-        };
-      }
-      return p;
-    });
+  // Curtidas compartilhadas sincronizadas no Supabase
+  const toggleLike = async (postId: string) => {
+    const targetPost = posts.find((p) => p.id === postId);
+    if (!targetPost) return;
+    const currentlyLiked = Boolean(targetPost.isLiked);
+
+    if (!user?.id) {
+      setNotification({
+        type: 'warning',
+        text: 'Faça login na sua conta para curtir recomendações do bairro!',
+      });
+      return;
+    }
+
+    const nextLiked = !currentlyLiked;
+    const currentCount = targetPost.likesCount || 0;
+    const nextCount = nextLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
+
+    const updatedPosts = posts.map((p) =>
+      p.id === postId ? { ...p, isLiked: nextLiked, likesCount: nextCount } : p
+    );
     setPosts(updatedPosts);
     savePostsToStorage(updatedPosts);
+
+    if (isSupabaseConfigured) {
+      await togglePostLikeInSupabase(postId, user.id, currentlyLiked);
+    }
   };
 
   const handleAddComment = async (postId: string) => {
@@ -1017,6 +1132,11 @@ export const FeedView: React.FC<FeedViewProps> = ({
                           ? 'Comerciante'
                           : 'Crítico Local'}
                       </span>
+                      {post.is_demo && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                          Demonstração
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
                       <span className="flex items-center gap-0.5 text-orange-400/90">
