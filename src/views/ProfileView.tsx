@@ -15,12 +15,16 @@ import {
   Users,
   Gift,
   CheckCircle2,
+  Camera,
+  Info,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
 import { AvatarGalleryModal } from '../components/profile/AvatarGalleryModal';
 import { getAvatarById, DEFAULT_AVATAR_ID } from '../data/avatars';
 import {
+  supabase,
+  isSupabaseConfigured,
   fetchLoyaltyPoints,
   lastLoyaltyError,
   fetchStoreLoyaltyBreakdown,
@@ -30,6 +34,8 @@ import {
   StorePointBreakdown,
   ReferralRecord,
 } from '../lib/supabase';
+import { QrCodeScannerModal } from '../components/loyalty/QrCodeScannerModal';
+import { parseAndValidateRestaurantQr } from '../utils/qrCode';
 import { MOCK_RESTAURANTS } from '../data/mockData';
 import { ThemeSelector } from '../components/common/ThemeSelector';
 import { GuideSection } from '../components/common/GuideSection';
@@ -74,6 +80,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [inputReferralCode, setInputReferralCode] = useState('');
   const [isApplyingCode, setIsApplyingCode] = useState(false);
   const [referralFeedback, setReferralFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Leitor de QR Code para check-in presencial no balcão (+5 pontos locais)
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [checkinResult, setCheckinResult] = useState<{
+    status: 'success' | 'error' | 'warning';
+    message: string;
+    pointsAwarded?: number;
+  } | null>(null);
 
   const handleBackToExplore = () => {
     if (onBackToExplore) {
@@ -214,6 +229,94 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       setInputReferralCode('');
     } else {
       setReferralFeedback({ type: 'error', message: res.message });
+    }
+  };
+
+  const handleStartCheckin = () => {
+    if (!authUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    setCheckinResult(null);
+    setIsScannerOpen(true);
+  };
+
+  const handleScanQr = async (scannedText: string) => {
+    setIsScannerOpen(false);
+
+    // Validação rigorosa do QR Code (formato oficial zaplanche://restaurant/<UUID>)
+    const parsed = parseAndValidateRestaurantQr(scannedText);
+    if (!parsed.isValid || !parsed.restaurantId) {
+      setCheckinResult({
+        status: 'error',
+        message: 'QR Code inválido. Aponte a câmera para o QR Code oficial do ZAP LANCHE.',
+      });
+      return;
+    }
+
+    if (!authUser?.id) {
+      setCheckinResult({
+        status: 'warning',
+        message: 'Você precisa estar conectado como cliente para registrar seu check-in e acumular pontos reais. Faça login no sistema.',
+      });
+      return;
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      setIsCheckingIn(true);
+      try {
+        const { data, error } = await supabase.rpc('register_restaurant_checkin', {
+          p_restaurant_id: parsed.restaurantId,
+        });
+
+        if (error) {
+          console.error('Erro na RPC register_restaurant_checkin:', error);
+          setCheckinResult({
+            status: 'error',
+            message: error.message || 'Não foi possível registrar o check-in. Tente novamente.',
+          });
+          return;
+        }
+
+        let result = data;
+        if (typeof result === 'string') {
+          try {
+            result = JSON.parse(result);
+          } catch {
+            // mantém resultado se não for JSON string
+          }
+        }
+
+        if (result && result.success === true) {
+          const awarded = typeof result.points_awarded === 'number' ? result.points_awarded : 5;
+          setCheckinResult({
+            status: 'success',
+            message: result.message || `Check-in realizado com sucesso! 🎉\nVocê ganhou ${awarded} pontos locais.`,
+            pointsAwarded: awarded,
+          });
+
+          // Atualiza imediatamente saldo real e histórico por loja no perfil
+          const [points, breakdownRes] = await Promise.all([
+            fetchLoyaltyPoints(authUser.id),
+            fetchStoreLoyaltyBreakdown(authUser.id),
+          ]);
+          if (points !== null) setRealPoints(points);
+          if (breakdownRes?.data) setStorePointsBreakdown(breakdownRes.data);
+        } else {
+          setCheckinResult({
+            status: 'error',
+            message: result?.message || result?.reason || 'Check-in não autorizado pelo estabelecimento.',
+          });
+        }
+      } catch (err: any) {
+        console.error('Exceção ao registrar check-in:', err);
+        setCheckinResult({
+          status: 'error',
+          message: err?.message || 'Erro inesperado ao conectar ao servidor de fidelidade.',
+        });
+      } finally {
+        setIsCheckingIn(false);
+      }
     }
   };
 
@@ -478,14 +581,26 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
       {/* Saldo de Pontos por Estabelecimento */}
       <div className="rounded-3xl bg-bg-surface border border-slate-800 p-6 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
             <Store className="w-4 h-4 text-orange-400" />
-            Pontos Locais por Estabelecimento
-          </h3>
-          <span className="text-[10px] bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/30 font-semibold">
-            Regra 70% Local
-          </span>
+            <h3 className="text-sm font-bold text-text-primary">
+              Pontos Locais por Estabelecimento
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleStartCheckin}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs shadow-md transition-colors"
+            >
+              <Camera className="w-4 h-4" />
+              Escanear QR Code (+5 pts)
+            </button>
+            <span className="text-[10px] bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/30 font-semibold">
+              Regra 70% Local
+            </span>
+          </div>
         </div>
 
         <p className="text-xs text-slate-400 leading-relaxed">
@@ -495,10 +610,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         {loadingRealPoints ? (
           <p className="text-xs text-slate-500 text-center py-4">Calculando saldos por loja...</p>
         ) : storePointsBreakdown.length === 0 ? (
-          <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 text-center">
+          <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-3">
             <p className="text-xs text-slate-400">
-              Você ainda não possui pontos acumulados em estabelecimentos específicos. Faça check-in pelo QR Code ou registre consumo!
+              Você ainda não possui pontos acumulados em estabelecimentos específicos. Faça check-in pelo QR Code no balcão e ganhe 5 pontos!
             </p>
+            <button
+              type="button"
+              onClick={handleStartCheckin}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-extrabold text-xs shadow-md shadow-orange-500/20 transition-all"
+            >
+              <Camera className="w-4 h-4" />
+              Fazer Check-in no Balcão
+            </button>
           </div>
         ) : (
           <div className="divide-y divide-slate-800/80 rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden">
@@ -677,6 +800,78 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         currentAvatarId={userAvatarId}
         onSaveAvatar={updateUserAvatar}
       />
+
+      {/* Leitor de QR Code para Check-in */}
+      <QrCodeScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScan={handleScanQr}
+        isProcessing={isCheckingIn}
+      />
+
+      {/* Modal de Feedback do Check-in */}
+      {checkinResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-sm bg-[#13151f] border border-orange-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="text-center space-y-3">
+              {checkinResult.status === 'success' && (
+                <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
+              )}
+              {checkinResult.status === 'warning' && (
+                <div className="w-16 h-16 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                  <Info className="w-10 h-10" />
+                </div>
+              )}
+              {checkinResult.status === 'error' && (
+                <div className="w-16 h-16 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto text-rose-400">
+                  <AlertCircle className="w-10 h-10" />
+                </div>
+              )}
+
+              <h3 className="text-lg font-bold text-white font-display">
+                {checkinResult.status === 'success'
+                  ? 'Check-in Confirmado!'
+                  : checkinResult.status === 'warning'
+                  ? 'Atenção'
+                  : 'Check-in Não Realizado'}
+              </h3>
+
+              {checkinResult.pointsAwarded && (
+                <div className="inline-block px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold text-xs border border-emerald-500/30">
+                  +{checkinResult.pointsAwarded} pontos adicionados à sua carteira
+                </div>
+              )}
+
+              <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
+                {checkinResult.message}
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              {checkinResult.status === 'error' && (
+                <button
+                  onClick={() => {
+                    setCheckinResult(null);
+                    handleStartCheckin();
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  Tentar Novamente
+                </button>
+              )}
+              <button
+                onClick={() => setCheckinResult(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white font-semibold text-xs transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
