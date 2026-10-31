@@ -1398,26 +1398,26 @@ export async function fetchUserProfileReferralCode(
   if (!isSupabaseConfigured || !supabase || !userId) return null;
 
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('referral_code')
       .eq('id', userId)
       .maybeSingle();
 
-    if (data?.referral_code) {
-      return data.referral_code;
+    if (error) {
+      console.error('Erro ao buscar código de indicação:', error.message);
+      return null;
     }
 
-    // Se ainda não tiver código, gera um baseado no ID
-    const fallbackCode = 'ZAP-' + userId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
-    await supabase
-      .from('profiles')
-      .update({ referral_code: fallbackCode })
-      .eq('id', userId);
+    const referralCode =
+      typeof data?.referral_code === 'string'
+        ? data.referral_code.trim()
+        : '';
 
-    return fallbackCode;
-  } catch {
-    return 'ZAP-' + userId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
+    return referralCode || null;
+  } catch (error) {
+    console.error('Falha ao consultar código de indicação:', error);
+    return null;
   }
 }
 
