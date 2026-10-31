@@ -1,0 +1,1143 @@
+BEGIN;
+
+-- ZAP LANCHE
+-- Migration revisada: feed, indicacoes, carteiras, premios e resgates.
+-- RASCUNHO PARA REVISAO: NAO EXECUTAR AINDA.
+--
+-- Premissas confirmadas no Supabase:
+--   profiles.id e restaurants.id sao UUID.
+--   posts ja existe e usa id UUID, restaurant_id UUID e author_profile_id UUID.
+--   loyalty_transactions ja existe e aceita:
+--   checkin, convite, avaliacao, foto, resgate, ajuste, bonus, campanha.
+--   loyalty_transactions.restaurant_id aceita NULL e expires_at existe.
+--
+-- Esta migration NAO recria nem altera public.posts.
+-- Carteira local: restaurant_id = ID da loja.
+-- Carteira global de indicacao: restaurant_id IS NULL.
+-- Resgate: minimo 70% da loja escolhida e maximo 30% global.
+-- Creditos de outras lojas nunca participam do resgate.
+
+-- ---------------------------------------------------------------------------
+-- 1. FEED: preservar posts e criar somente a tabela ausente de curtidas
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.post_likes (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_id uuid NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+    profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT post_likes_post_user_unique UNIQUE (post_id, profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS post_likes_post_id_idx
+    ON public.post_likes(post_id);
+CREATE INDEX IF NOT EXISTS post_likes_profile_id_idx
+    ON public.post_likes(profile_id);
+
+ALTER TABLE public.post_likes ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT ON public.post_likes TO anon, authenticated;
+GRANT INSERT, DELETE ON public.post_likes TO authenticated;
+
+DROP POLICY IF EXISTS post_likes_select_public ON public.post_likes;
+CREATE POLICY post_likes_select_public
+ON public.post_likes
+FOR SELECT TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS post_likes_insert_own ON public.post_likes;
+CREATE POLICY post_likes_insert_own
+ON public.post_likes
+FOR INSERT TO authenticated
+WITH CHECK (auth.uid() = profile_id);
+
+DROP POLICY IF EXISTS post_likes_delete_own ON public.post_likes;
+CREATE POLICY post_likes_delete_own
+ON public.post_likes
+FOR DELETE TO authenticated
+USING (auth.uid() = profile_id);
+
+
+-- ---------------------------------------------------------------------------
+-- 2. CÓDIGOS E REGISTROS DE INDICAÇÃO
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE public.profiles
+    ADD COLUMN IF NOT EXISTS referral_code text;
+
+-- Backfill antes do índice único. Cada perfil recebe um código aleatório.
+DO $$
+DECLARE
+    v_profile record;
+    v_code text;
+BEGIN
+    FOR v_profile IN
+        SELECT id
+        FROM public.profiles
+        WHERE referral_code IS NULL OR btrim(referral_code) = ''
+    LOOP
+        LOOP
+            v_code := 'ZAP-' ||
+                upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
+
+            EXIT WHEN NOT EXISTS (
+                SELECT 1
+                FROM public.profiles p
+                WHERE upper(p.referral_code) = v_code
+            );
+        END LOOP;
+
+        UPDATE public.profiles
+        SET referral_code = v_code
+        WHERE id = v_profile.id
+          AND (referral_code IS NULL OR btrim(referral_code) = '');
+    END LOOP;
+END;
+$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_referral_code_uidx
+    ON public.profiles (upper(referral_code))
+    WHERE referral_code IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.generate_profile_referral_code()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_code text;
+BEGIN
+    IF NEW.referral_code IS NOT NULL
+       AND pg_catalog.btrim(NEW.referral_code) <> '' THEN
+        RETURN NEW;
+    END IF;
+
+    LOOP
+        v_code := 'ZAP-' ||
+            pg_catalog.upper(
+                pg_catalog.substr(
+                    pg_catalog.replace(pg_catalog.gen_random_uuid()::text, '-', ''),
+                    1,
+                    6
+                )
+            );
+
+        EXIT WHEN NOT EXISTS (
+            SELECT 1
+            FROM public.profiles p
+            WHERE pg_catalog.upper(p.referral_code) = v_code
+        );
+    END LOOP;
+
+    NEW.referral_code := v_code;
+    RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.generate_profile_referral_code()
+    FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_generate_profile_referral_code
+    ON public.profiles;
+
+CREATE TRIGGER trg_generate_profile_referral_code
+BEFORE INSERT OR UPDATE ON public.profiles
+FOR EACH ROW
+WHEN (NEW.referral_code IS NULL OR NEW.referral_code = '')
+EXECUTE FUNCTION public.generate_profile_referral_code();
+
+CREATE TABLE IF NOT EXISTS public.referrals (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    referrer_profile_id uuid NOT NULL
+        REFERENCES public.profiles(id) ON DELETE CASCADE,
+    referred_profile_id uuid NOT NULL UNIQUE
+        REFERENCES public.profiles(id) ON DELETE CASCADE,
+    referral_code text NOT NULL,
+    status text NOT NULL DEFAULT 'pendente'
+        CHECK (status IN ('pendente', 'recompensado')),
+    rewarded_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT referrals_no_self_referral
+        CHECK (referrer_profile_id <> referred_profile_id)
+);
+
+CREATE INDEX IF NOT EXISTS referrals_referrer_idx
+    ON public.referrals(referrer_profile_id);
+
+ALTER TABLE public.referrals ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.referrals TO authenticated;
+
+DROP POLICY IF EXISTS referrals_select_participants
+    ON public.referrals;
+
+CREATE POLICY referrals_select_participants
+ON public.referrals
+FOR SELECT TO authenticated
+USING (
+    auth.uid() = referrer_profile_id
+    OR auth.uid() = referred_profile_id
+    OR public.is_admin()
+);
+
+CREATE OR REPLACE FUNCTION public.register_referral_code(p_code text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_user_id uuid;
+    v_user_role text;
+    v_referrer_id uuid;
+    v_referrer_role text;
+    v_clean_code text;
+BEGIN
+    v_user_id := auth.uid();
+
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Usuário não autenticado.'
+        );
+    END IF;
+
+    -- Mesmo lock usado pelo check-in, resgate e cancelamento.
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended(v_user_id::text, 2)
+    );
+
+    SELECT role
+    INTO v_user_role
+    FROM public.profiles
+    WHERE id = v_user_id;
+
+    IF v_user_role IS DISTINCT FROM 'cliente' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Somente clientes podem utilizar código de indicação.'
+        );
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.loyalty_transactions
+        WHERE profile_id = v_user_id
+          AND transaction_type = 'checkin'
+          AND points > 0
+    ) THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'O código precisa ser vinculado antes do primeiro check-in.'
+        );
+    END IF;
+
+    v_clean_code := upper(btrim(coalesce(p_code, '')));
+
+    IF v_clean_code = '' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Código de indicação inválido.'
+        );
+    END IF;
+
+    SELECT id, role
+    INTO v_referrer_id, v_referrer_role
+    FROM public.profiles
+    WHERE upper(referral_code) = v_clean_code
+    LIMIT 1;
+
+    IF v_referrer_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Código de indicação não encontrado.'
+        );
+    END IF;
+
+    IF v_referrer_id = v_user_id THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Você não pode utilizar seu próprio código.'
+        );
+    END IF;
+
+    IF v_referrer_role IS DISTINCT FROM 'cliente' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Este código não pertence a uma conta de cliente.'
+        );
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM public.referrals
+        WHERE referred_profile_id = v_user_id
+    ) THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Você já possui uma indicação vinculada.'
+        );
+    END IF;
+
+    INSERT INTO public.referrals (
+        referrer_profile_id,
+        referred_profile_id,
+        referral_code
+    )
+    VALUES (
+        v_referrer_id,
+        v_user_id,
+        v_clean_code
+    );
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', 'Indicação registrada. O bônus será liberado após o primeiro check-in validado.'
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.register_referral_code(text)
+    FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.register_referral_code(text)
+    TO authenticated, service_role;
+
+
+-- ---------------------------------------------------------------------------
+-- 3. CHECK-IN: 5 PONTOS LOCAIS + 15 PONTOS GLOBAIS PARA O INDICADOR
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.register_restaurant_checkin(
+    p_restaurant_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_user_id uuid;
+    v_role text;
+    v_restaurant_status text;
+    v_last_checkin timestamptz;
+    v_is_first_checkin boolean;
+    v_referral record;
+    v_expires_at timestamptz;
+    v_bonus_awarded boolean := false;
+BEGIN
+    v_user_id := auth.uid();
+
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Sessão inválida. Entre na sua conta.'
+        );
+    END IF;
+
+    -- Serializa todas as operações de pontos do mesmo cliente.
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended(v_user_id::text, 2)
+    );
+
+    SELECT role
+    INTO v_role
+    FROM public.profiles
+    WHERE id = v_user_id;
+
+    IF v_role IS DISTINCT FROM 'cliente' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Somente clientes podem fazer check-in.'
+        );
+    END IF;
+
+    IF p_restaurant_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Restaurante inválido.'
+        );
+    END IF;
+
+    SELECT status
+    INTO v_restaurant_status
+    FROM public.restaurants
+    WHERE id = p_restaurant_id;
+
+    IF v_restaurant_status IS DISTINCT FROM 'ativo' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Restaurante não encontrado ou inativo.'
+        );
+    END IF;
+
+    SELECT max(created_at)
+    INTO v_last_checkin
+    FROM public.loyalty_transactions
+    WHERE profile_id = v_user_id
+      AND restaurant_id = p_restaurant_id
+      AND transaction_type = 'checkin'
+      AND points > 0;
+
+    IF v_last_checkin IS NOT NULL
+       AND v_last_checkin > now() - interval '24 hours' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'reason', 'checkin_already_used',
+            'message', 'Você já recebeu pontos por check-in nesta loja nas últimas 24 horas.'
+        );
+    END IF;
+
+    SELECT NOT EXISTS (
+        SELECT 1
+        FROM public.loyalty_transactions
+        WHERE profile_id = v_user_id
+          AND transaction_type = 'checkin'
+          AND points > 0
+    )
+    INTO v_is_first_checkin;
+
+    v_expires_at := now() + interval '90 days';
+
+    INSERT INTO public.loyalty_transactions (
+        profile_id,
+        restaurant_id,
+        points,
+        transaction_type,
+        description,
+        expires_at
+    )
+    VALUES (
+        v_user_id,
+        p_restaurant_id,
+        5,
+        'checkin',
+        'Pontos por primeiro check-in ou visita validada',
+        v_expires_at
+    );
+
+    IF v_is_first_checkin THEN
+        SELECT id, referrer_profile_id
+        INTO v_referral
+        FROM public.referrals
+        WHERE referred_profile_id = v_user_id
+          AND status = 'pendente'
+        FOR UPDATE;
+
+        IF FOUND THEN
+            INSERT INTO public.loyalty_transactions (
+                profile_id,
+                restaurant_id,
+                points,
+                transaction_type,
+                description,
+                expires_at
+            )
+            VALUES (
+                v_referral.referrer_profile_id,
+                NULL,
+                15,
+                'convite',
+                'Bônus global por indicação: primeiro check-in validado do amigo',
+                v_expires_at
+            );
+
+            UPDATE public.referrals
+            SET status = 'recompensado',
+                rewarded_at = now()
+            WHERE id = v_referral.id
+              AND status = 'pendente';
+
+            v_bonus_awarded := FOUND;
+        END IF;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'points_awarded', 5,
+        'expires_at', v_expires_at,
+        'bonus_awarded_to_referrer', v_bonus_awarded,
+        'referral_bonus_points', CASE WHEN v_bonus_awarded THEN 15 ELSE 0 END,
+        'message', 'Check-in registrado! Você ganhou 5 pontos.'
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.register_restaurant_checkin(uuid)
+    FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.register_restaurant_checkin(uuid)
+    TO authenticated, service_role;
+
+
+-- ---------------------------------------------------------------------------
+-- 4. PRÊMIOS
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.loyalty_rewards (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    restaurant_id uuid NOT NULL
+        REFERENCES public.restaurants(id) ON DELETE CASCADE,
+    title text NOT NULL,
+    description text NOT NULL,
+    points_cost integer NOT NULL CHECK (points_cost > 0),
+    stock integer NOT NULL DEFAULT 0 CHECK (stock >= 0),
+    status text NOT NULL DEFAULT 'ativo'
+        CHECK (status IN ('ativo', 'pausado', 'esgotado')),
+    image_url text,
+    max_redemptions_per_user integer DEFAULT 1,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS loyalty_rewards_restaurant_idx
+    ON public.loyalty_rewards(restaurant_id);
+
+ALTER TABLE public.loyalty_rewards ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT ON public.loyalty_rewards TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.loyalty_rewards TO authenticated;
+
+DROP POLICY IF EXISTS loyalty_rewards_select_public
+    ON public.loyalty_rewards;
+CREATE POLICY loyalty_rewards_select_public
+ON public.loyalty_rewards
+FOR SELECT TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS loyalty_rewards_insert_owner
+    ON public.loyalty_rewards;
+CREATE POLICY loyalty_rewards_insert_owner
+ON public.loyalty_rewards
+FOR INSERT TO authenticated
+WITH CHECK (
+    public.is_restaurant_owner(restaurant_id)
+    OR public.is_admin()
+);
+
+DROP POLICY IF EXISTS loyalty_rewards_update_owner
+    ON public.loyalty_rewards;
+CREATE POLICY loyalty_rewards_update_owner
+ON public.loyalty_rewards
+FOR UPDATE TO authenticated
+USING (
+    public.is_restaurant_owner(restaurant_id)
+    OR public.is_admin()
+)
+WITH CHECK (
+    public.is_restaurant_owner(restaurant_id)
+    OR public.is_admin()
+);
+
+DROP POLICY IF EXISTS loyalty_rewards_delete_owner
+    ON public.loyalty_rewards;
+CREATE POLICY loyalty_rewards_delete_owner
+ON public.loyalty_rewards
+FOR DELETE TO authenticated
+USING (
+    public.is_restaurant_owner(restaurant_id)
+    OR public.is_admin()
+);
+
+
+-- ---------------------------------------------------------------------------
+-- 5. RESGATES E CONSUMO FIFO
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.loyalty_redemptions (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    voucher_code text NOT NULL UNIQUE,
+    reward_id uuid NOT NULL
+        REFERENCES public.loyalty_rewards(id) ON DELETE RESTRICT,
+    restaurant_id uuid NOT NULL
+        REFERENCES public.restaurants(id) ON DELETE RESTRICT,
+    profile_id uuid NOT NULL
+        REFERENCES public.profiles(id) ON DELETE CASCADE,
+    debit_transaction_id uuid
+        REFERENCES public.loyalty_transactions(id) ON DELETE RESTRICT,
+    points_debited integer NOT NULL CHECK (points_debited > 0),
+    status text NOT NULL DEFAULT 'emitido'
+        CHECK (status IN ('emitido', 'utilizado', 'cancelado')),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS loyalty_redemptions_profile_idx
+    ON public.loyalty_redemptions(profile_id);
+CREATE INDEX IF NOT EXISTS loyalty_redemptions_restaurant_idx
+    ON public.loyalty_redemptions(restaurant_id);
+CREATE INDEX IF NOT EXISTS loyalty_redemptions_debit_idx
+    ON public.loyalty_redemptions(debit_transaction_id);
+
+ALTER TABLE public.loyalty_redemptions ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.loyalty_redemptions TO authenticated;
+
+DROP POLICY IF EXISTS loyalty_redemptions_select_owner_or_merchant
+    ON public.loyalty_redemptions;
+CREATE POLICY loyalty_redemptions_select_owner_or_merchant
+ON public.loyalty_redemptions
+FOR SELECT TO authenticated
+USING (
+    auth.uid() = profile_id
+    OR public.is_restaurant_owner(restaurant_id)
+    OR public.is_admin()
+);
+
+CREATE TABLE IF NOT EXISTS public.loyalty_consumption (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    debit_transaction_id uuid NOT NULL
+        REFERENCES public.loyalty_transactions(id) ON DELETE RESTRICT,
+    credit_transaction_id uuid NOT NULL
+        REFERENCES public.loyalty_transactions(id) ON DELETE RESTRICT,
+    points_consumed integer NOT NULL CHECK (points_consumed > 0),
+    is_active boolean NOT NULL DEFAULT true,
+    refund_transaction_id uuid
+        REFERENCES public.loyalty_transactions(id) ON DELETE RESTRICT,
+    refund_processed_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT loyalty_consumption_distinct_transactions
+        CHECK (debit_transaction_id <> credit_transaction_id),
+    CONSTRAINT loyalty_consumption_debit_credit_unique
+        UNIQUE (debit_transaction_id, credit_transaction_id)
+);
+
+CREATE INDEX IF NOT EXISTS loyalty_consumption_debit_idx
+    ON public.loyalty_consumption(debit_transaction_id);
+CREATE INDEX IF NOT EXISTS loyalty_consumption_credit_idx
+    ON public.loyalty_consumption(credit_transaction_id);
+
+ALTER TABLE public.loyalty_consumption ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.loyalty_consumption FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.loyalty_consumption TO authenticated;
+
+DROP POLICY IF EXISTS loyalty_consumption_select_policy
+    ON public.loyalty_consumption;
+CREATE POLICY loyalty_consumption_select_policy
+ON public.loyalty_consumption
+FOR SELECT TO authenticated
+USING (
+    public.is_admin()
+    OR EXISTS (
+        SELECT 1
+        FROM public.loyalty_transactions tx
+        WHERE tx.id = loyalty_consumption.credit_transaction_id
+          AND tx.profile_id = auth.uid()
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM public.loyalty_transactions tx
+        WHERE tx.id = loyalty_consumption.debit_transaction_id
+          AND tx.profile_id = auth.uid()
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM public.loyalty_redemptions r
+        WHERE r.debit_transaction_id =
+              loyalty_consumption.debit_transaction_id
+          AND public.is_restaurant_owner(r.restaurant_id)
+    )
+);
+
+
+-- ---------------------------------------------------------------------------
+-- 6. RESGATE: SOMENTE CARTEIRA DA LOJA + CARTEIRA GLOBAL
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(p_reward_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_user_id uuid;
+    v_role text;
+    v_reward record;
+    v_points_cost integer;
+    v_min_store_points integer;
+    v_max_global_points integer;
+    v_store_available integer;
+    v_global_available integer;
+    v_user_redemptions integer;
+    v_credit record;
+    v_take integer;
+    v_store_allocated integer := 0;
+    v_global_allocated integer := 0;
+    v_total_allocated integer := 0;
+    v_debit_id uuid;
+    v_voucher text;
+    v_allocations jsonb := '[]'::jsonb;
+    v_item jsonb;
+BEGIN
+    v_user_id := auth.uid();
+
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Usuário não autenticado.'
+        );
+    END IF;
+
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended(v_user_id::text, 2)
+    );
+
+    SELECT role
+    INTO v_role
+    FROM public.profiles
+    WHERE id = v_user_id;
+
+    IF v_role IS DISTINCT FROM 'cliente' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Apenas clientes podem resgatar prêmios.'
+        );
+    END IF;
+
+    SELECT *
+    INTO v_reward
+    FROM public.loyalty_rewards
+    WHERE id = p_reward_id
+    FOR UPDATE;
+
+    IF NOT FOUND
+       OR v_reward.status <> 'ativo'
+       OR v_reward.stock <= 0 THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Prêmio não encontrado, esgotado ou indisponível.'
+        );
+    END IF;
+
+    IF v_reward.max_redemptions_per_user IS NOT NULL
+       AND v_reward.max_redemptions_per_user > 0 THEN
+        SELECT count(*)::integer
+        INTO v_user_redemptions
+        FROM public.loyalty_redemptions
+        WHERE reward_id = p_reward_id
+          AND profile_id = v_user_id
+          AND status <> 'cancelado';
+
+        IF v_user_redemptions >= v_reward.max_redemptions_per_user THEN
+            RETURN jsonb_build_object(
+                'success', false,
+                'message', 'Você já atingiu o limite de resgates deste prêmio.'
+            );
+        END IF;
+    END IF;
+
+    v_points_cost := v_reward.points_cost;
+    v_min_store_points := ceil(v_points_cost * 0.70)::integer;
+    v_max_global_points := v_points_cost - v_min_store_points;
+
+    -- Carteira local: somente créditos da loja do prêmio.
+    SELECT coalesce(sum(
+        t.points - coalesce(c.consumed_sum, 0)
+    ), 0)::integer
+    INTO v_store_available
+    FROM public.loyalty_transactions t
+    LEFT JOIN LATERAL (
+        SELECT sum(points_consumed) AS consumed_sum
+        FROM public.loyalty_consumption
+        WHERE credit_transaction_id = t.id
+          AND is_active = true
+    ) c ON true
+    WHERE t.profile_id = v_user_id
+      AND t.restaurant_id = v_reward.restaurant_id
+      AND t.transaction_type <> 'convite'
+      AND t.points > 0
+      AND (t.expires_at IS NULL OR t.expires_at > now());
+
+    -- Carteira global: somente movimentações sem restaurante.
+    SELECT coalesce(sum(
+        t.points - coalesce(c.consumed_sum, 0)
+    ), 0)::integer
+    INTO v_global_available
+    FROM public.loyalty_transactions t
+    LEFT JOIN LATERAL (
+        SELECT sum(points_consumed) AS consumed_sum
+        FROM public.loyalty_consumption
+        WHERE credit_transaction_id = t.id
+          AND is_active = true
+    ) c ON true
+    WHERE t.profile_id = v_user_id
+      AND t.restaurant_id IS NULL
+      AND t.transaction_type IN ('convite', 'ajuste')
+      AND t.points > 0
+      AND (t.expires_at IS NULL OR t.expires_at > now());
+
+    IF v_store_available < v_min_store_points THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', format(
+                'Este prêmio exige pelo menos %s pontos desta loja. Seu saldo local disponível é %s.',
+                v_min_store_points,
+                v_store_available
+            ),
+            'store_points_required', v_min_store_points,
+            'store_points_available', v_store_available
+        );
+    END IF;
+
+    IF v_store_available + v_global_available < v_points_cost THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', format(
+                'Saldo elegível insuficiente. São necessários %s pontos; você possui %s nesta loja e %s globais.',
+                v_points_cost,
+                v_store_available,
+                v_global_available
+            )
+        );
+    END IF;
+
+    -- FIFO apenas entre a loja escolhida e a carteira global.
+    -- Créditos de qualquer outra loja são excluídos da consulta.
+    FOR v_credit IN
+        SELECT
+            t.id,
+            t.restaurant_id,
+            t.points,
+            t.expires_at,
+            greatest(
+                t.points - coalesce(c.consumed_sum, 0),
+                0
+            )::integer AS available
+        FROM public.loyalty_transactions t
+        LEFT JOIN LATERAL (
+            SELECT sum(points_consumed) AS consumed_sum
+            FROM public.loyalty_consumption
+            WHERE credit_transaction_id = t.id
+              AND is_active = true
+        ) c ON true
+        WHERE t.profile_id = v_user_id
+          AND t.points > 0
+          AND (t.expires_at IS NULL OR t.expires_at > now())
+          AND (
+              (
+                  t.restaurant_id = v_reward.restaurant_id
+                  AND t.transaction_type <> 'convite'
+              )
+              OR (
+                  t.restaurant_id IS NULL
+                  AND t.transaction_type IN ('convite', 'ajuste')
+              )
+          )
+        ORDER BY t.expires_at ASC NULLS LAST, t.created_at ASC, t.id
+    LOOP
+        EXIT WHEN v_total_allocated >= v_points_cost;
+
+        IF v_credit.available <= 0 THEN
+            CONTINUE;
+        END IF;
+
+        IF v_credit.restaurant_id = v_reward.restaurant_id THEN
+            v_take := least(
+                v_credit.available,
+                v_points_cost - v_total_allocated
+            );
+
+            v_store_allocated := v_store_allocated + v_take;
+            v_total_allocated := v_total_allocated + v_take;
+        ELSE
+            IF v_global_allocated >= v_max_global_points THEN
+                CONTINUE;
+            END IF;
+
+            v_take := least(
+                v_credit.available,
+                v_points_cost - v_total_allocated,
+                v_max_global_points - v_global_allocated
+            );
+
+            v_global_allocated := v_global_allocated + v_take;
+            v_total_allocated := v_total_allocated + v_take;
+        END IF;
+
+        IF v_take > 0 THEN
+            v_allocations := v_allocations || jsonb_build_array(
+                jsonb_build_object(
+                    'credit_id', v_credit.id,
+                    'points', v_take
+                )
+            );
+        END IF;
+    END LOOP;
+
+    IF v_total_allocated <> v_points_cost
+       OR v_store_allocated < v_min_store_points
+       OR v_global_allocated > v_max_global_points THEN
+        RAISE EXCEPTION
+            'Falha na alocação FIFO: regra de carteira 70/30 não satisfeita.';
+    END IF;
+
+    INSERT INTO public.loyalty_transactions (
+        profile_id,
+        restaurant_id,
+        points,
+        transaction_type,
+        description,
+        expires_at
+    )
+    VALUES (
+        v_user_id,
+        v_reward.restaurant_id,
+        -v_points_cost,
+        'resgate',
+        format('Resgate do prêmio: %s', v_reward.title),
+        NULL
+    )
+    RETURNING id INTO v_debit_id;
+
+    FOR v_item IN
+        SELECT value
+        FROM jsonb_array_elements(v_allocations)
+    LOOP
+        INSERT INTO public.loyalty_consumption (
+            debit_transaction_id,
+            credit_transaction_id,
+            points_consumed
+        )
+        VALUES (
+            v_debit_id,
+            (v_item->>'credit_id')::uuid,
+            (v_item->>'points')::integer
+        );
+    END LOOP;
+
+    UPDATE public.loyalty_rewards
+    SET stock = stock - 1,
+        status = CASE
+            WHEN stock - 1 = 0 THEN 'esgotado'
+            ELSE status
+        END,
+        updated_at = now()
+    WHERE id = p_reward_id;
+
+    LOOP
+        v_voucher := 'ZAP-' ||
+            upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+
+        EXIT WHEN NOT EXISTS (
+            SELECT 1
+            FROM public.loyalty_redemptions
+            WHERE voucher_code = v_voucher
+        );
+    END LOOP;
+
+    INSERT INTO public.loyalty_redemptions (
+        voucher_code,
+        reward_id,
+        restaurant_id,
+        profile_id,
+        debit_transaction_id,
+        points_debited,
+        status
+    )
+    VALUES (
+        v_voucher,
+        p_reward_id,
+        v_reward.restaurant_id,
+        v_user_id,
+        v_debit_id,
+        v_points_cost,
+        'emitido'
+    );
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'voucher_code', v_voucher,
+        'reward_title', v_reward.title,
+        'points_debited', v_points_cost,
+        'store_points_used', v_store_allocated,
+        'global_points_used', v_global_allocated,
+        'message', 'Prêmio resgatado com sucesso. Apresente o voucher no estabelecimento.'
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.redeem_loyalty_reward(uuid)
+    FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.redeem_loyalty_reward(uuid)
+    TO authenticated, service_role;
+
+
+-- ---------------------------------------------------------------------------
+-- 7. CANCELAMENTO: ESTORNO IDEMPOTENTE, COM VALIDADE ORIGINAL
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.cancel_loyalty_redemption(
+    p_redemption_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_user_id uuid;
+    v_preview record;
+    v_redemption record;
+    v_consumption record;
+    v_credit record;
+    v_refund_id uuid;
+    v_points_refunded integer := 0;
+BEGIN
+    v_user_id := auth.uid();
+
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Usuário não autenticado.'
+        );
+    END IF;
+
+    SELECT profile_id
+    INTO v_preview
+    FROM public.loyalty_redemptions
+    WHERE id = p_redemption_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Resgate não encontrado.'
+        );
+    END IF;
+
+    -- Mesma trava de usuário utilizada pelo resgate e check-in.
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended(v_preview.profile_id::text, 2)
+    );
+
+    -- Releitura bloqueada: impede dois cancelamentos simultâneos.
+    SELECT *
+    INTO v_redemption
+    FROM public.loyalty_redemptions
+    WHERE id = p_redemption_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Resgate não encontrado.'
+        );
+    END IF;
+
+    IF v_redemption.status = 'cancelado' THEN
+        RETURN jsonb_build_object(
+            'success', true,
+            'message', 'Este resgate já foi cancelado.'
+        );
+    END IF;
+
+    IF v_redemption.status = 'utilizado' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Não é possível cancelar um prêmio já utilizado.'
+        );
+    END IF;
+
+    IF NOT (
+        public.is_admin()
+        OR public.is_restaurant_owner(v_redemption.restaurant_id)
+    ) THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Somente o comerciante responsável ou um administrador pode cancelar.'
+        );
+    END IF;
+
+    IF v_redemption.debit_transaction_id IS NULL THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Este resgate não possui débito vinculado. É necessária análise administrativa.'
+        );
+    END IF;
+
+    UPDATE public.loyalty_redemptions
+    SET status = 'cancelado'
+    WHERE id = p_redemption_id
+      AND status = 'emitido';
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'O status do resgate mudou. Atualize e tente novamente.'
+        );
+    END IF;
+
+    UPDATE public.loyalty_rewards
+    SET stock = stock + 1,
+        status = CASE
+            WHEN status = 'esgotado' THEN 'ativo'
+            ELSE status
+        END,
+        updated_at = now()
+    WHERE id = v_redemption.reward_id;
+
+    -- Mantém o consumo original ativo para preservar a trilha FIFO.
+    -- Devolve cada parcela como novo crédito na mesma carteira e com
+    -- exatamente a validade do crédito originalmente consumido.
+    FOR v_consumption IN
+        SELECT *
+        FROM public.loyalty_consumption
+        WHERE debit_transaction_id = v_redemption.debit_transaction_id
+          AND refund_processed_at IS NULL
+        FOR UPDATE
+    LOOP
+        SELECT profile_id, restaurant_id, expires_at
+        INTO v_credit
+        FROM public.loyalty_transactions
+        WHERE id = v_consumption.credit_transaction_id
+        FOR UPDATE;
+
+        IF FOUND
+           AND (
+               v_credit.expires_at IS NULL
+               OR v_credit.expires_at > now()
+           ) THEN
+
+            INSERT INTO public.loyalty_transactions (
+                profile_id,
+                restaurant_id,
+                points,
+                transaction_type,
+                description,
+                expires_at
+            )
+            VALUES (
+                v_credit.profile_id,
+                v_credit.restaurant_id,
+                v_consumption.points_consumed,
+                'ajuste',
+                'Estorno de resgate cancelado; validade original preservada',
+                v_credit.expires_at
+            )
+            RETURNING id INTO v_refund_id;
+
+            UPDATE public.loyalty_consumption
+            SET refund_transaction_id = v_refund_id,
+                refund_processed_at = now()
+            WHERE id = v_consumption.id;
+
+            v_points_refunded :=
+                v_points_refunded + v_consumption.points_consumed;
+        ELSE
+            -- Crédito já vencido: marca como processado, sem devolver pontos.
+            UPDATE public.loyalty_consumption
+            SET refund_processed_at = now()
+            WHERE id = v_consumption.id;
+        END IF;
+    END LOOP;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'points_refunded', v_points_refunded,
+        'message', 'Resgate cancelado. Os pontos ainda válidos foram devolvidos com a validade original.'
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.cancel_loyalty_redemption(uuid)
+    FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cancel_loyalty_redemption(uuid)
+    TO authenticated, service_role;
+
+COMMIT;

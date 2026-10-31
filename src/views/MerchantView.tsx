@@ -6,7 +6,6 @@ import {
   Eye,
   Flame,
   Clock,
-  CheckCircle,
   Power,
   Plus,
   Sparkles,
@@ -29,6 +28,7 @@ import {
   Image as ImageIcon,
   Check,
   Phone,
+  Ticket,
 } from 'lucide-react';
 import {
   Restaurant,
@@ -38,7 +38,6 @@ import {
   RegionalHighlight,
   LoyaltyReward,
   RewardStatus,
-  DemoPointConcession,
 } from '../types';
 import {
   MOCK_MERCHANT_STATS,
@@ -75,6 +74,7 @@ import {
   insertRewardToSupabase,
   updateRewardInSupabase,
   deleteRewardFromSupabase,
+  markLoyaltyRedemptionUsed,
   isSupabaseConfigured,
 } from '../lib/supabase';
 import { UUID_REGEX } from '../utils/qrCode';
@@ -124,7 +124,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const [rewardsList, setRewardsList] = useState<LoyaltyReward[]>(() =>
     loadRestaurantRewards(selectedRestaurantId)
   );
-  const [confirmedOrders, setConfirmedOrders] = useState<Record<string, boolean>>({});
 
   // Mensagens de feedback
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -263,13 +262,51 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const [deletingReward, setDeletingReward] = useState<LoyaltyReward | null>(null);
 
   // -------------------------------------------------------------
-  // ESTADOS DO MODAL: SIMULAÇÃO DE CONCESSÃO DE PONTOS
+  // VALIDAÇÃO REAL DE VOUCHERS DE CLIENTES NO BALCÃO (RPC mark_loyalty_redemption_used)
   // -------------------------------------------------------------
-  const [isConcessionModalOpen, setIsConcessionModalOpen] = useState(false);
-  const [concessionPoints, setConcessionPoints] = useState<number>(30);
-  const [concessionReason, setConcessionReason] = useState<string>('');
-  const [concessionValidated, setConcessionValidated] = useState<boolean>(true);
-  const [isGrantingPoints, setIsGrantingPoints] = useState<boolean>(false);
+  const [voucherInput, setVoucherInput] = useState('');
+  const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
+  const [voucherValidationResult, setVoucherValidationResult] = useState<{
+    status: 'success' | 'error';
+    message: string;
+    rewardTitle?: string;
+    customerName?: string;
+    pointsCost?: number;
+    usedAt?: string;
+    voucherCode?: string;
+  } | null>(null);
+
+  const handleValidateVoucher = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanCode = voucherInput.trim().toUpperCase();
+    if (!cleanCode) return;
+
+    setIsValidatingVoucher(true);
+    setVoucherValidationResult(null);
+
+    const res = await markLoyaltyRedemptionUsed(cleanCode);
+    setIsValidatingVoucher(false);
+
+    if (res.success && res.data) {
+      setVoucherValidationResult({
+        status: 'success',
+        message: res.message,
+        rewardTitle: res.data.reward_title,
+        customerName: res.data.customer_name,
+        pointsCost: res.data.points_cost,
+        usedAt: res.data.used_at,
+        voucherCode: res.data.voucher_code,
+      });
+      setVoucherInput('');
+      showToast('Voucher validado com sucesso! Entregue o prêmio ao cliente.', 'success');
+    } else {
+      setVoucherValidationResult({
+        status: 'error',
+        message: res.message || 'Código de voucher inválido ou não pertencente a esta loja.',
+      });
+      showToast(res.message || 'Falha ao validar voucher.', 'error');
+    }
+  };
 
   const remainingBudget = Math.max(0, promotionalBudget - pointsDistributed);
   const budgetUsagePercent = Math.min(100, Math.round((pointsDistributed / promotionalBudget) * 100));
@@ -696,10 +733,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     showToast(`"${data.name}" ${data.isAvailable ? 'ativado para pedidos' : 'pausado na chapa'}.`);
   };
 
-  const handleConfirmOrder = (orderId: string) => {
-    setConfirmedOrders((prev) => ({ ...prev, [orderId]: true }));
-  };
-
   // -------------------------------------------------------------
   // HANDLERS: GESTÃO DE PRÊMIOS E FIDELIDADE
   // -------------------------------------------------------------
@@ -923,60 +956,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setDeletingReward(null);
   };
 
-  // -------------------------------------------------------------
-  // HANDLERS: SIMULAÇÃO DE CONCESSÃO DE PONTOS
-  // -------------------------------------------------------------
-  const handleOpenConcessionModal = (amount: number, reason: string) => {
-    if (remainingBudget < amount) {
-      showToast(`Orçamento insuficiente! Saldo restante é de ${remainingBudget} pontos.`, 'error');
-      return;
-    }
-    setConcessionPoints(amount);
-    setConcessionReason(reason);
-    setConcessionValidated(true);
-    setIsConcessionModalOpen(true);
-  };
-
-  const handleConfirmGrantPoints = () => {
-    if (isGrantingPoints) return;
-    if (remainingBudget < concessionPoints) {
-      showToast(`Orçamento insuficiente! Saldo restante é de ${remainingBudget} pontos.`, 'error');
-      setIsConcessionModalOpen(false);
-      return;
-    }
-
-    setIsGrantingPoints(true);
-    const newDistributed = pointsDistributed + concessionPoints;
-    setPointsDistributed(newDistributed);
-
-    const newConcession: DemoPointConcession = {
-      id: `dc-${Date.now()}`,
-      restaurantId: selectedRestaurantId,
-      restaurantName: currentRestaurant.name,
-      points: concessionPoints,
-      reason: concessionReason,
-      date: 'Hoje, agora mesmo (Simulação)',
-      validationStatus: 'simulada_validada',
-      operatorNote: 'Validação presencial demonstrativa conferida',
-    };
-
-    const currentHistory = stats.concessionsHistory || [];
-    const updatedHistory = [newConcession, ...currentHistory];
-
-    const updatedStats: MerchantDemoStats = {
-      ...stats,
-      promotionalPointsDistributed: newDistributed,
-      concessionsHistory: updatedHistory,
-    };
-
-    setStats(updatedStats);
-    saveMerchantStats(updatedStats);
-
-    setIsConcessionModalOpen(false);
-    setIsGrantingPoints(false);
-    showToast(`Demonstração: +${concessionPoints} pontos concedidos por "${concessionReason}". Saldo atualizado.`);
-  };
-
   // Solicitação de Destaque Regional no Bairro
   const handleRequestHighlight = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1013,25 +992,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setIsRequestModalOpen(false);
     showToast('Solicitação de destaque enviada para moderação administrativa!');
   };
-
-  const mockIncomingOrders = [
-    {
-      id: 'ord-in-1',
-      clientName: 'Thiago da Silva (Freguesia)',
-      items: '1x Smash Especial da Freguesia + 1x Batata Rústica',
-      time: 'Há 4 minutos',
-      total: 56.9,
-      obs: 'Carne ao ponto, sem picles',
-    },
-    {
-      id: 'ord-in-2',
-      clientName: 'Juliana Mendes (Jacarepaguá)',
-      items: '2x X-Salada Tradicional + 1x Pudim Caseiro',
-      time: 'Há 12 minutos',
-      total: 70.0,
-      obs: 'Caprichar na maionese verde caseira',
-    },
-  ];
 
   const getStatusBadge = (status: HighlightStatus | string) => {
     switch (status) {
@@ -1321,9 +1281,9 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         title="Guia de Gestão da Sua Loja"
         steps={[
           "Mantenha o cardápio atualizado com fotos reais e preços em dia.",
-          "Crie Recompensas de Fidelidade com estoque e controle de 70% de pontos da sua loja.",
-          "Exiba seu QR Code oficial no balcão para os clientes pontuarem presencialmente.",
-          "Receba clientes direto no WhatsApp oficial, sem intermediários nem comissão sobre o pedido."
+          "Check-in no balcão: cada check-in concede 5 pontos locais ao cliente (intervalo mínimo de 2 horas).",
+          "Recompensas com Regra 70/30: exige no mínimo 70% de pontos da sua loja e até 30% globais da rede.",
+          "Validação obrigatória de vouchers: valide o código no painel antes de entregar a cortesia ao cliente."
         ]}
       />
 
@@ -1507,7 +1467,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             <span>Distinção entre Cardápio Comercial e Programa de Recompensas:</span>
           </div>
           <p className="text-[11px] text-slate-400 leading-relaxed">
-            • <strong>Não são produtos vendidos por dinheiro:</strong> prêmios de fidelidade são adquiridos exclusivamente através de pontos acumulados pelos clientes (pelo menos 70% obtidos nesta loja e até 30% de pontos de convites comunitários).
+            • <strong>Não são produtos vendidos por dinheiro:</strong> prêmios de fidelidade são adquiridos exclusivamente através de pontos acumulados pelos clientes (no mínimo 70% obtidos nesta loja e até 30% em pontos globais da rede). Pontos de outras lojas nunca participam do resgate.
             <br />
             • Cada prêmio tem seu próprio estoque físico. Prêmios com estoque zerado ou pausados deixam de ficar disponíveis para resgate no aplicativo do cliente.
           </p>
@@ -1664,6 +1624,125 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         )}
       </div>
 
+      {/* Validador Oficial de Vouchers no Balcão */}
+      <div className="rounded-3xl bg-[#13151f] border border-emerald-500/30 p-5 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-xl bg-emerald-500/20 text-emerald-400">
+                <Ticket className="w-5 h-5" />
+              </span>
+              <h3 className="text-sm sm:text-base font-bold text-white font-display">
+                Validação de Voucher no Balcão (Entrega de Cortesia)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Valide o código fornecido pelo morador antes de entregar a cortesia. O sistema confere a autenticidade e dá baixa imediata.
+            </p>
+          </div>
+          <span className="text-xs px-2.5 py-1 rounded-xl bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30 self-start sm:self-auto shrink-0">
+            Segurança 70/30
+          </span>
+        </div>
+
+        {/* Regras Operacionais para o Lojista */}
+        <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs space-y-1.5 text-slate-300">
+          <div className="flex items-center gap-2 font-bold text-amber-300">
+            <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Regras Obrigatórias de Validação para o Comerciante:</span>
+          </div>
+          <ul className="text-[11px] text-slate-400 space-y-1 list-disc list-inside leading-relaxed">
+            <li><strong>Validação prévia obrigatória:</strong> valide o código no painel <em>antes</em> de entregar o prêmio ao morador.</li>
+            <li><strong>Permissão exclusiva:</strong> apenas a sua lanchonete (ou um administrador) pode validar vouchers emitidos para esta loja.</li>
+            <li><strong>Vouchers inválidos:</strong> códigos já utilizados, cancelados, expirados ou pertencentes a outro restaurante são recusados pelo sistema e não devem ser aceitos.</li>
+            <li><strong>Garantia 70/30:</strong> o sistema garante que pelo menos 70% dos pontos foram conquistados na sua loja e até 30% complementados com pontos globais da rede.</li>
+          </ul>
+        </div>
+
+        <form onSubmit={handleValidateVoucher} className="flex flex-col sm:flex-row gap-2.5 pt-1">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={voucherInput}
+              onChange={(e) => setVoucherInput(e.target.value.toUpperCase())}
+              placeholder="Ex: ZAP-A1B2C3D4"
+              maxLength={20}
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 tracking-wider uppercase transition-colors"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isValidatingVoucher || !voucherInput.trim()}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold text-xs transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            {isValidatingVoucher ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                <span>Validando...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Validar Voucher</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Feedback da Validação */}
+        {voucherValidationResult && (
+          <div
+            className={`p-4 rounded-2xl border text-xs space-y-2 animate-fade-in ${
+              voucherValidationResult.status === 'success'
+                ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+                : 'bg-rose-950/30 border-rose-500/40 text-rose-200'
+            }`}
+          >
+            <div className="flex items-center gap-2 font-bold text-sm">
+              {voucherValidationResult.status === 'success' ? (
+                <>
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <span className="text-white">Voucher Autêntico & Validado com Sucesso!</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                  <span className="text-white">Atenção na Validação</span>
+                </>
+              )}
+            </div>
+
+            <p className="text-xs leading-relaxed">
+              {voucherValidationResult.message}
+            </p>
+
+            {voucherValidationResult.status === 'success' && (
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-emerald-500/30 text-[11px] text-slate-300 space-y-1 mt-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Prêmio:</span>
+                  <strong className="text-white">{voucherValidationResult.rewardTitle}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Cliente:</span>
+                  <span className="text-emerald-300 font-semibold">{voucherValidationResult.customerName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Pontos Deduzidos:</span>
+                  <span className="text-amber-400 font-mono font-bold">{voucherValidationResult.pointsCost} pts</span>
+                </div>
+                {voucherValidationResult.voucherCode && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Voucher:</span>
+                    <span className="text-slate-200 font-mono">{voucherValidationResult.voucherCode}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Orçamento Promocional de Fidelidade (3.000 pontos) */}
       <div className="rounded-3xl bg-[#13151f] border border-amber-500/30 p-5 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1765,73 +1844,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           </div>
         </div>
 
-        {/* Action: Distribuir Pontos para Ações de Clientes (com confirmação e transparência) */}
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <span className="text-xs font-bold text-white">
-              Simular Concessão de Pontos (Ação Demonstrativa):
-            </span>
-            <span className="text-[11px] text-amber-400 font-medium">
-              * Exige confirmação prévia e registro
-            </span>
-          </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() =>
-                handleOpenConcessionModal(30, 'Check-in de Mesa com Proximidade')
-              }
-              disabled={remainingBudget < 30}
-              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-xs font-semibold text-white flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus className="w-3.5 h-3.5 text-amber-400" />
-              +30 pts (Simular Check-in de Mesa)
-            </button>
-
-            <button
-              onClick={() =>
-                handleOpenConcessionModal(50, 'Avaliação com Foto Real do Prato')
-              }
-              disabled={remainingBudget < 50}
-              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-xs font-semibold text-white flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus className="w-3.5 h-3.5 text-orange-400" />
-              +50 pts (Simular Avaliação com Foto)
-            </button>
-          </div>
-
-          {/* Histórico Demonstrativo de Concessões */}
-          {stats.concessionsHistory && stats.concessionsHistory.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-slate-800 space-y-2">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Histórico Demonstrativo de Concessões ({stats.concessionsHistory.length})
-              </span>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                {stats.concessionsHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="font-semibold text-white flex items-center gap-1.5">
-                        <span>{item.reason}</span>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 font-bold">
-                          +{item.points} pts
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-slate-400">
-                        {item.date} · {item.operatorNote}
-                      </span>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium border border-emerald-500/30 shrink-0">
-                      Simulada
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Destaque Regional por Bairro (5 Estados) */}
@@ -1888,75 +1901,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
       </div>
 
-      {/* Simulated Live Zap Orders Queue com transparência */}
-      <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <div className="flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-bold text-white">
-                Simulador de Atendimento WhatsApp
-              </h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30">
-                Simulador
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
-              Os pedidos reais dos clientes chegam diretamente no aplicativo WhatsApp do seu estabelecimento. Este painel demonstra o fluxo de conferência ágil.
-            </p>
-          </div>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-bold border border-orange-500/30 self-start sm:self-auto shrink-0">
-            {mockIncomingOrders.length} na fila
-          </span>
-        </div>
 
-        <div className="space-y-3">
-          {mockIncomingOrders.map((ord) => {
-            const isConfirmed = confirmedOrders[ord.id];
-            return (
-              <div
-                key={ord.id}
-                className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-xs sm:text-sm text-white">
-                      {ord.clientName}
-                    </span>
-                    <span className="text-[11px] text-slate-400">· {ord.time}</span>
-                  </div>
-
-                  <p className="text-xs text-slate-300 font-medium">
-                    {ord.items}
-                  </p>
-
-                  <p className="text-[11px] text-amber-300/90 italic">
-                    Obs: "{ord.obs}"
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end pt-2 sm:pt-0 border-t sm:border-0 border-slate-800">
-                  <span className="text-sm font-extrabold text-amber-400 tabular-nums">
-                    R$ {ord.total.toFixed(2).replace('.', ',')}
-                  </span>
-
-                  <button
-                    onClick={() => handleConfirmOrder(ord.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                      isConfirmed
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                        : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                    }`}
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    {isConfirmed ? 'Confirmado no Zap' : 'Responder no Zap'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
       {/* ============================================================ */}
       {/* MODAL: EDITAR MINHA LOJA                                      */}
@@ -2540,69 +2485,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
       )}
       
-      {/* ============================================================ */}
-      {/* MODAL: CONFIRMAÇÃO DE CONCESSÃO DE PONTOS                    */}
-      {/* ============================================================ */}
-      {isConcessionModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md bg-[#13151f] border border-amber-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-amber-500/20 text-amber-400">
-                <Gift className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  Confirmar Concessão de Pontos
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Ação demonstrativa para {currentRestaurant.name}
-                </p>
-              </div>
-            </div>
 
-            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2 text-xs text-slate-300">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Pontos a Conceder:</span>
-                <span className="font-extrabold text-amber-400">+{concessionPoints} pts</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Motivo / Ação:</span>
-                <span className="font-semibold text-white">{concessionReason}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Cliente Destinatário:</span>
-                <span className="font-semibold text-emerald-400">Thiago da Silva (@thiago.lanches)</span>
-              </div>
-              <div className="flex justify-between border-t border-slate-800 pt-2">
-                <span className="text-slate-400">Orçamento Restante Após Ação:</span>
-                <span className="font-bold text-white">{remainingBudget - concessionPoints} pts</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Ao confirmar, esta concessão será registrada no histórico de campanhas da loja e abatida do orçamento promocional de fidelidade.
-            </p>
-
-            <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsConcessionModalOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-semibold text-xs transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmGrantPoints}
-                disabled={isGrantingPoints}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold text-xs shadow-md transition-all disabled:opacity-50"
-              >
-                {isGrantingPoints ? 'Concedendo...' : 'Confirmar Concessão'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ============================================================ */}
       {/* MODAL: CRIAR OU EDITAR PRÊMIO DE FIDELIDADE                  */}

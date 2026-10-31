@@ -1,7 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Restaurant, MenuItem, LoyaltyReward } from '../types';
-import { MOCK_RESTAURANTS, MOCK_MENU_ITEMS } from '../data/mockData';
 
 // Obtenção das variáveis injetadas via Vite no ambiente cliente.
 const viteEnv =
@@ -109,72 +108,51 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
       .select('*')
       .eq('status', 'ativo');
 
-    if (error || !data || data.length === 0) {
-      if (error) {
-        console.error('Falha ao consultar restaurantes:', error.message);
-      }
+    if (error) {
+      console.error('Falha ao consultar restaurantes:', error.message);
       return null;
     }
 
-    const mergedRestaurants: Restaurant[] = data.map((row: any) => {
-      const localMatch = MOCK_RESTAURANTS.find(
-        (item) => item.id === row.slug || item.id === row.id
-      );
+    if (!data || data.length === 0) {
+      return [];
+    }
 
-      if (!localMatch) {
-        return {
-          id: row.slug || row.id,
-          supabaseId: row.id,
-          name: row.name || 'Lanchonete',
-          neighborhoodId: 'todos',
-          neighborhoodName: row.neighborhood || 'Bairro',
-          category: 'hamburguer',
-          categoryLabel: 'Lanches de Bairro',
-          rating: 4.8,
-          reviewCount: 1,
-          deliveryTime: '30-40 min',
-          distanceKm: 1.0,
-          deliveryFee: 0,
-          minOrder: 20.0,
-          priceRange: '$$',
-          bannerUrl:
-            row.image_url ||
-            '/src/assets/images/lanchonete_front_1792014252947.jpg',
-          logoUrl: row.logo_url || undefined,
-          isOpen: row.status === 'ativo',
-          openingHours: '18h às 23h30',
-          address: row.address || '',
-          whatsappDemo: row.whatsapp || '',
-          verifiedNeighborhoodSpot: true,
-          bio: row.description || '',
-          popularDishes: [],
-          ownerProfileId: row.owner_profile_id || undefined,
-        } as Restaurant;
-      }
+    const realRestaurants: Restaurant[] = data.map((row: any) => {
+      const cleanAddress = row.address ? String(row.address).replace(/\s*\(Demonstração\)/gi, '').trim() : '';
+      const cleanWhatsapp = row.whatsapp ? String(row.whatsapp).replace(/\s*\(Demonstração\)/gi, '').trim() : '';
+      const cleanBio = row.description ? String(row.description).replace(/\s*\[Estabelecimento fictício de demonstração\]/gi, '').trim() : '';
 
       return {
-        ...localMatch,
-        id: row.slug || localMatch.id,
+        id: row.slug || row.id,
         supabaseId: row.id,
-        name: row.name || localMatch.name,
-        bio: row.description || localMatch.bio,
-        address: row.address || localMatch.address,
-        neighborhoodName:
-          row.neighborhood || localMatch.neighborhoodName,
-        whatsappDemo: row.whatsapp || localMatch.whatsappDemo,
-        bannerUrl: row.image_url || localMatch.bannerUrl,
-        logoUrl: row.logo_url || localMatch.logoUrl || undefined,
+        name: row.name || 'Lanchonete',
+        neighborhoodId: normalizeSlug(row.neighborhood) || 'todos',
+        neighborhoodName: row.neighborhood || 'Bairro',
+        category: (row.category || 'hamburguer') as any,
+        categoryLabel: row.category_label || 'Lanches de Bairro',
+        rating: typeof row.rating === 'number' ? row.rating : 5.0,
+        reviewCount: typeof row.review_count === 'number' ? row.review_count : 0,
+        deliveryTime: row.delivery_time || '30-40 min',
+        distanceKm: typeof row.distance_km === 'number' ? row.distance_km : 1.0,
+        deliveryFee: typeof row.delivery_fee === 'number' ? row.delivery_fee : 0,
+        minOrder: typeof row.min_order === 'number' ? row.min_order : 20.0,
+        priceRange: row.price_range || '$$',
+        bannerUrl: row.image_url || '/images/lanchonete_front_1792014252947.jpg',
+        logoUrl: row.logo_url || undefined,
         isOpen: row.status === 'ativo',
+        openingHours: row.opening_hours || '18h às 23h30',
+        address: cleanAddress,
+        whatsappDemo: cleanWhatsapp,
+        verifiedNeighborhoodSpot: Boolean(row.owner_profile_id),
+        bio: cleanBio,
+        popularDishes: [],
         ownerProfileId: row.owner_profile_id || undefined,
-      };
+      } as Restaurant;
     });
 
-    return mergedRestaurants;
+    return realRestaurants;
   } catch (err) {
-    console.warn(
-      'Falha na consulta ao Supabase, mantendo dados locais:',
-      err
-    );
+    console.warn('Falha na consulta ao Supabase:', err);
     return null;
   }
 }
@@ -199,15 +177,11 @@ export async function fetchMerchantRestaurant(
 
     if (error || !data) {
       if (error) {
-        console.error(
-          'Falha ao consultar restaurante do comerciante:',
-          error.message
-        );
+        console.error('Falha ao consultar restaurante do comerciante:', error.message);
       }
       return null;
     }
 
-    // Busca o nome real do proprietário cadastrado em public.profiles
     let ownerRealName: string | undefined = undefined;
     try {
       const { data: profileRow } = await supabase
@@ -222,63 +196,39 @@ export async function fetchMerchantRestaurant(
       // Fallback silencioso
     }
 
-    const localMatch = MOCK_RESTAURANTS.find(
-      (item) => item.id === data.slug || item.id === data.id
-    );
-
-    if (!localMatch) {
-      return {
-        id: data.slug || data.id,
-        supabaseId: data.id,
-        name: data.name || 'Lanchonete',
-        ownerName: ownerRealName,
-        neighborhoodId: 'todos',
-        neighborhoodName: data.neighborhood || 'Bairro',
-        category: 'hamburguer',
-        categoryLabel: 'Lanches de Bairro',
-        rating: 4.8,
-        reviewCount: 1,
-        deliveryTime: '30-40 min',
-        distanceKm: 1.0,
-        deliveryFee: 0,
-        minOrder: 20.0,
-        priceRange: '$$',
-        bannerUrl:
-          data.image_url ||
-          '/src/assets/images/lanchonete_front_1792014252947.jpg',
-        logoUrl: data.logo_url || undefined,
-        isOpen: data.status === 'ativo',
-        openingHours: '18h às 23h30',
-        address: data.address || '',
-        whatsappDemo: data.whatsapp || '',
-        verifiedNeighborhoodSpot: true,
-        bio: data.description || '',
-        popularDishes: [],
-        ownerProfileId: data.owner_profile_id || undefined,
-      } as Restaurant;
-    }
+    const cleanAddress = data.address ? String(data.address).replace(/\s*\(Demonstração\)/gi, '').trim() : '';
+    const cleanWhatsapp = data.whatsapp ? String(data.whatsapp).replace(/\s*\(Demonstração\)/gi, '').trim() : '';
+    const cleanBio = data.description ? String(data.description).replace(/\s*\[Estabelecimento fictício de demonstração\]/gi, '').trim() : '';
 
     return {
-      ...localMatch,
-      id: data.slug || localMatch.id,
+      id: data.slug || data.id,
       supabaseId: data.id,
-      name: data.name || localMatch.name,
-      ownerName: ownerRealName || localMatch.ownerName,
-      bio: data.description || localMatch.bio,
-      address: data.address || localMatch.address,
-      neighborhoodName:
-        data.neighborhood || localMatch.neighborhoodName,
-      whatsappDemo: data.whatsapp || localMatch.whatsappDemo,
-      bannerUrl: data.image_url || localMatch.bannerUrl,
-      logoUrl: data.logo_url || localMatch.logoUrl || undefined,
+      name: data.name || 'Lanchonete',
+      ownerName: ownerRealName,
+      neighborhoodId: normalizeSlug(data.neighborhood) || 'todos',
+      neighborhoodName: data.neighborhood || 'Bairro',
+      category: (data.category || 'hamburguer') as any,
+      categoryLabel: data.category_label || 'Lanches de Bairro',
+      rating: typeof data.rating === 'number' ? data.rating : 5.0,
+      reviewCount: typeof data.review_count === 'number' ? data.review_count : 0,
+      deliveryTime: data.delivery_time || '30-40 min',
+      distanceKm: typeof data.distance_km === 'number' ? data.distance_km : 1.0,
+      deliveryFee: typeof data.delivery_fee === 'number' ? data.delivery_fee : 0,
+      minOrder: typeof data.min_order === 'number' ? data.min_order : 20.0,
+      priceRange: data.price_range || '$$',
+      bannerUrl: data.image_url || '/images/lanchonete_front_1792014252947.jpg',
+      logoUrl: data.logo_url || undefined,
       isOpen: data.status === 'ativo',
+      openingHours: data.opening_hours || '18h às 23h30',
+      address: cleanAddress,
+      whatsappDemo: cleanWhatsapp,
+      verifiedNeighborhoodSpot: true,
+      bio: cleanBio,
+      popularDishes: [],
       ownerProfileId: data.owner_profile_id || undefined,
-    };
+    } as Restaurant;
   } catch (err) {
-    console.warn(
-      'Erro ao consultar restaurante do comerciante:',
-      err
-    );
+    console.warn('Erro ao consultar restaurante do comerciante:', err);
     return null;
   }
 }
@@ -304,11 +254,13 @@ export async function fetchMenuItemsFromSupabase(
       .select('*')
       .eq('available', true);
 
-    if (error || !data || data.length === 0) {
-      if (error) {
-        console.error('Falha ao consultar produtos:', error.message);
-      }
+    if (error) {
+      console.error('Falha ao consultar produtos:', error.message);
       return null;
+    }
+
+    if (!data || data.length === 0) {
+      return {};
     }
 
     const uuidToSlugMap = new Map<string, string>();
@@ -329,46 +281,28 @@ export async function fetchMenuItemsFromSupabase(
         groupedMenu[restaurantSlug] = [];
       }
 
-      const localList = MOCK_MENU_ITEMS[restaurantSlug] || [];
-      const localMatch = localList.find(
-        (item) =>
-          item.name.trim().toLowerCase() ===
-          String(row.name || '').trim().toLowerCase()
-      );
-
       const item: MenuItem = {
         id: row.id,
         supabaseId: row.id,
         restaurantId: restaurantSlug,
-        name: row.name || localMatch?.name || 'Produto',
-        description: row.description || localMatch?.description || '',
+        name: row.name || 'Produto',
+        description: row.description || '',
         price:
           typeof row.price === 'number'
             ? row.price
-            : parseFloat(row.price) || (localMatch?.price ?? 0),
-        originalPrice: localMatch?.originalPrice,
-        imageUrl: row.image_url || localMatch?.imageUrl || '',
-        category: localMatch?.category || 'Lanches',
+            : parseFloat(row.price) || 0,
+        imageUrl: row.image_url || '',
+        category: 'Lanches',
         isAvailable: row.available ?? true,
-        isPopular: localMatch?.isPopular,
-        badge: localMatch?.badge,
-        prepTimeMinutes: localMatch?.prepTimeMinutes,
       };
 
       groupedMenu[restaurantSlug].push(item);
     }
 
     supabaseMenuCache = groupedMenu;
-
-    // Mantém a compatibilidade com os componentes existentes.
-    Object.assign(MOCK_MENU_ITEMS, groupedMenu);
-
     return groupedMenu;
   } catch (err) {
-    console.warn(
-      'Falha na consulta de menu_items no Supabase, mantendo dados locais:',
-      err
-    );
+    console.warn('Falha na consulta de menu_items no Supabase:', err);
     return null;
   }
 }
@@ -810,6 +744,64 @@ export async function deleteMenuItem(itemId: string) {
  *
  * Os logs ajudam a distinguir erro de consulta de uma resposta vazia.
  */
+export interface UserLoyaltyBalance {
+  store_available_points: number;
+  global_available_points: number;
+  other_stores_available_points: number;
+  total_available_points: number;
+  max_redeemable_at_store: number;
+  expired_points: number;
+  consumed_points: number;
+}
+
+/**
+ * Consulta atômica e definitiva de saldo de fidelidade via RPC get_user_loyalty_balance.
+ * Aplica a Regra 70/30, FIFO por expiração e não duplica contagem de débitos.
+ */
+export async function fetchUserLoyaltyBalance(
+  restaurantId?: string
+): Promise<{ data: UserLoyaltyBalance | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { data: null, error: new Error('Supabase não configurado neste ambiente.') };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('get_user_loyalty_balance', {
+      p_restaurant_id: restaurantId || null,
+    });
+
+    if (error) {
+      console.warn('RPC get_user_loyalty_balance não disponível ou erro:', error.message);
+      return { data: null, error: new Error(error.message) };
+    }
+
+    const res = typeof data === 'string' ? JSON.parse(data) : data;
+    if (res && typeof res.total_available_points === 'number') {
+      return {
+        data: {
+          store_available_points: Number(res.store_available_points) || 0,
+          global_available_points: Number(res.global_available_points) || 0,
+          other_stores_available_points: Number(res.other_stores_available_points) || 0,
+          total_available_points: Number(res.total_available_points) || 0,
+          max_redeemable_at_store: Number(res.max_redeemable_at_store) || 0,
+          expired_points: Number(res.expired_points) || 0,
+          consumed_points: Number(res.consumed_points) || 0,
+        },
+        error: null,
+      };
+    }
+
+    return { data: null, error: new Error('Formato de resposta inesperado de get_user_loyalty_balance.') };
+  } catch (err: any) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Consulta e soma os pontos válidos e disponíveis do usuário autenticado.
+ * Utiliza preferencialmente a RPC get_user_loyalty_balance para evitar a
+ * armadilha de contagem dupla de estornos e débitos.
+ */
 export async function fetchLoyaltyPoints(
   userId: string
 ): Promise<number | null> {
@@ -817,65 +809,65 @@ export async function fetchLoyaltyPoints(
 
   if (!isSupabaseConfigured || !supabase) {
     lastLoyaltyError = { message: 'Supabase não está configurado neste ambiente.' };
-    console.error(
-      'PONTOS REAIS: Supabase não está configurado neste ambiente.'
-    );
     return null;
   }
 
   if (!userId?.trim()) {
     lastLoyaltyError = { message: 'userId está vazio.' };
-    console.error('PONTOS REAIS: userId está vazio.');
     return null;
   }
 
   try {
-    const { data, error } = await supabase
+    // 1. Tenta a RPC oficial segura
+    const rpcRes = await fetchUserLoyaltyBalance();
+    if (rpcRes.data) {
+      return rpcRes.data.total_available_points;
+    }
+
+    // 2. Fallback resiliente: calcula créditos positivos não expirados subtraindo consumo ativo
+    // (evita subtrair loyalty_transactions.points negativos se já existirem)
+    const nowIso = new Date().toISOString();
+    const { data: credits, error: creditErr } = await supabase
       .from('loyalty_transactions')
-      .select('points')
-      .eq('profile_id', userId);
+      .select('id, points, expires_at')
+      .eq('profile_id', userId)
+      .gt('points', 0);
 
-    if (error) {
+    if (creditErr) {
       lastLoyaltyError = {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
+        message: creditErr.message,
+        details: creditErr.details,
+        hint: creditErr.hint,
+        code: creditErr.code,
       };
-
-      console.error('FALHA REAL loyalty_transactions:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-        userId,
-      });
-
       return null;
     }
 
-    const rows = data ?? [];
-    const total = rows.reduce(
-      (sum, item) => sum + (Number(item.points) || 0),
-      0
-    );
+    const { data: consumptions } = await supabase
+      .from('loyalty_consumption')
+      .select('credit_transaction_id, points_consumed')
+      .eq('is_active', true);
 
-    console.info('SUCESSO loyalty_transactions:', {
-      userId,
-      quantidade: rows.length,
-      total,
-    });
+    const consumptionMap = new Map<string, number>();
+    for (const c of consumptions || []) {
+      const prev = consumptionMap.get(c.credit_transaction_id) || 0;
+      consumptionMap.set(c.credit_transaction_id, prev + (Number(c.points_consumed) || 0));
+    }
 
-    return total;
-  } catch (err) {
+    let totalAvailable = 0;
+    for (const tx of credits || []) {
+      const isExpired = tx.expires_at && tx.expires_at <= nowIso;
+      if (isExpired) continue;
+
+      const consumed = consumptionMap.get(tx.id) || 0;
+      const remaining = Math.max(0, (Number(tx.points) || 0) - consumed);
+      totalAvailable += remaining;
+    }
+
+    return totalAvailable;
+  } catch (err: any) {
     const errMessage = err instanceof Error ? err.message : String(err);
     lastLoyaltyError = { message: errMessage };
-
-    console.error('EXCEÇÃO ao consultar pontos reais:', {
-      userId,
-      message: errMessage,
-    });
-
     return null;
   }
 }
@@ -1072,14 +1064,61 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
   try {
     const { data, error } = await supabase
       .from('posts')
-      .select('*')
+      .select('id, restaurant_id, author_profile_id, content, image_url, created_at')
       .order('created_at', { ascending: false });
 
     if (error) {
       return { data: null, error: new Error(error.message) };
     }
 
-    return { data: (data as DbPostRow[]) || [], error: null };
+    if (!data || data.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Busca restaurantes e perfis para enriquecer os dados das postagens
+    const { data: restaurants } = await supabase
+      .from('restaurants')
+      .select('id, slug, name, neighborhood, category');
+
+    const restMap = new Map<string, any>();
+    for (const r of restaurants || []) {
+      restMap.set(r.id, r);
+      if (r.slug) restMap.set(r.slug, r);
+    }
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, username, avatar_url, role');
+
+    const profileMap = new Map<string, any>();
+    for (const p of profiles || []) {
+      profileMap.set(p.id, p);
+    }
+
+    const mappedPosts: DbPostRow[] = data.map((row: any) => {
+      const rest = restMap.get(row.restaurant_id);
+      const authorId = row.author_profile_id || row.profile_id;
+      const authorProfile = profileMap.get(authorId);
+
+      return {
+        id: row.id,
+        restaurant_id: row.restaurant_id,
+        restaurant_name: rest?.name || 'Lanchonete Local',
+        restaurant_category: rest?.category || 'Lanches',
+        neighborhood: rest?.neighborhood || 'Jacarepaguá',
+        profile_id: authorId,
+        author_name: authorProfile?.full_name || authorProfile?.username || 'Morador',
+        author_avatar: authorProfile?.avatar_url || null,
+        author_role: (authorProfile?.role === 'comerciante' ? 'comerciante' : 'morador') as any,
+        content: row.content,
+        image_url: row.image_url,
+        is_demo: false,
+        created_at: row.created_at,
+        edited_at: row.edited_at || null,
+      };
+    });
+
+    return { data: mappedPosts, error: null };
   } catch (err: any) {
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
   }
@@ -1091,18 +1130,13 @@ export async function insertPostToSupabase(input: InsertPostInput): Promise<{ da
   }
 
   try {
+    const resolvedRestId = (await resolveRestaurantUuid(input.restaurant_id)) || input.restaurant_id;
+
     const payload = {
-      restaurant_id: input.restaurant_id,
-      restaurant_name: input.restaurant_name,
-      restaurant_category: input.restaurant_category,
-      neighborhood: input.neighborhood,
-      profile_id: input.profile_id,
-      author_name: input.author_name.trim(),
-      author_avatar: input.author_avatar || null,
-      author_role: input.author_role || 'morador',
+      restaurant_id: resolvedRestId,
+      author_profile_id: input.profile_id,
       content: input.content.trim(),
       image_url: input.image_url || null,
-      is_demo: Boolean(input.is_demo),
     };
 
     const { data, error } = await supabase
@@ -1111,11 +1145,27 @@ export async function insertPostToSupabase(input: InsertPostInput): Promise<{ da
       .select()
       .single();
 
-    if (error) {
-      return { data: null, error: new Error(error.message) };
+    if (error || !data) {
+      return { data: null, error: new Error(error?.message || 'Falha ao publicar') };
     }
 
-    return { data: data as DbPostRow, error: null };
+    const mapped: DbPostRow = {
+      id: data.id,
+      restaurant_id: data.restaurant_id,
+      restaurant_name: input.restaurant_name,
+      restaurant_category: input.restaurant_category,
+      neighborhood: input.neighborhood,
+      profile_id: data.author_profile_id,
+      author_name: input.author_name,
+      author_avatar: input.author_avatar || null,
+      author_role: input.author_role || 'morador',
+      content: data.content,
+      image_url: data.image_url,
+      is_demo: false,
+      created_at: data.created_at,
+    };
+
+    return { data: mapped, error: null };
   } catch (err: any) {
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
   }
@@ -1259,38 +1309,78 @@ export async function fetchStoreLoyaltyBreakdown(
   }
 
   try {
-    const { data, error } = await supabase
+    const nowIso = new Date().toISOString();
+
+    // 1. Busca transações de crédito positivas e não expiradas vinculadas a lojas
+    const { data: credits, error: creditErr } = await supabase
       .from('loyalty_transactions')
-      .select('restaurant_id, points')
+      .select('id, restaurant_id, points, expires_at')
       .eq('profile_id', userId)
-      .not('restaurant_id', 'is', null);
+      .not('restaurant_id', 'is', null)
+      .gt('points', 0);
 
-    if (error) {
-      return { data: null, error: new Error(error.message) };
+    if (creditErr) {
+      return { data: null, error: new Error(creditErr.message) };
     }
 
-    const map = new Map<string, { points: number; count: number }>();
-    for (const row of data || []) {
+    // 2. Busca consumos ativos para abater dos créditos
+    const creditIds = (credits || []).map((c) => c.id);
+    const consumptionMap = new Map<string, number>();
+
+    if (creditIds.length > 0) {
+      const { data: consumptions } = await supabase
+        .from('loyalty_consumption')
+        .select('credit_transaction_id, points_consumed')
+        .in('credit_transaction_id', creditIds)
+        .eq('is_active', true);
+
+      for (const c of consumptions || []) {
+        const prev = consumptionMap.get(c.credit_transaction_id) || 0;
+        consumptionMap.set(c.credit_transaction_id, prev + (Number(c.points_consumed) || 0));
+      }
+    }
+
+    // 3. Agrupa por loja considerando apenas créditos válidos
+    const storeMap = new Map<string, { points: number; count: number }>();
+    for (const row of credits || []) {
+      const isExpired = row.expires_at && row.expires_at <= nowIso;
+      if (isExpired) continue;
+
       const rId = String(row.restaurant_id);
-      const pts = Number(row.points) || 0;
-      const current = map.get(rId) || { points: 0, count: 0 };
-      map.set(rId, { points: current.points + pts, count: current.count + 1 });
+      const consumed = consumptionMap.get(row.id) || 0;
+      const remaining = Math.max(0, (Number(row.points) || 0) - consumed);
+
+      const current = storeMap.get(rId) || { points: 0, count: 0 };
+      storeMap.set(rId, { points: current.points + remaining, count: current.count + 1 });
     }
 
-    const result: StorePointBreakdown[] = Array.from(map.entries()).map(([restaurantId, stat]) => {
-      const matched = MOCK_RESTAURANTS.find((r) => r.id === restaurantId || r.supabaseId === restaurantId);
-      const name = matched?.name || `Lanchonete (${restaurantId.slice(0, 8)})`;
-      return {
-        restaurantId,
-        restaurant_id: restaurantId,
-        restaurantName: name,
-        restaurant_name: name,
-        points: stat.points,
-        balance: stat.points,
-        transactionsCount: stat.count,
-        transactions_count: stat.count,
-      };
-    });
+    // Busca nomes reais das lojas no Supabase
+    const restNameMap = new Map<string, string>();
+    try {
+      const { data: dbRests } = await supabase.from('restaurants').select('id, slug, name');
+      for (const r of dbRests || []) {
+        restNameMap.set(r.id, r.name);
+        if (r.slug) restNameMap.set(r.slug, r.name);
+      }
+    } catch {
+      // Fallback
+    }
+
+    const result: StorePointBreakdown[] = Array.from(storeMap.entries())
+      .filter(([_, stat]) => stat.points > 0 || stat.count > 0)
+      .map(([restaurantId, stat]) => {
+        const name = restNameMap.get(restaurantId) || `Lanchonete (${restaurantId.slice(0, 8)})`;
+        return {
+          restaurantId,
+          restaurant_id: restaurantId,
+          restaurantName: name,
+          restaurant_name: name,
+          points: stat.points,
+          balance: stat.points,
+          transactionsCount: stat.count,
+          transactions_count: stat.count,
+        };
+      });
 
     return { data: result, error: null };
   } catch (err: any) {
@@ -1634,3 +1724,100 @@ export async function redeemRewardInSupabase(
     return { success: false, message: err?.message || 'Falha ao processar resgate no servidor.' };
   }
 }
+
+/**
+ * Validação presencial de voucher pelo comerciante ou administrador via RPC mark_loyalty_redemption_used.
+ * Garante que somente o comerciante do restaurante ou admin possa validar, evita duplicidade e vouchers expirados.
+ */
+export async function markLoyaltyRedemptionUsed(
+  voucherCode: string
+): Promise<{
+  success: boolean;
+  code?: string;
+  message: string;
+  data?: {
+    redemption_id?: string;
+    voucher_code?: string;
+    reward_title?: string;
+    customer_name?: string;
+    points_cost?: number;
+    used_at?: string;
+  };
+}> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, message: 'Supabase não está configurado neste ambiente.' };
+  }
+
+  const normalized = voucherCode?.trim().toUpperCase();
+  if (!normalized || normalized.length < 4) {
+    return { success: false, message: 'Código de voucher inválido.' };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('mark_loyalty_redemption_used', {
+      p_voucher_code: normalized,
+    });
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    const res = typeof data === 'string' ? JSON.parse(data) : data;
+    return {
+      success: Boolean(res?.success),
+      code: res?.code,
+      message: res?.message || (res?.success ? 'Voucher validado com sucesso!' : 'Falha na validação.'),
+      data: res?.success ? res : undefined,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Falha ao conectar ao servidor para validar voucher.',
+    };
+  }
+}
+
+/**
+ * Cancelamento atômico de resgate via RPC cancel_loyalty_redemption.
+ * Estorna apenas pontos ainda não expirados preservando o expires_at original.
+ */
+export async function cancelLoyaltyRedemption(
+  redemptionId: string,
+  reason: string = 'Cancelamento solicitado'
+): Promise<{
+  success: boolean;
+  code?: string;
+  message: string;
+  pointsRefunded?: number;
+  pointsExpiredLost?: number;
+}> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, message: 'Supabase não está configurado neste ambiente.' };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('cancel_loyalty_redemption', {
+      p_redemption_id: redemptionId,
+      p_reason: reason,
+    });
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    const res = typeof data === 'string' ? JSON.parse(data) : data;
+    return {
+      success: Boolean(res?.success),
+      code: res?.code,
+      message: res?.message || (res?.success ? 'Resgate cancelado com sucesso.' : 'Falha ao cancelar resgate.'),
+      pointsRefunded: res?.points_refunded,
+      pointsExpiredLost: res?.points_expired_lost,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Falha ao cancelar resgate.',
+    };
+  }
+}
+

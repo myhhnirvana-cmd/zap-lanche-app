@@ -14,8 +14,8 @@ export const CheckInQrSection: React.FC<CheckInQrSectionProps> = ({ restaurant }
           QR Code de Check-in
         </h3>
         <p className="text-sm text-text-secondary">
-          Imprima e disponibilize o código perto do caixa ou entregue junto ao pedido. 
-          <strong className="text-orange-400"> Permita o acesso ao QR Code somente após a compra.</strong>
+          Cada check-in validado concede 5 pontos locais para o cliente (intervalo mínimo de 2 horas entre check-ins no mesmo restaurante). Imprima e disponibilize o código perto do caixa.
+          <strong className="text-orange-400"> Permita o acesso ao QR Code somente após o atendimento.</strong>
         </p>
       </div>
       

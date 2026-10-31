@@ -29,6 +29,7 @@ import {
   supabase,
   isSupabaseConfigured,
   fetchLoyaltyPoints,
+  fetchUserLoyaltyBalance,
   redeemRewardInSupabase,
   fetchRewardsFromSupabase,
 } from '../lib/supabase';
@@ -94,23 +95,35 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const loadRealPoints = async () => {
     if (!isSupabaseConfigured || !user?.id || !supabase) return;
     try {
-      const total = await fetchLoyaltyPoints(user.id);
-      setRealTotalPoints(total);
-
       const targetUuid =
         (restaurant.supabaseId && UUID_REGEX.test(restaurant.supabaseId) && restaurant.supabaseId) ||
         (restaurant.id && UUID_REGEX.test(restaurant.id) && restaurant.id) ||
         null;
 
       if (targetUuid) {
-        const { data } = await supabase
-          .from('loyalty_transactions')
-          .select('points')
-          .eq('profile_id', user.id)
-          .eq('restaurant_id', targetUuid);
+        const balanceRes = await fetchUserLoyaltyBalance(targetUuid);
+        if (balanceRes?.data) {
+          setRealTotalPoints(balanceRes.data.total_available_points);
+          setRealStorePoints(balanceRes.data.store_available_points);
+          return;
+        }
+      }
 
-        if (data) {
-          const storeSum = data.reduce((sum, item) => sum + (item.points || 0), 0);
+      const total = await fetchLoyaltyPoints(user.id);
+      setRealTotalPoints(total);
+
+      if (targetUuid) {
+        const { data: credits } = await supabase
+          .from('loyalty_transactions')
+          .select('id, points, expires_at')
+          .eq('profile_id', user.id)
+          .eq('restaurant_id', targetUuid)
+          .gt('points', 0);
+
+        if (credits) {
+          const nowIso = new Date().toISOString();
+          const validCredits = credits.filter((c) => !c.expires_at || c.expires_at > nowIso);
+          const storeSum = validCredits.reduce((sum, item) => sum + (Number(item.points) || 0), 0);
           setRealStorePoints(storeSum);
         }
       }
@@ -802,7 +815,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
               <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="text-xs text-slate-300">
                   <span className="font-bold text-white block">Está no estabelecimento agora?</span>
-                  <span className="text-[11px] text-slate-400">Escaneie o QR Code oficial no balcão e ganhe 5 pontos a cada 24h.</span>
+                  <span className="text-[11px] text-slate-400">Escaneie o QR Code oficial no balcão e ganhe 5 pontos por check-in validado (novo check-in a cada 2 horas).</span>
                 </div>
                 <button
                   onClick={handleStartCheckin}
@@ -821,7 +834,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                 Como funciona o resgate (Regra 70/30):
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Para proteger os comerciantes de bairro e incentivar a frequência real, <strong>pelo menos 70% dos pontos</strong> devem vir de ações nesta casa (check-in ou avaliação com foto auditada). Até <strong>30%</strong> podem ser cobertos com pontos globais que você ganhou convidando amigos.
+                Os pontos locais pertencem exclusivamente à lanchonete onde foram conquistados. O resgate exige <strong>no mínimo 70% em pontos locais desta loja</strong> e até <strong>30% em pontos globais da rede</strong> (conquistados em indicações). Pontos acumulados em outras lanchonetes nunca participam deste resgate.
               </p>
             </div>
 
@@ -1058,7 +1071,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
             <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300/90 space-y-1">
               <span className="font-bold block">Regra de Segurança 70/30:</span>
               <p className="text-[11px] text-slate-300">
-                Mínimo de {redeemedReward.minStorePointsRequired} pontos da casa + até {redeemedReward.maxGlobalPointsAllowed} pontos globais de indicação.
+                Mínimo de {redeemedReward.minStorePointsRequired} pontos locais desta loja (70%) e até {redeemedReward.maxGlobalPointsAllowed} pontos globais de indicação (30%). Pontos de outras lojas não podem ser usados.
               </p>
             </div>
 
@@ -1128,7 +1141,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                 {redemptionVoucherResult.voucherCode}
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Apresente este código presencialmente na lanchonete ou informe na mensagem do seu pedido no WhatsApp!
+                Apresente este código presencialmente no balcão da lanchonete ou informe na mensagem do seu pedido no WhatsApp. O comerciante deve obrigatoriamente validar o voucher no painel antes de entregar a sua cortesia!
               </p>
             </div>
 

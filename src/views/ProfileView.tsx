@@ -442,13 +442,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
             <Award className="w-4 h-4 text-emerald-400" />
-            Meus Pontos Globais
+            Meus Pontos Globais da Rede
           </h3>
 
           <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">
-            Saldo acumulado
+            Validade: 180 dias
           </span>
         </div>
+
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Pontos globais acumulados por indicações de amigos (15 pontos por amigo após o 1º check-in validado dele). Podem ser utilizados para cobrir até 30% do valor de qualquer resgate na rede.
+        </p>
 
         {loadingRealPoints ? (
           <div className="text-xs text-text-secondary text-center py-6">
@@ -466,7 +470,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             </span>
 
             <span className="block text-emerald-300/60 text-[10px] uppercase font-bold mt-1">
-              Pontos Disponíveis na Rede
+              Pontos Globais Disponíveis na Rede (Cobrem até 30% do Resgate)
             </span>
           </div>
         )}
@@ -477,15 +481,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
             <Store className="w-4 h-4 text-orange-400" />
-            Pontos por Estabelecimento
+            Pontos Locais por Estabelecimento
           </h3>
           <span className="text-[10px] bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full border border-orange-500/30 font-semibold">
-            Para Resgate (Regra 70%)
+            Regra 70% Local
           </span>
         </div>
 
         <p className="text-xs text-slate-400 leading-relaxed">
-          Para resgatar prêmios em um comércio específico, 70% dos pontos devem ter sido acumulados no próprio estabelecimento.
+          Os pontos locais pertencem exclusivamente a cada restaurante onde foram conquistados (check-ins de +5 pontos com intervalo de 2 horas). Para resgatar uma recompensa, você precisa de no mínimo 70% do custo em pontos da loja escolhida. Pontos de uma loja não podem ser usados em outra.
         </p>
 
         {loadingRealPoints ? (
@@ -521,16 +525,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div className="flex items-center gap-2">
             <Gift className="w-5 h-5 text-purple-400" />
             <h3 className="text-sm font-bold text-text-primary">
-              Indique Amigos e Ganhe 15 Pontos
+              Indique Amigos e Ganhe 15 Pontos Globais
             </h3>
           </div>
           <span className="text-[10px] bg-purple-500/10 text-purple-300 font-bold px-2 py-0.5 rounded-full border border-purple-500/30">
-            +15 pts automáticos
+            Validade: 180 dias
           </span>
         </div>
 
         <p className="text-xs text-slate-400 leading-relaxed">
-          Compartilhe seu código exclusivo. Quando seu amigo se cadastrar e realizar o primeiro check-in em qualquer lanchonete, você recebe <strong>15 pontos reais</strong> creditados instantaneamente no seu saldo!
+          Compartilhe seu código exclusivo. Quando seu amigo convidado se cadastrar e realizar o <strong>primeiro check-in validado</strong> em qualquer lanchonete participante, você recebe <strong>15 pontos globais</strong> creditados na sua carteira! Os pontos de indicação têm validade de <strong>180 dias</strong> e podem cobrir até 30% do valor dos seus resgates.
         </p>
 
         {/* Meu Código e Compartilhamento */}
@@ -648,20 +652,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <GuideSection
           title="Guia do Comerciante ZAP LANCHE"
           steps={[
-            "Cadastre e gerencie seu cardápio com preços reais e fotos.",
-            "Crie Recompensas de Fidelidade com custo em pontos e estoque controlado.",
-            "Receba pedidos diretamente no seu WhatsApp oficial, sem taxas abusivas.",
-            "Consulte os dados reais de resgate e acompanhe a simulação de pedidos."
+            "Disponibilize o QR Code no balcão: cada check-in concede 5 pontos locais (intervalo mínimo de 2 horas por cliente).",
+            "Os pontos locais pertencem à sua loja; pontos globais de indicação são geridos e garantidos pela rede.",
+            "Recompensas exigem no mínimo 70% em pontos da sua loja e até 30% globais (outras lojas nunca participam).",
+            "Validação obrigatória: confira e dê baixa no código do voucher no seu painel antes de entregar a cortesia."
           ]}
         />
       ) : (
         <GuideSection
-          title="Como Funciona o ZAP LANCHE"
+          title="Como Funciona a Fidelidade ZAP LANCHE"
           steps={[
-            "Explore lanches e botecos de Jacarepaguá e peça direto pelo WhatsApp.",
-            "Acumule pontos reais via QR Code ou consumo no estabelecimento.",
-            "Indique amigos com seu código: ganhe 15 pontos no primeiro check-in deles.",
-            "Resgate vouchers reais (regra 70/30) e apresente o código no balcão."
+            "Faça check-in via QR Code no balcão e ganhe 5 pontos (novo check-in a cada 2 horas no mesmo restaurante).",
+            "Indique amigos com seu código: ganhe 15 pontos globais (validade de 180 dias) no 1º check-in validado deles.",
+            "Pontos locais pertencem exclusivamente à lanchonete onde foram conquistados e não transferem entre lojas.",
+            "Resgate prêmios com a Regra 70/30: no mínimo 70% em pontos da loja e até 30% em pontos globais da rede."
           ]}
         />
       )}

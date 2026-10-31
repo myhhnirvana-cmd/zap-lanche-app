@@ -5,14 +5,6 @@ import {
   MenuItem,
   Neighborhood,
 } from './types';
-import { NEIGHBORHOODS, MOCK_RESTAURANTS, MOCK_MENU_ITEMS } from './data/mockData';
-import {
-  loadCurrentNeighborhood,
-  saveCurrentNeighborhood,
-  loadRestaurants,
-  saveRestaurants,
-  loadAllMenuItems,
-} from './data/mockData';
 import { Header } from './components/layout/Header';
 import { BottomNav } from './components/layout/BottomNav';
 import { DemoBadge } from './components/common/DemoBadge';
@@ -29,15 +21,14 @@ import { DishDetailModal } from './views/DishDetailModal';
 import { GitHubGuideModal } from './views/GitHubGuideModal';
 import { AcceptInvitationModal } from './components/merchant/AcceptInvitationModal';
 import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseConfigured } from './lib/supabase';
+import { loadAllMenuItems, MOCK_MENU_ITEMS, saveCurrentNeighborhood } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
 
 export default function App() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('explorar');
-  const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>(() =>
-    loadCurrentNeighborhood()
-  );
-  const [restaurants, setRestaurants] = useState<Restaurant[]>(() => loadRestaurants());
+  const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>({ id: 'todos', name: 'Todos os Bairros', zone: '', city: '', state: '', activeSpotsCount: 0 });
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
   const [selectedRestaurantInitialTab, setSelectedRestaurantInitialTab] = useState<'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes'>('cardapio');
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
@@ -80,16 +71,7 @@ export default function App() {
       }
       const menuData = await fetchMenuItemsFromSupabase(currentList);
       if (isMounted && menuData && Object.keys(menuData).length > 0) {
-        const next = Object.keys(menuData).reduce<Record<string, MenuItem[]>>((acc, key) => {
-          acc[key] = menuData[key];
-          return acc;
-        }, {});
-        if (Object.keys(next).length > 0) {
-          saveRestaurants(currentList);
-          const menuMap = loadAllMenuItems();
-          const mergedMenu = { ...menuMap, ...next };
-          localStorage.setItem('zap_lanche_menu_items_v2', JSON.stringify(mergedMenu));
-        }
+        // O Supabase já é a fonte da verdade e o cache é gerenciado em lib/supabase.ts
       }
     }
     loadFromSupabase();
@@ -107,9 +89,7 @@ export default function App() {
   // Atualização em tempo real de loja (Área do Lojista)
   const handleUpdateRestaurant = (updated: Restaurant) => {
     setRestaurants((prev) => {
-      const next = prev.map((r) => (r.id === updated.id ? updated : r));
-      saveRestaurants(next);
-      return next;
+      return prev.map((r) => (r.id === updated.id ? updated : r));
     });
     if (selectedRestaurant?.id === updated.id) {
       setSelectedRestaurant(updated);
@@ -137,7 +117,7 @@ export default function App() {
     const allMenus = loadAllMenuItems();
     const restItems = allMenus[restaurant.id] || MOCK_MENU_ITEMS[restaurant.id] || [];
     const found =
-      restItems.find((i) => i.name.toLowerCase().includes(dishName.toLowerCase())) ||
+      restItems.find((i: MenuItem) => i.name.toLowerCase().includes(dishName.toLowerCase())) ||
       restItems[0];
     setSelectedMenuItem(found);
     setDishModalRestaurant(restaurant);

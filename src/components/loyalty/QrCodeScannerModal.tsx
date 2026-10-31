@@ -269,7 +269,7 @@ export const QrCodeScannerModal: React.FC<QrCodeScannerModalProps> = ({
         {/* Instrução ao usuário */}
         {cameraState === 'active' && !isProcessing && (
           <p className="text-xs text-center text-slate-300 font-medium">
-            Centralize o QR Code da loja dentro da área indicada.
+            Centralize o QR Code da loja no quadrado (+5 pontos por check-in · intervalo de 2h).
           </p>
         )}
 

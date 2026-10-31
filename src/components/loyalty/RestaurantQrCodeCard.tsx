@@ -124,7 +124,7 @@ export const RestaurantQrCodeCard: React.FC<RestaurantQrCodeCardProps> = ({
             <h2>${restaurant.neighborhoodName} · Programa de Fidelidade ZAP LANCHE</h2>
             <img src="${qrDataUrl}" alt="QR Code" />
             <br />
-            <div class="badge">Ganhe 5 pontos de fidelidade a cada 24 horas</div>
+            <div class="badge">+5 pontos por check-in (novo check-in a cada 2 horas)</div>
             <p class="instructions">
               Abra o aplicativo <strong>ZAP LANCHE</strong> pelo celular,<br />
               toque em <strong>"Fazer check-in"</strong> e aponte a câmera para este código.
@@ -198,7 +198,7 @@ export const RestaurantQrCodeCard: React.FC<RestaurantQrCodeCardProps> = ({
               Check-in de Fidelidade Oficial
             </h4>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Cada cliente que escanear este QR Code ganha <strong>5 pontos reais</strong> a cada 24 horas. O banco de dados valida automaticamente o tempo e a autenticação.
+              Cada cliente que escanear este QR Code ganha <strong>5 pontos</strong> por check-in validado (intervalo mínimo de 2 horas entre check-ins no mesmo restaurante). O sistema valida automaticamente o tempo e a autenticação.
             </p>
           </div>
 

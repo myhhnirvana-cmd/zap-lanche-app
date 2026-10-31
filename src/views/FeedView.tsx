@@ -19,7 +19,6 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { SocialPost, Restaurant, PostComment } from '../types';
-import { MOCK_POSTS } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { getAvatarUrl, DEFAULT_AVATAR_URL } from '../data/avatars';
 import {
@@ -36,6 +35,7 @@ import {
   fetchPostLikesFromSupabase,
   togglePostLikeInSupabase,
 } from '../lib/supabase';
+import { MOCK_POSTS, processAndCompressImage, savePostsFromStorage, loadPostsFromStorage, savePostsToStorage } from '../data/mockData';
 
 interface FeedViewProps {
   restaurants: Restaurant[];
@@ -43,121 +43,10 @@ interface FeedViewProps {
   onOpenDishPreview: (dishName: string, restaurantName: string) => void;
 }
 
-const STORAGE_KEY = 'zap_lanche_feed_posts_v2';
-const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
-
-// Função de persistência segura no localStorage
-const loadPostsFromStorage = (): SocialPost[] => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return MOCK_POSTS;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      // Normalização defensiva: sincronizar comments e commentsCount
-      return parsed.map((p: SocialPost) => {
-        const defaultPost = MOCK_POSTS.find((m) => m.id === p.id);
-        const comments = Array.isArray(p.comments)
-          ? p.comments
-          : defaultPost?.comments || [];
-        
-        // Migração pontual de caminhos antigos de imagens no localStorage para /images/
-        let fixedImageUrl = p.imageUrl;
-        if (fixedImageUrl && fixedImageUrl.startsWith('/src/assets/images/')) {
-          fixedImageUrl = fixedImageUrl.replace('/src/assets/images/', '/images/');
-        }
-
-        return {
-          ...p,
-          imageUrl: fixedImageUrl,
-          comments,
-          commentsCount: comments.length,
-        };
-      });
-    }
-  } catch (err) {
-    console.warn('Erro ao carregar postagens do localStorage:', err);
-  }
-  return MOCK_POSTS;
-};
-
-const savePostsToStorage = (posts: SocialPost[]): boolean => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-    return true;
-  } catch (err: unknown) {
-    console.error('Falha ao salvar postagens no localStorage:', err);
-    return false;
-  }
-};
-
 // -------------------------------------------------------------
-// UTILITÁRIO: VALIDAÇÃO, REDIMENSIONAMENTO E COMPRESSÃO DE FOTOS
-// Utiliza HTML5 Canvas nativo do navegador para compactar a foto
-// antes de gerar o DataURL (economizando memória no localStorage).
+// FEED REAL: CARREGAMENTO INTEGRADO COM O SUPABASE
 // -------------------------------------------------------------
-const processAndCompressImage = (
-  file: File,
-  maxWidth = 1200,
-  maxHeight = 1200,
-  quality = 0.75
-): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    // 1. Validação de tipo de arquivo
-    if (!file.type || !file.type.startsWith('image/')) {
-      reject(new Error('O arquivo selecionado não é uma foto válida. Use JPG, PNG ou WebP.'));
-      return;
-    }
 
-    // 2. Validação rigorosa de tamanho máximo de 2 MB
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      reject(
-        new Error(`A imagem tem ${sizeMB} MB e ultrapassa o limite de 2 MB. Escolha uma foto menor.`)
-      );
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Não foi possível ler o arquivo da galeria.'));
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Não foi possível decodificar os dados da imagem.'));
-      img.onload = () => {
-        let { width, height } = img;
-
-        // Redimensionar proporcionalmente se exceder os limites
-        if (width > maxWidth || height > maxHeight) {
-          if (width > height) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          } else {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-
-        if (!ctx) {
-          // Fallback seguro se contexto 2D falhar
-          resolve(e.target?.result as string);
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Compressão em JPEG com qualidade otimizada (reduz 2MB para ~80-140KB)
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-        resolve(compressedDataUrl);
-      };
-      img.src = e.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
-};
 
 export const FeedView: React.FC<FeedViewProps> = ({
   restaurants,
@@ -165,6 +54,12 @@ export const FeedView: React.FC<FeedViewProps> = ({
   onOpenDishPreview,
 }) => {
   const { user, profile } = useAuth();
+
+  const [posts, setPosts] = useState<SocialPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+
 
   // Identificação do usuário autenticado a partir do Supabase Auth e public.profiles
   const authenticatedAuthorName =
@@ -191,8 +86,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
       ? 'critico_do_bairro'
       : 'morador';
 
-  // Estado inicial carregado de forma resiliente do localStorage
-  const [posts, setPosts] = useState<SocialPost[]>(() => loadPostsFromStorage());
   const [filterRole, setFilterRole] = useState<'todos' | 'morador' | 'comerciante'>('todos');
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
@@ -232,10 +125,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sincronizar persistência no localStorage sempre que o array de postagens mudar
-  useEffect(() => {
-    savePostsToStorage(posts);
-  }, [posts]);
+
 
   // Limpar notificação após tempo determinado
   useEffect(() => {
