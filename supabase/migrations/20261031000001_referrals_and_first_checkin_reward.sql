@@ -1,33 +1,48 @@
+
 BEGIN;
 
--- ==============================================================================
--- ZAP LANCHE - MIGRATION INDEPENDENTE: TRIGGER-BASED REFERRAL REWARD
--- Arquivo: 20261031000001_referrals_and_first_checkin_reward.sql
--- Escopo Exclusivo:
---   1. Estrutura em public.profiles (referral_code, referred_by)
---   2. Gerador robusto de código de indicação (com anti-colisão simultânea)
---   3. Tabela public.referrals (vínculos pendentes/concluídos)
---   4. RPC register_referral_code (para vincular códigos antes do 1º check-in, com validação anti-check-in prévio e advisory lock de serialização)
---   5. TRIGGER process_referral_bonus (dispara bônus atômico no 1º check-in via loyalty_transactions)
---   * NOTA: A RPC register_restaurant_checkin NÃO é modificada nem substituída.
--- ==============================================================================
+-- =============================================================================
+-- ZAP LANCHE
+-- INDICAÇÕES + BÔNUS NO PRIMEIRO CHECK-IN
+-- Migration independente
+--
+-- Não modifica register_restaurant_checkin.
+-- Não altera as regras dos pontos locais.
+-- =============================================================================
 
--- ------------------------------------------------------------------------------
--- 1. ESTRUTURA EM PROFILES E GERADOR DE CÓDIGO
--- ------------------------------------------------------------------------------
+
+-- 1. CAMPOS DE INDICAÇÃO EM PROFILES
+-- -----------------------------------------------------------------------------
+
 ALTER TABLE public.profiles
     ADD COLUMN IF NOT EXISTS referral_code text;
+
+ALTER TABLE public.profiles
+    ADD COLUMN IF NOT EXISTS referred_by uuid
+    REFERENCES public.profiles(id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_referral_code_unique
     ON public.profiles (referral_code)
     WHERE referral_code IS NOT NULL;
 
-ALTER TABLE public.profiles
-    ADD COLUMN IF NOT EXISTS referred_by uuid REFERENCES public.profiles(id);
-
 CREATE INDEX IF NOT EXISTS profiles_referred_by_idx
     ON public.profiles (referred_by)
     WHERE referred_by IS NOT NULL;
+
+
+-- 2. PROTEÇÃO DAS PERMISSÕES DE PROFILES
+-- -----------------------------------------------------------------------------
+
+REVOKE UPDATE ON public.profiles
+FROM PUBLIC, anon, authenticated;
+
+GRANT UPDATE (full_name, username, role)
+ON public.profiles
+TO authenticated;
+
+
+-- 3. GERADOR DE CÓDIGOS ÚNICOS
+-- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.generate_unique_referral_code()
 RETURNS text
@@ -44,20 +59,35 @@ DECLARE
 BEGIN
     LOOP
         v_attempts := v_attempts + 1;
+
         IF v_attempts > 200 THEN
-            RAISE EXCEPTION 'Falha ao gerar código único de indicação.';
+            RAISE EXCEPTION 'Não foi possível gerar um código único de indicação.';
         END IF;
 
         v_code := 'ZAP-';
+
         FOR v_i IN 1..6 LOOP
-            v_code := v_code || substr(v_chars, floor(random() * length(v_chars) + 1)::integer, 1);
+            v_code := v_code ||
+                pg_catalog.substr(
+                    v_chars,
+                    pg_catalog.floor(
+                        pg_catalog.random() *
+                        pg_catalog.length(v_chars) + 1
+                    )::integer,
+                    1
+                );
         END LOOP;
 
-        PERFORM pg_advisory_xact_lock(hashtextextended(v_code, 42));
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended(v_code, 42)
+        );
 
         SELECT EXISTS (
-            SELECT 1 FROM public.profiles WHERE referral_code = v_code
-        ) INTO v_exists;
+            SELECT 1
+            FROM public.profiles
+            WHERE referral_code = v_code
+        )
+        INTO v_exists;
 
         EXIT WHEN NOT v_exists;
     END LOOP;
@@ -66,7 +96,12 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.generate_unique_referral_code() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.generate_unique_referral_code()
+FROM PUBLIC, anon, authenticated;
+
+
+-- 4. GERAÇÃO AUTOMÁTICA PARA NOVOS PERFIS
+-- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.set_profile_referral_code()
 RETURNS trigger
@@ -75,47 +110,72 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-    IF NEW.referral_code IS NULL THEN
-        NEW.referral_code := public.generate_unique_referral_code();
-    END IF;
+    NEW.referral_code :=
+        public.generate_unique_referral_code();
+
+    NEW.referred_by := NULL;
+
     RETURN NEW;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.set_profile_referral_code() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.set_profile_referral_code()
+FROM PUBLIC, anon, authenticated;
 
-DROP TRIGGER IF EXISTS set_referral_code_on_profile_created ON public.profiles;
+DROP TRIGGER IF EXISTS set_referral_code_on_profile_created
+ON public.profiles;
+
 CREATE TRIGGER set_referral_code_on_profile_created
-    BEFORE INSERT ON public.profiles
-    FOR EACH ROW
-    EXECUTE FUNCTION public.set_profile_referral_code();
+BEFORE INSERT ON public.profiles
+FOR EACH ROW
+EXECUTE FUNCTION public.set_profile_referral_code();
 
--- Backfill seguro para perfis legados sem código
+
+-- 5. BACKFILL DOS PERFIS ANTIGOS
+-- -----------------------------------------------------------------------------
+
 DO $$
 DECLARE
     r RECORD;
-    v_new_code text;
 BEGIN
-    FOR r IN SELECT id FROM public.profiles WHERE referral_code IS NULL FOR UPDATE LOOP
-        v_new_code := public.generate_unique_referral_code();
+    FOR r IN
+        SELECT id
+        FROM public.profiles
+        WHERE referral_code IS NULL
+        FOR UPDATE
+    LOOP
         UPDATE public.profiles
-        SET referral_code = v_new_code
+        SET referral_code = public.generate_unique_referral_code()
         WHERE id = r.id;
     END LOOP;
-END $$;
+END;
+$$;
 
--- ------------------------------------------------------------------------------
--- 2. TABELA DE INDICAÇÕES (public.referrals) E RPC DE VINCULAÇÃO
--- ------------------------------------------------------------------------------
+
+-- 6. TABELA DE INDICAÇÕES
+-- -----------------------------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS public.referrals (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    referrer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    referred_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled')),
+
+    referrer_id uuid NOT NULL
+        REFERENCES public.profiles(id) ON DELETE CASCADE,
+
+    referred_id uuid NOT NULL
+        REFERENCES public.profiles(id) ON DELETE CASCADE,
+
+    status text NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'completed', 'cancelled')),
+
     created_at timestamptz NOT NULL DEFAULT now(),
+
     completed_at timestamptz,
-    CONSTRAINT referrals_not_self CHECK (referrer_id <> referred_id),
-    CONSTRAINT referrals_unique_pair UNIQUE (referrer_id, referred_id)
+
+    CONSTRAINT referrals_not_self
+        CHECK (referrer_id <> referred_id),
+
+    CONSTRAINT referrals_unique_pair
+        UNIQUE (referrer_id, referred_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS referrals_unique_referred
@@ -127,24 +187,34 @@ CREATE INDEX IF NOT EXISTS referrals_referrer_idx
 CREATE INDEX IF NOT EXISTS referrals_status_idx
     ON public.referrals (status);
 
-REVOKE ALL ON TABLE public.referrals FROM PUBLIC, anon;
-GRANT SELECT ON TABLE public.referrals TO authenticated;
+
+-- 7. PERMISSÕES E RLS DE REFERRALS
+-- -----------------------------------------------------------------------------
 
 ALTER TABLE public.referrals ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "referrals_select_participants_or_admin" ON public.referrals;
-CREATE POLICY "referrals_select_participants_or_admin"
-ON public.referrals FOR SELECT TO authenticated
+REVOKE ALL ON TABLE public.referrals
+FROM PUBLIC, anon, authenticated;
+
+GRANT SELECT ON TABLE public.referrals
+TO authenticated;
+
+DROP POLICY IF EXISTS referrals_select_participants_or_admin
+ON public.referrals;
+
+CREATE POLICY referrals_select_participants_or_admin
+ON public.referrals
+FOR SELECT
+TO authenticated
 USING (
     auth.uid() = referrer_id
     OR auth.uid() = referred_id
-    OR (
-        EXISTS (
-            SELECT 1 FROM public.profiles p
-            WHERE p.id = auth.uid() AND p.role = 'admin'
-        )
-    )
+    OR public.is_admin()
 );
+
+
+-- 8. RPC PARA VINCULAR CÓDIGO DE INDICAÇÃO
+-- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.register_referral_code(
     p_referral_code text
@@ -156,129 +226,243 @@ SET search_path = ''
 AS $$
 DECLARE
     v_caller_id uuid := auth.uid();
-    v_caller_role text;
-    v_referrer_id uuid;
+    v_role text;
     v_existing_referred_by uuid;
+    v_referrer_id uuid;
     v_normalized_code text;
+    v_referral_id uuid;
+    v_updated_profile_id uuid;
 BEGIN
+
+    -- Autenticação
     IF v_caller_id IS NULL THEN
-        RETURN jsonb_build_object(
+        RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'UNAUTHENTICATED',
-            'message', 'Sessão inválida. Conecte-se para vincular o código.'
+            'message', 'É necessário entrar na sua conta.'
         );
     END IF;
 
-    -- Serializa com o trigger de check-in para evitar corrida entre vinculação e primeiro check-in
-    PERFORM pg_advisory_xact_lock(hashtextextended(v_caller_id::text, 101));
 
-    -- BLOQUEIO CONCORRENTE: Trava a linha do perfil convidado com FOR UPDATE
+    -- Mesmo lock utilizado pelo trigger de check-in
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(v_caller_id::text, 101)
+    );
+
+
+    -- Bloqueia alterações concorrentes no perfil
     SELECT role, referred_by
-    INTO v_caller_role, v_existing_referred_by
+    INTO v_role, v_existing_referred_by
     FROM public.profiles
     WHERE id = v_caller_id
     FOR UPDATE;
 
     IF NOT FOUND THEN
-        RETURN jsonb_build_object(
+        RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'PROFILE_NOT_FOUND',
-            'message', 'Perfil de usuário não encontrado.'
+            'message', 'Perfil não encontrado.'
         );
     END IF;
 
-    -- Validar se já existe algum check-in positivo (o código só pode ser vinculado antes do primeiro check-in)
+
+    -- Somente clientes podem participar
+    IF v_role IS DISTINCT FROM 'cliente' THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'FORBIDDEN_ROLE',
+            'message', 'Somente clientes podem utilizar indicações.'
+        );
+    END IF;
+
+
+    -- Não permite segunda indicação
+    IF v_existing_referred_by IS NOT NULL THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'ALREADY_REFERRED',
+            'message', 'Você já possui um indicador.'
+        );
+    END IF;
+
+
     IF EXISTS (
-        SELECT 1 FROM public.loyalty_transactions
+        SELECT 1
+        FROM public.referrals
+        WHERE referred_id = v_caller_id
+    ) THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'ALREADY_REFERRED',
+            'message', 'Você já foi indicado.'
+        );
+    END IF;
+
+
+    -- Não permite vincular depois do primeiro check-in positivo
+    IF EXISTS (
+        SELECT 1
+        FROM public.loyalty_transactions
         WHERE profile_id = v_caller_id
           AND transaction_type = 'checkin'
           AND points > 0
     ) THEN
-        RETURN jsonb_build_object(
+        RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'ALREADY_CHECKED_IN',
-            'message', 'O código de indicação só pode ser vinculado antes do seu primeiro check-in.'
+            'message', 'O código só pode ser vinculado antes do primeiro check-in.'
         );
     END IF;
 
-    IF v_caller_role IS DISTINCT FROM 'cliente' THEN
-        RETURN jsonb_build_object(
+
+    -- Normalização e validação
+    IF p_referral_code IS NULL
+       OR pg_catalog.btrim(p_referral_code) = '' THEN
+
+        RETURN pg_catalog.jsonb_build_object(
             'success', false,
-            'code', 'FORBIDDEN_ROLE',
-            'message', 'Apenas contas de clientes podem vincular códigos de indicação.'
+            'code', 'INVALID_CODE',
+            'message', 'Informe um código de indicação.'
         );
     END IF;
 
-    IF v_existing_referred_by IS NOT NULL THEN
-        RETURN jsonb_build_object(
-            'success', false,
-            'code', 'ALREADY_REFERRED',
-            'message', 'Você já possui um código de indicação vinculado à sua conta.'
-        );
-    END IF;
+    v_normalized_code :=
+        pg_catalog.upper(pg_catalog.btrim(p_referral_code));
 
-    IF EXISTS (
-        SELECT 1 FROM public.referrals
-        WHERE referred_id = v_caller_id
-    ) THEN
-        RETURN jsonb_build_object(
-            'success', false,
-            'code', 'ALREADY_REFERRED',
-            'message', 'Você já foi indicado por outro participante.'
-        );
-    END IF;
-
-    v_normalized_code := upper(trim(p_referral_code));
-    IF v_normalized_code IS NULL OR length(v_normalized_code) < 4 THEN
-        RETURN jsonb_build_object(
+    IF pg_catalog.length(v_normalized_code) < 4 THEN
+        RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'INVALID_CODE',
             'message', 'Código de indicação inválido.'
         );
     END IF;
 
-    SELECT id INTO v_referrer_id
+
+    -- Localiza o indicador
+    SELECT id
+    INTO v_referrer_id
     FROM public.profiles
     WHERE referral_code = v_normalized_code;
 
     IF v_referrer_id IS NULL THEN
-        RETURN jsonb_build_object(
+        RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'CODE_NOT_FOUND',
             'message', 'Código de indicação não encontrado.'
         );
     END IF;
 
+
+    -- Impede autoindicação
     IF v_referrer_id = v_caller_id THEN
-        RETURN jsonb_build_object(
+        RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'SELF_REFERRAL',
-            'message', 'Você não pode utilizar seu próprio código de indicação.'
+            'message', 'Você não pode utilizar seu próprio código.'
         );
     END IF;
 
+
+    -- Insere primeiro a indicação.
+    -- O índice único impede duplicidade por usuário indicado.
+    INSERT INTO public.referrals (
+        referrer_id,
+        referred_id,
+        status
+    )
+    VALUES (
+        v_referrer_id,
+        v_caller_id,
+        'pending'
+    )
+    ON CONFLICT (referred_id) DO NOTHING
+    RETURNING id INTO v_referral_id;
+
+    IF NOT FOUND THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'ALREADY_REFERRED',
+            'message', 'Este usuário já possui uma indicação.'
+        );
+    END IF;
+
+
+    -- Atualiza o perfil somente depois de inserir a indicação.
     UPDATE public.profiles
     SET referred_by = v_referrer_id
-    WHERE id = v_caller_id;
+    WHERE id = v_caller_id
+      AND referred_by IS NULL
+    RETURNING id INTO v_updated_profile_id;
 
-    INSERT INTO public.referrals (referrer_id, referred_id, status)
-    VALUES (v_referrer_id, v_caller_id, 'pending')
-    ON CONFLICT (referred_id) DO NOTHING;
+    IF NOT FOUND THEN
 
-    RETURN jsonb_build_object(
+        -- Remove somente a indicação criada por esta execução.
+        DELETE FROM public.referrals
+        WHERE id = v_referral_id;
+
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'PROFILE_UPDATE_FAILED',
+            'message', 'Não foi possível vincular o código.'
+        );
+    END IF;
+
+
+    RETURN pg_catalog.jsonb_build_object(
         'success', true,
         'code', 'REFERRAL_LINKED',
-        'message', 'Código vinculado com sucesso! O bônus será creditado no seu primeiro check-in.'
+        'message', 'Código vinculado com sucesso! O bônus será concedido no primeiro check-in.'
     );
+
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.register_referral_code(text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.register_referral_code(text) TO authenticated;
+REVOKE ALL ON FUNCTION public.register_referral_code(text)
+FROM PUBLIC, anon;
 
--- ------------------------------------------------------------------------------
--- 3. TRIGGER TRANSACIONAL: BÔNUS DE INDICAÇÃO NO 1º CHECK-IN
--- ------------------------------------------------------------------------------
+GRANT EXECUTE ON FUNCTION public.register_referral_code(text)
+TO authenticated;
+
+
+-- 9. LOCK ANTES DA INSERÇÃO DO CHECK-IN
+-- -----------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.lock_first_checkin_referral()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+
+    IF NEW.transaction_type = 'checkin'
+       AND NEW.points > 0 THEN
+
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended(NEW.profile_id::text, 101)
+        );
+
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.lock_first_checkin_referral()
+FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_lock_first_checkin_referral
+ON public.loyalty_transactions;
+
+CREATE TRIGGER trg_lock_first_checkin_referral
+BEFORE INSERT ON public.loyalty_transactions
+FOR EACH ROW
+EXECUTE FUNCTION public.lock_first_checkin_referral();
+
+
+-- 10. PROCESSAMENTO DO BÔNUS NO PRIMEIRO CHECK-IN
+-- -----------------------------------------------------------------------------
+
 CREATE OR REPLACE FUNCTION public.process_referral_bonus()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -287,85 +471,89 @@ SET search_path = ''
 AS $$
 DECLARE
     v_referrer_id uuid;
-    v_referral_row public.referrals%ROWTYPE;
-    v_positive_checkin_count integer;
 BEGIN
-    -- 1. Disparar somente para transações positivas do tipo checkin
-    IF NEW.transaction_type IS DISTINCT FROM 'checkin' OR NEW.points <= 0 THEN
+
+    -- Somente check-ins positivos
+    IF NEW.transaction_type IS DISTINCT FROM 'checkin'
+       OR NEW.points <= 0 THEN
         RETURN NULL;
     END IF;
 
-    -- 2. Serializar o processamento por perfil do convidado usando o mesmo advisory lock da RPC
-    PERFORM pg_advisory_xact_lock(hashtextextended(NEW.profile_id::text, 101));
 
-    -- 3. Verificar rigorosamente se já existe outro check-in positivo antes deste
-    SELECT count(*)
-    INTO v_positive_checkin_count
-    FROM public.loyalty_transactions
-    WHERE profile_id = NEW.profile_id
-      AND transaction_type = 'checkin'
-      AND points > 0;
-
-    -- Se houver mais de 1 check-in positivo, este não é o primeiro. Retorna sem bonificar.
-    IF v_positive_checkin_count > 1 THEN
+    -- O próprio INSERT já está visível neste AFTER INSERT.
+    -- Mais de um check-in positivo significa que não é o primeiro.
+    IF (
+        SELECT pg_catalog.count(*)
+        FROM public.loyalty_transactions
+        WHERE profile_id = NEW.profile_id
+          AND transaction_type = 'checkin'
+          AND points > 0
+    ) > 1 THEN
         RETURN NULL;
     END IF;
 
-    -- 4. Buscar o indicador a partir de profiles.referred_by
-    SELECT referred_by INTO v_referrer_id
+
+    -- Busca o indicador vinculado
+    SELECT referred_by
+    INTO v_referrer_id
     FROM public.profiles
     WHERE id = NEW.profile_id;
 
-    IF v_referrer_id IS NULL OR v_referrer_id = NEW.profile_id THEN
+    IF v_referrer_id IS NULL
+       OR v_referrer_id = NEW.profile_id THEN
         RETURN NULL;
     END IF;
 
-    -- 5. Localizar a indicação pendente com lock FOR UPDATE para evitar duplicidade
-    SELECT * INTO v_referral_row
-    FROM public.referrals
-    WHERE referrer_id = v_referrer_id
-      AND referred_id = NEW.profile_id
+
+    -- Conclui somente a indicação pendente correspondente.
+    -- RETURNING garante que o bônus só será criado se a atualização ocorrer.
+    UPDATE public.referrals
+    SET status = 'completed',
+        completed_at = pg_catalog.now()
+    WHERE referred_id = NEW.profile_id
+      AND referrer_id = v_referrer_id
       AND status = 'pending'
-    FOR UPDATE;
+    RETURNING referrer_id INTO v_referrer_id;
+
 
     IF FOUND THEN
-        -- 6. Marcar indicação como completed na mesma transação
-        UPDATE public.referrals
-        SET status = 'completed',
-            completed_at = now()
-        WHERE id = v_referral_row.id
-          AND status = 'pending';
 
-        IF FOUND THEN
-            -- 7. Conceder 15 pontos globais ao indicador com restaurant_id = NULL e validade 180 dias
-            INSERT INTO public.loyalty_transactions (
-                profile_id,
-                restaurant_id,
-                points,
-                transaction_type,
-                description,
-                expires_at
-            ) VALUES (
-                v_referrer_id,
-                NULL,
-                15,
-                'convite',
-                'Bônus global por indicação: primeiro check-in validado do amigo',
-                now() + interval '180 days'
-            );
-        END IF;
+        INSERT INTO public.loyalty_transactions (
+            profile_id,
+            restaurant_id,
+            points,
+            transaction_type,
+            description,
+            expires_at
+        )
+        VALUES (
+            v_referrer_id,
+            NULL,
+            15,
+            'convite',
+            'Bônus global por indicação: primeiro check-in validado do amigo',
+            pg_catalog.now() + INTERVAL '180 days'
+        );
+
     END IF;
 
     RETURN NULL;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.process_referral_bonus() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.process_referral_bonus()
+FROM PUBLIC, anon, authenticated;
 
-DROP TRIGGER IF EXISTS trg_process_referral_bonus ON public.loyalty_transactions;
+DROP TRIGGER IF EXISTS trg_process_referral_bonus
+ON public.loyalty_transactions;
+
 CREATE TRIGGER trg_process_referral_bonus
-    AFTER INSERT ON public.loyalty_transactions
-    FOR EACH ROW
-    EXECUTE FUNCTION public.process_referral_bonus();
+AFTER INSERT ON public.loyalty_transactions
+FOR EACH ROW
+EXECUTE FUNCTION public.process_referral_bonus();
+
+
+-- 11. FINALIZAÇÃO
+-- -----------------------------------------------------------------------------
 
 COMMIT;
