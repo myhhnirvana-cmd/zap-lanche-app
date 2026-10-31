@@ -75,6 +75,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   // Sistema de Indicação de Amigos (15 pontos)
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referralCodeLoaded, setReferralCodeLoaded] = useState(false);
   const [referralsList, setReferralsList] = useState<ReferralRecord[]>([]);
   const [hasCopiedCode, setHasCopiedCode] = useState(false);
   const [inputReferralCode, setInputReferralCode] = useState('');
@@ -131,6 +132,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           setRealPoints(null);
           setErrorRealPoints(null);
           setLoadingRealPoints(false);
+          setReferralCodeLoaded(true);
         }
         return;
       }
@@ -187,6 +189,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       } finally {
         if (isMounted) {
           setLoadingRealPoints(false);
+          setReferralCodeLoaded(true);
         }
       }
     }
@@ -198,11 +201,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     };
   }, [authUser]);
 
-  const handleCopyReferralCode = () => {
-    if (!referralCode) return;
-    navigator.clipboard?.writeText(referralCode);
-    setHasCopiedCode(true);
-    setTimeout(() => setHasCopiedCode(false), 2500);
+  const handleCopyReferralCode = async () => {
+    if (!referralCode || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(referralCode);
+      setHasCopiedCode(true);
+      setTimeout(() => setHasCopiedCode(false), 2500);
+    } catch (error) {
+      console.error('Não foi possível copiar o código de indicação:', error);
+      setReferralFeedback({ type: 'error', message: 'Não foi possível copiar. Selecione e copie o código manualmente.' });
+    }
   };
 
   const handleShareWhatsApp = () => {
@@ -668,13 +676,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
           <div className="flex items-center justify-between gap-3 bg-slate-900/90 border border-purple-500/40 rounded-xl px-4 py-2.5">
             <span className="text-base font-mono font-extrabold text-purple-300 tracking-wider">
-              {referralCode || 'Carregando...'}
+              {referralCode || (referralCodeLoaded ? 'Código indisponível' : 'Carregando...')}
             </span>
 
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleCopyReferralCode}
+                disabled={!referralCode}
                 className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-purple-500/30"
               >
                 {hasCopiedCode ? (
@@ -693,6 +702,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <button
                 type="button"
                 onClick={handleShareWhatsApp}
+                disabled={!referralCode}
                 className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
               >
                 <Share2 className="w-3.5 h-3.5" />
