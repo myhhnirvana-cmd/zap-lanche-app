@@ -1430,20 +1430,21 @@ export async function applyReferralCode(
 
   try {
     const { data, error } = await supabase.rpc('register_referral_code', {
-      p_code: code.trim(),
+      p_referral_code: code.trim(),
     });
 
     if (error) {
-      return { success: false, message: error.message };
+      return { success: false, message: error.message || 'Erro ao registrar código de indicação no servidor.' };
     }
 
     const res = typeof data === 'string' ? JSON.parse(data) : data;
     return {
       success: Boolean(res?.success),
-      message: res?.message || (res?.success ? 'Código aplicado com sucesso!' : 'Código inválido.'),
+      message: res?.message || (res?.success ? 'Código vinculado com sucesso! O bônus será creditado no seu primeiro check-in.' : 'Código de indicação inválido.'),
     };
   } catch (err: any) {
-    return { success: false, message: err?.message || 'Falha ao aplicar código de indicação.' };
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return { success: false, message: errorMsg || 'Falha ao aplicar código de indicação.' };
   }
 }
 
@@ -1451,7 +1452,7 @@ export interface ReferralRecord {
   id: string;
   status: string;
   created_at: string;
-  rewarded_at?: string | null;
+  completed_at?: string | null;
   referred_name?: string;
 }
 
@@ -1463,8 +1464,8 @@ export async function fetchUserReferralsList(
   try {
     const { data, error } = await supabase
       .from('referrals')
-      .select('id, status, created_at, rewarded_at')
-      .eq('referrer_profile_id', userId)
+      .select('id, status, created_at, completed_at')
+      .eq('referrer_id', userId)
       .order('created_at', { ascending: false });
 
     if (error || !data) return [];
