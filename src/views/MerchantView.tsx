@@ -996,6 +996,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       showToast(`Prêmio "${rewardTitle.trim()}" atualizado com sucesso!`);
     } else {
       let createdId = `rew-${Date.now()}`;
+      if (isSupabaseConfigured && !targetRestUuid) {
+        setRewardFormError('Esta loja ainda não está vinculada a um registro do Supabase. O prêmio não foi salvo. Conecte a loja antes de cadastrar prêmios.');
+        return;
+      }
       if (isSupabaseConfigured && targetRestUuid) {
         const { data: dbReward, error: dbError } = await insertRewardToSupabase({
           restaurant_id: targetRestUuid,
