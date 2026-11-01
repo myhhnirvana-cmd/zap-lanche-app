@@ -145,7 +145,7 @@ export interface Restaurant {
   priceRange: '$' | '$$' | '$$$';
   bannerUrl: string;
   logoUrl?: string;
-  isOpen: boolean;
+  isOpen?: boolean;
   openingHours: string;
   address: string;
   whatsappDemo: string;
