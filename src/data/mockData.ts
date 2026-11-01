@@ -494,12 +494,55 @@ export function savePostsFromStorage(posts: SocialPost[]): void {
 }
 export const savePostsToStorage = savePostsFromStorage;
 
-export function processAndCompressImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (error) => reject(error);
-    reader.readAsDataURL(file);
-  });
+export async function processAndCompressImage(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Selecione um arquivo de imagem válido.');
+  }
+
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = imageUrl;
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Não foi possível abrir esta imagem.'));
+    });
+
+    const maxDimension = 1600;
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Não foi possível preparar a imagem.');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    // WebP reduz bastante o peso mantendo o enquadramento e a proporção originais.
+    let quality = 0.82;
+    let result = canvas.toDataURL('image/webp', quality);
+    while (result.length * 0.75 > 500 * 1024 && quality > 0.52) {
+      quality -= 0.08;
+      result = canvas.toDataURL('image/webp', quality);
+    }
+
+    // Se ainda estiver grande, reduz dimensões proporcionalmente, sem cortar a foto.
+    if (result.length * 0.75 > 500 * 1024) {
+      const reduction = Math.sqrt((500 * 1024) / (result.length * 0.75));
+      const smaller = document.createElement('canvas');
+      smaller.width = Math.max(1, Math.round(canvas.width * reduction));
+      smaller.height = Math.max(1, Math.round(canvas.height * reduction));
+      const smallerContext = smaller.getContext('2d');
+      if (!smallerContext) throw new Error('Não foi possível otimizar a imagem.');
+      smallerContext.drawImage(canvas, 0, 0, smaller.width, smaller.height);
+      result = smaller.toDataURL('image/webp', 0.68);
+    }
+
+    return result;
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
 }
 
