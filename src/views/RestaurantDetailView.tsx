@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Loader2,
   Camera,
+  Ticket,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -54,7 +55,7 @@ interface RestaurantDetailViewProps {
   restaurant: Restaurant;
   onBack: () => void;
   onSelectMenuItem: (item: MenuItem) => void;
-  initialTab?: 'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes';
+  initialTab?: 'cardapio' | 'promocoes' | 'fidelidade' | 'premios' | 'resgates' | 'publicacoes';
 }
 
 export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
@@ -63,7 +64,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   onSelectMenuItem,
   initialTab = 'cardapio',
 }) => {
-  const [activeTab, setActiveTab] = useState<'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'cardapio' | 'promocoes' | 'fidelidade' | 'premios' | 'resgates' | 'publicacoes'>(initialTab);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedZap, setCopiedZap] = useState(false);
   const [redeemedReward, setRedeemedReward] = useState<LoyaltyReward | null>(null);
@@ -77,6 +78,9 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [showAntiFraudModal, setShowAntiFraudModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfileDemo>(() => loadUserProfile());
   const [rewardsList, setRewardsList] = useState<LoyaltyReward[]>(() => loadRestaurantRewards(restaurant.id));
+  const [myRedemptions, setMyRedemptions] = useState<Array<{id:string; voucher_code:string; status:string; points_cost:number; created_at:string; expires_at:string; used_at:string|null; reward_title:string|null}>>([]);
+  const [isLoadingRedemptions, setIsLoadingRedemptions] = useState(false);
+  const [redemptionHistoryError, setRedemptionHistoryError] = useState<string | null>(null);
 
   // Estados do Leitor Real de QR Code e Feedback
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -304,6 +308,45 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
       isMounted = false;
     };
   }, [restaurant.id, restaurant.supabaseId, initialTab]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadRedemptions = async () => {
+      if (activeTab !== 'resgates') return;
+      if (!user?.id) {
+        setMyRedemptions([]);
+        setRedemptionHistoryError(null);
+        setIsLoadingRedemptions(false);
+        return;
+      }
+      if (!isSupabaseConfigured || !supabase) {
+        setMyRedemptions([]);
+        setRedemptionHistoryError('Não foi possível consultar seus resgates porque a conexão com o sistema está indisponível. Tente novamente mais tarde.');
+        setIsLoadingRedemptions(false);
+        return;
+      }
+      const restaurantUuid = (restaurant.supabaseId && UUID_REGEX.test(restaurant.supabaseId) && restaurant.supabaseId) || (UUID_REGEX.test(restaurant.id) ? restaurant.id : null);
+      if (!restaurantUuid) {
+        setMyRedemptions([]);
+        setRedemptionHistoryError('O histórico estará disponível quando este estabelecimento estiver conectado ao sistema.');
+        setIsLoadingRedemptions(false);
+        return;
+      }
+      setIsLoadingRedemptions(true);
+      setRedemptionHistoryError(null);
+      const { data, error } = await supabase.from('loyalty_redemptions').select('id, voucher_code, status, points_cost, created_at, expires_at, used_at, loyalty_rewards(title)').eq('profile_id', user.id).eq('restaurant_id', restaurantUuid).order('created_at', { ascending: false });
+      if (!isMounted) return;
+      if (error) {
+        setRedemptionHistoryError('Não foi possível carregar seus resgates agora. Tente novamente em instantes.');
+        setMyRedemptions([]);
+      } else {
+        setMyRedemptions((data || []).map((row: any) => ({ ...row, reward_title: row.loyalty_rewards?.title || null })));
+      }
+      setIsLoadingRedemptions(false);
+    };
+    loadRedemptions();
+    return () => { isMounted = false; };
+  }, [activeTab, user?.id, restaurant.id, restaurant.supabaseId]);
 
   const menuItems = loadRestaurantMenu(restaurant.id);
   const promotions = MOCK_PROMOTIONS[restaurant.id] || MOCK_PROMOTIONS['rest-jorge-jpa'] || Object.values(MOCK_PROMOTIONS)[0] || [];
@@ -589,7 +632,23 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
             }`}
           >
             <Gift className="w-4 h-4 text-amber-400" />
-            Clube Fidelidade ({rewards.length})
+            Clube Fidelidade
+          </button>
+
+          <button
+            onClick={() => setActiveTab('premios')}
+            className={`py-3 px-3 border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5 ${activeTab === 'premios' ? 'border-amber-400 text-amber-300 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+          >
+            <Gift className="w-4 h-4 text-amber-400" />
+            Prêmios da Casa ({rewards.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('resgates')}
+            className={`py-3 px-3 border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5 ${activeTab === 'resgates' ? 'border-orange-400 text-orange-300 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+          >
+            <Ticket className="w-4 h-4" />
+            Meus Resgates
           </button>
 
           <button
@@ -838,7 +897,24 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
               </p>
             </div>
 
-            {/* Rewards Grid */}
+          </div>
+        )}
+
+        {/* Tab 4: Prêmios da Casa */}
+        {activeTab === 'premios' && (
+          <div className="mt-5 space-y-4">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-[#161824] to-orange-500/10 border border-amber-500/25">
+              <div className="flex items-center gap-2">
+                <Gift className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-sm text-white">Prêmios da Casa</h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">Troque seus pontos por recompensas oferecidas por esta lanchonete. Consulte o custo, estoque e os pontos necessários antes de resgatar.</p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <span className="px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-700 text-[11px] text-amber-300">{rewards.length} recompensa(s) cadastrada(s)</span>
+                <button onClick={() => setActiveTab('resgates')} className="px-2.5 py-1 rounded-lg bg-orange-500/15 border border-orange-500/30 text-[11px] font-semibold text-orange-300 hover:bg-orange-500/25">Ver meus resgates</button>
+              </div>
+            </div>
+                        {/* Catálogo de recompensas da loja */}
             <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
                 Recompensas Disponíveis da Casa ({rewards.length})
@@ -962,10 +1038,46 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                 </div>
               )}
             </div>
+
           </div>
         )}
 
-        {/* Tab 4: Publicações & Fotos */}
+        {/* Tab 5: Meus Resgates */}
+        {activeTab === 'resgates' && (
+          <div className="mt-5 space-y-4">
+            <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
+              <div className="flex items-center gap-2"><Ticket className="w-5 h-5 text-orange-400" /><h3 className="font-bold text-sm text-white">Meus Resgates</h3></div>
+              <p className="text-xs text-slate-400 mt-1">Seus vouchers desta lanchonete, com código, validade e situação atual.</p>
+            </div>
+            {!user ? (
+              <div className="text-center py-9 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">Entre na sua conta para consultar seus vouchers.</div>
+            ) : isLoadingRedemptions ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-xs text-slate-400"><Loader2 className="w-4 h-4 animate-spin" />Carregando seus resgates...</div>
+            ) : redemptionHistoryError ? (
+              <div className="text-center py-8 rounded-2xl bg-slate-900 border border-rose-500/20 text-xs text-slate-400">{redemptionHistoryError}</div>
+            ) : myRedemptions.length === 0 ? (
+              <div className="text-center py-9 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">Você ainda não tem resgates nesta lanchonete. Quando trocar pontos por um prêmio, seu voucher aparecerá aqui.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {myRedemptions.map((item) => {
+                  const expired = item.status === 'pendente' && new Date(item.expires_at).getTime() <= Date.now();
+                  const status = expired ? 'Expirado' : item.status === 'utilizado' ? 'Utilizado' : item.status === 'cancelado' ? 'Cancelado' : 'Pendente';
+                  const statusClass = expired || item.status === 'cancelado' ? 'text-rose-300 bg-rose-500/10 border-rose-500/20' : item.status === 'utilizado' ? 'text-slate-300 bg-slate-700/40 border-slate-600' : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20';
+                  return (
+                    <article key={item.id} className="p-4 rounded-2xl bg-[#13151f] border border-slate-800 space-y-3">
+                      <div className="flex items-start justify-between gap-3"><div><h4 className="font-bold text-sm text-white">{item.reward_title || 'Prêmio resgatado'}</h4><p className="text-[11px] text-slate-400 mt-1">{item.points_cost} pontos utilizados</p></div><span className={`px-2 py-1 rounded-full border text-[10px] font-bold ${statusClass}`}>{status}</span></div>
+                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-800"><span className="text-[10px] uppercase tracking-wider text-slate-500 block">Código do voucher</span><div className="font-mono font-bold text-lg tracking-wider text-orange-300 select-all mt-1">{item.voucher_code}</div><button onClick={() => navigator.clipboard?.writeText(item.voucher_code)} className="text-[11px] text-orange-300 hover:text-orange-200 mt-1">Copiar código</button></div>
+                      <div className="flex flex-wrap justify-between gap-2 text-[10px] text-slate-400"><span>Resgatado: {new Date(item.created_at).toLocaleDateString('pt-BR')}</span><span>Validade: {new Date(item.expires_at).toLocaleDateString('pt-BR')}</span></div>
+                      {item.used_at && <p className="text-[10px] text-slate-500">Utilizado em {new Date(item.used_at).toLocaleString('pt-BR')}</p>}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Publicações & Fotos */}
         {activeTab === 'publicacoes' && (
           <div className="mt-5 space-y-4">
             {posts.length === 0 ? (
