@@ -350,6 +350,7 @@ function mapDbRowToPromotion(row: any, restaurantName = ''): Promotion {
     couponCode: row.coupon_code || undefined,
     validUntil: row.valid_until || '',
     imageUrl: row.image_url || '',
+    isActive: row.is_active !== false,
   };
 }
 
