@@ -33,11 +33,12 @@ import {
   fetchUserLoyaltyBalance,
   redeemRewardInSupabase,
   fetchRewardsFromSupabase,
+  fetchRestaurantMenuFromSupabase,
+  fetchRestaurantPromotions,
 } from '../lib/supabase';
 import { Restaurant, MenuItem, Promotion, SocialPost, LoyaltyReward, UserProfileDemo } from '../types';
 import {
   MOCK_MENU_ITEMS,
-  MOCK_PROMOTIONS,
   MOCK_POSTS,
   MOCK_LOYALTY_REWARDS,
   MOCK_USER_PROFILE,
@@ -45,6 +46,7 @@ import {
   loadUserProfile,
   saveUserProfile,
   loadRestaurantMenu,
+  saveRestaurantMenu,
   loadRestaurantRewards,
   saveRestaurantRewards,
 } from '../data/mockData';
@@ -78,6 +80,8 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [showAntiFraudModal, setShowAntiFraudModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfileDemo>(() => loadUserProfile());
   const [rewardsList, setRewardsList] = useState<LoyaltyReward[]>(() => loadRestaurantRewards(restaurant.id));
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => loadRestaurantMenu(restaurant.id));
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [myRedemptions, setMyRedemptions] = useState<Array<{id:string; voucher_code:string; status:string; points_cost:number; created_at:string; expires_at:string; used_at:string|null; reward_title:string|null}>>([]);
   const [isLoadingRedemptions, setIsLoadingRedemptions] = useState(false);
   const [redemptionHistoryError, setRedemptionHistoryError] = useState<string | null>(null);
@@ -348,9 +352,41 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
     return () => { isMounted = false; };
   }, [activeTab, user?.id, restaurant.id, restaurant.supabaseId]);
 
-  const menuItems = loadRestaurantMenu(restaurant.id);
-  const promotions = MOCK_PROMOTIONS[restaurant.id] || MOCK_PROMOTIONS['rest-jorge-jpa'] || Object.values(MOCK_PROMOTIONS)[0] || [];
   const rewards = rewardsList;
+
+  // Cardápio, promoções e prêmios vêm da loja atual no Supabase.
+  // Array vazio é uma resposta válida e substitui o cache antigo; erro mantém o cache local.
+  useEffect(() => {
+    let isMounted = true;
+    const loadRestaurantContent = async () => {
+      if (!isSupabaseConfigured) {
+        setMenuItems(loadRestaurantMenu(restaurant.id));
+        setPromotions([]);
+        return;
+      }
+
+      const [dbMenu, dbPromotions, dbRewards] = await Promise.all([
+        fetchRestaurantMenuFromSupabase(restaurant),
+        fetchRestaurantPromotions(restaurant.supabaseId || restaurant.id, restaurant.name),
+        fetchRewardsFromSupabase(restaurant.supabaseId || restaurant.id),
+      ]);
+
+      if (!isMounted) return;
+      if (dbMenu !== null) {
+        setMenuItems(dbMenu);
+        saveRestaurantMenu(restaurant.id, dbMenu);
+      } else {
+        setMenuItems(loadRestaurantMenu(restaurant.id));
+      }
+      setPromotions(dbPromotions ?? []);
+      if (dbRewards !== null) setRewardsList(dbRewards);
+    };
+
+    loadRestaurantContent();
+    return () => { isMounted = false; };
+  }, [restaurant.id, restaurant.supabaseId, restaurant.name]);
+
+
   const posts = MOCK_POSTS.filter((p) => p.restaurantId === restaurant.id);
 
   // Group menu by categories
