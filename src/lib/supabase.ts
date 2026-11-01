@@ -1130,13 +1130,21 @@ export async function insertPostToSupabase(input: InsertPostInput): Promise<{ da
   }
 
   try {
+    // A autoria vem da sessão real do Supabase Auth, nunca de um ID informado pela interface.
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const authenticatedUserId = authData?.user?.id;
+
+    if (authError || !authenticatedUserId) {
+      return { data: null, error: new Error('Entre na sua conta para publicar no feed.') };
+    }
+
     const resolvedRestId = input.restaurant_id
       ? (await resolveRestaurantUuid(input.restaurant_id)) || input.restaurant_id
       : null;
 
     const payload = {
       restaurant_id: resolvedRestId,
-      author_profile_id: input.profile_id,
+      author_profile_id: authenticatedUserId,
       content: input.content.trim(),
       image_url: input.image_url || null,
     };
