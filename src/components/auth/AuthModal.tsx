@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Mail, Lock, User as UserIcon, LogIn, UserPlus, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -95,9 +96,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setSuccessMessage(null);
   };
 
-  return (
+  const modal = (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 bg-black/80 backdrop-blur-sm animate-fade-in ${fitViewport ? 'overscroll-contain' : ''}`}
+      className={`fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto p-4 bg-black/80 backdrop-blur-sm animate-fade-in ${fitViewport ? 'overscroll-contain' : ''}`}
       onClick={onClose}
     >
       <div
@@ -294,4 +295,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       </div>
     </div>
   );
+
+  // O login do cabeçalho é montado fora do sticky header para escapar
+  // do stacking context criado por backdrop-filter.
+  return fitViewport ? createPortal(modal, document.body) : modal;
 };
