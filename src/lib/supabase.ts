@@ -1506,8 +1506,8 @@ export async function fetchRewardsFromSupabase(
       stock: r.stock,
       status: r.status,
       isAvailable: r.status === 'ativo' && r.stock > 0,
-      maxGlobalPointsAllowed: Math.round(r.points_cost * 0.3),
-      minStorePointsRequired: Math.round(r.points_cost * 0.7),
+      maxGlobalPointsAllowed: Math.floor(r.points_cost * 0.3),
+      minStorePointsRequired: Math.ceil(r.points_cost * 0.7),
       maxRedemptionsPerUser: r.max_redemptions_per_user || 1,
       imageUrl: r.image_url || '',
     }));
@@ -1576,8 +1576,8 @@ export async function insertRewardToSupabase(
       stock: data.stock,
       status: data.status,
       isAvailable: data.status === 'ativo' && data.stock > 0,
-      maxGlobalPointsAllowed: Math.round(data.points_cost * 0.3),
-      minStorePointsRequired: Math.round(data.points_cost * 0.7),
+      maxGlobalPointsAllowed: Math.floor(data.points_cost * 0.3),
+      minStorePointsRequired: Math.ceil(data.points_cost * 0.7),
       maxRedemptionsPerUser: data.max_redemptions_per_user || 1,
       imageUrl: data.image_url || '',
     };
@@ -1656,8 +1656,8 @@ export async function updateRewardInSupabase(
       stock: data.stock,
       status: data.status,
       isAvailable: data.status === 'ativo' && data.stock > 0,
-      maxGlobalPointsAllowed: Math.round(data.points_cost * 0.3),
-      minStorePointsRequired: Math.round(data.points_cost * 0.7),
+      maxGlobalPointsAllowed: Math.floor(data.points_cost * 0.3),
+      minStorePointsRequired: Math.ceil(data.points_cost * 0.7),
       maxRedemptionsPerUser: data.max_redemptions_per_user || 1,
       imageUrl: data.image_url || '',
     };
