@@ -29,6 +29,7 @@ import {
   Check,
   Phone,
   Ticket,
+  Tag,
 } from 'lucide-react';
 import {
   Restaurant,
