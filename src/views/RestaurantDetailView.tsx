@@ -34,6 +34,8 @@ import {
   fetchRewardsFromSupabase,
   fetchRestaurantMenuFromSupabase,
   fetchRestaurantPromotions,
+  fetchRestaurantReviewSummary,
+  insertRestaurantReview,
 } from '../lib/supabase';
 import { Restaurant, MenuItem, SocialPost, LoyaltyReward, UserProfileDemo, Promotion } from '../types';
 import {
@@ -86,6 +88,15 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [myRedemptions, setMyRedemptions] = useState<Array<{id:string; voucher_code:string; status:string; points_cost:number; created_at:string; expires_at:string; used_at:string|null; reward_title:string|null}>>([]);
   const [isLoadingRedemptions, setIsLoadingRedemptions] = useState(false);
   const [redemptionHistoryError, setRedemptionHistoryError] = useState<string | null>(null);
+  const [reviewSummary, setReviewSummary] = useState<{average:number; count:number; myRating:number|null; myComment:string|null}>({average:0,count:0,myRating:null,myComment:null});
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
+  const [isSavingReview, setIsSavingReview] = useState(false);
+  const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
+  const [customerCoordinates, setCustomerCoordinates] = useState<{latitude:number;longitude:number}|null>(null);
+  const [isLocatingCustomer, setIsLocatingCustomer] = useState(false);
+  const [locationFeedback, setLocationFeedback] = useState<string | null>(null);
 
   // Estados do Leitor Real de QR Code e Feedback
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -99,6 +110,76 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [realStorePoints, setRealStorePoints] = useState<number | null>(null);
 
   const { user } = useAuth();
+
+  useEffect(() => {
+    let active = true;
+    fetchRestaurantReviewSummary(restaurant.supabaseId || restaurant.id, user?.id).then((summary) => {
+      if (!active || !summary) return;
+      setReviewSummary(summary);
+    });
+    return () => { active = false; };
+  }, [restaurant.id, restaurant.supabaseId, user?.id]);
+
+  const handleSubmitReview = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user?.id) {
+      setReviewFeedback('Entre na sua conta para avaliar esta loja.');
+      return;
+    }
+    setIsSavingReview(true);
+    setReviewFeedback(null);
+    const result = await insertRestaurantReview({
+      restaurantId: restaurant.supabaseId || restaurant.id,
+      profileId: user.id,
+      rating: reviewRating,
+      comment: reviewComment,
+    });
+    if (!result.success) {
+      setReviewFeedback(result.error || 'Não foi possível salvar a avaliação.');
+      setIsSavingReview(false);
+      return;
+    }
+    const updated = await fetchRestaurantReviewSummary(restaurant.supabaseId || restaurant.id, user.id);
+    if (updated) setReviewSummary(updated);
+    setIsReviewFormOpen(false);
+    setReviewComment('');
+    setReviewFeedback('Sua avaliação foi registrada. Obrigada!');
+    setIsSavingReview(false);
+  };
+
+  const handleLocateCustomer = () => {
+    if (typeof restaurant.latitude !== 'number' || typeof restaurant.longitude !== 'number') {
+      setLocationFeedback('A loja ainda não cadastrou sua localização.');
+      return;
+    }
+    if (!navigator.geolocation) {
+      setLocationFeedback('Seu navegador não oferece localização.');
+      return;
+    }
+    setIsLocatingCustomer(true);
+    setLocationFeedback(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCustomerCoordinates({latitude: position.coords.latitude, longitude: position.coords.longitude});
+        setIsLocatingCustomer(false);
+      },
+      () => {
+        setLocationFeedback('Não foi possível obter sua localização. Confira a permissão do navegador.');
+        setIsLocatingCustomer(false);
+      },
+      {enableHighAccuracy:false, timeout:10000, maximumAge:60000}
+    );
+  };
+
+  const calculatedDistanceKm = customerCoordinates && typeof restaurant.latitude === 'number' && typeof restaurant.longitude === 'number'
+    ? (() => {
+        const toRad = (value:number) => value * Math.PI / 180;
+        const dLat = toRad(restaurant.latitude! - customerCoordinates.latitude);
+        const dLon = toRad(restaurant.longitude! - customerCoordinates.longitude);
+        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(customerCoordinates.latitude))*Math.cos(toRad(restaurant.latitude!))*Math.sin(dLon/2)**2;
+        return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      })()
+    : null;
 
   // Consulta saldo de pontos real no Supabase
   const loadRealPoints = async () => {
@@ -635,16 +716,16 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
             <div className="flex items-center gap-2">
               <Star className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0" />
               <div>
-                <span className="font-bold text-white tabular-nums">{restaurant.rating.toFixed(1)}</span>
-                <span className="text-[11px] text-slate-400 block">({restaurant.reviewCount} avaliações)</span>
+                <span className="font-bold text-white tabular-nums">{reviewSummary.count ? reviewSummary.average.toFixed(1) : 'Sem avaliações'}</span>
+                <span className="text-[11px] text-slate-400 block">({reviewSummary.count} avaliações)</span>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-orange-400 shrink-0" />
               <div>
-                <span className="font-bold text-white">{restaurant.deliveryTime}</span>
-                <span className="text-[11px] text-slate-400 block">{restaurant.openingHours}</span>
+                <span className="font-bold text-white">{restaurant.deliveryTime || 'Tempo não informado'}</span>
+                <span className="text-[11px] text-slate-400 block">{restaurant.openingHours || 'Horário não informado'}</span>
               </div>
             </div>
 
@@ -652,7 +733,9 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
               <MapPin className="w-4 h-4 text-orange-400 shrink-0" />
               <div>
                 <span className="font-bold text-white">{restaurant.neighborhoodName}</span>
-                <span className="text-[11px] text-slate-400 block">{restaurant.distanceKm} km de você</span>
+                <button type="button" onClick={handleLocateCustomer} disabled={isLocatingCustomer} className="text-[11px] text-slate-400 block text-left hover:text-orange-300">
+                  {isLocatingCustomer ? 'Calculando...' : calculatedDistanceKm !== null ? `${calculatedDistanceKm.toFixed(1)} km de você` : 'Calcular distância'}
+                </button>
               </div>
             </div>
 
@@ -671,6 +754,38 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                 <span className="text-[11px] text-slate-400 block group-hover:text-emerald-300 transition-colors">{restaurant.whatsappDemo}</span>
               </div>
             </button>
+          </div>
+
+          {locationFeedback && <p className="text-[11px] text-amber-300">{locationFeedback}</p>}
+
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-white">Avaliações dos clientes</p>
+                <p className="text-[11px] text-slate-400">{reviewSummary.count ? `${reviewSummary.count} avaliação(ões), média ${reviewSummary.average.toFixed(1)} de 5` : 'Esta loja ainda não recebeu avaliações.'}</p>
+              </div>
+              {user && reviewSummary.myRating === null && (
+                <button type="button" onClick={() => setIsReviewFormOpen((open) => !open)} className="text-xs font-bold text-orange-300 hover:text-orange-200">
+                  {isReviewFormOpen ? 'Fechar' : 'Avaliar loja'}
+                </button>
+              )}
+            </div>
+            {isReviewFormOpen && (
+              <form onSubmit={handleSubmitReview} className="mt-3 space-y-2">
+                <div className="flex items-center gap-1" aria-label="Escolha uma nota de 1 a 5">
+                  {[1,2,3,4,5].map((value) => (
+                    <button key={value} type="button" onClick={() => setReviewRating(value)} aria-label={`${value} estrelas`} className="p-1">
+                      <Star className={`w-5 h-5 ${value <= reviewRating ? 'text-amber-400 fill-amber-400' : 'text-slate-600'}`} />
+                    </button>
+                  ))}
+                </div>
+                <textarea value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} maxLength={500} rows={2} placeholder="Conte como foi sua experiência (opcional)" className="w-full rounded-lg bg-slate-950 border border-slate-700 p-2 text-xs text-white" />
+                <button type="submit" disabled={isSavingReview} className="px-3 py-2 rounded-lg bg-orange-500 text-slate-950 text-xs font-bold disabled:opacity-50">{isSavingReview ? 'Enviando...' : 'Enviar avaliação'}</button>
+              </form>
+            )}
+            {reviewSummary.myRating !== null && <p className="mt-2 text-[11px] text-emerald-300">Você já avaliou esta loja: {reviewSummary.myRating}/5.</p>}
+            {reviewFeedback && <p className="mt-2 text-[11px] text-amber-300">{reviewFeedback}</p>}
+            {!user && <p className="mt-2 text-[11px] text-slate-500">Entre na sua conta para avaliar.</p>}
           </div>
 
           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
