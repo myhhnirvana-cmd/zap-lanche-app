@@ -2363,6 +2363,11 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                   <input type="number" step="any" value={storeFormLatitude} onChange={(e) => setStoreFormLatitude(e.target.value)} placeholder="Latitude" className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white" />
                   <input type="number" step="any" value={storeFormLongitude} onChange={(e) => setStoreFormLongitude(e.target.value)} placeholder="Longitude" className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white" />
                 </div>
+                <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-[11px] leading-relaxed text-slate-300">
+                  <span className="font-semibold text-sky-300">💡 Dica: </span>
+                  Não sabe onde encontrar as coordenadas? Abra o{" "}
+                  <a href="https://www.google.com.br/maps" target="_blank" rel="noopener noreferrer" className="font-semibold text-sky-300 underline underline-offset-2">Google Maps</a>, pesquise o endereço da loja e marque o ponto exato no mapa. No computador, clique com o botão direito no ponto; no celular, toque e segure. Copie os números exibidos: o primeiro é a latitude e o segundo é a longitude.
+                </div>
                 <button type="button" onClick={() => {
                   if (!navigator.geolocation) { setStoreFormError('Seu navegador não oferece geolocalização.'); return; }
                   navigator.geolocation.getCurrentPosition(
