@@ -1086,9 +1086,14 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
       if (r.slug) restMap.set(r.slug, r);
     }
 
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, full_name, username, avatar_url, role');
+    const authorIds = [...new Set(data.map((row: any) => row.author_profile_id).filter(Boolean))];
+    const { data: profiles, error: profilesError } = authorIds.length
+      ? await supabase.rpc('get_public_post_authors', { author_ids: authorIds })
+      : { data: [], error: null };
+
+    if (profilesError) {
+      return { data: null, error: new Error('Não foi possível carregar os autores: ' + profilesError.message) };
+    }
 
     const profileMap = new Map<string, any>();
     for (const p of profiles || []) {
@@ -1108,7 +1113,7 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
         neighborhood: rest?.neighborhood || 'Comunidade',
         profile_id: authorId,
         author_name: authorProfile?.full_name || authorProfile?.username || 'Morador',
-        author_avatar: authorProfile?.avatar_url || null,
+        author_avatar: null,
         author_role: (authorProfile?.role === 'comerciante' ? 'comerciante' : 'morador') as any,
         content: row.content,
         image_url: row.image_url,
@@ -1272,19 +1277,25 @@ export async function togglePostLikeInSupabase(
   }
 
   try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const authenticatedUserId = authData?.user?.id;
+    if (authError || !authenticatedUserId || authenticatedUserId !== profileId) {
+      return { isLiked: currentlyLiked, error: new Error('Sessão inválida. Entre novamente para curtir.') };
+    }
+
     if (currentlyLiked) {
       const { error } = await supabase
         .from('post_likes')
         .delete()
         .eq('post_id', postId)
-        .eq('profile_id', profileId);
+        .eq('profile_id', authenticatedUserId);
 
       if (error) return { isLiked: true, error: new Error(error.message) };
       return { isLiked: false, error: null };
     } else {
       const { error } = await supabase
         .from('post_likes')
-        .insert([{ post_id: postId, profile_id: profileId }]);
+        .insert([{ post_id: postId, profile_id: authenticatedUserId }]);
 
       if (error && error.code !== '23505') {
         return { isLiked: false, error: new Error(error.message) };

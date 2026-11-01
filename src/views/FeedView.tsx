@@ -503,19 +503,27 @@ export const FeedView: React.FC<FeedViewProps> = ({
       return;
     }
 
-    const nextLiked = !currentlyLiked;
+    if (!isSupabaseConfigured) {
+      setNotification({ type: 'warning', text: 'Curtidas compartilhadas indisponíveis no momento.' });
+      return;
+    }
+
+    const result = await togglePostLikeInSupabase(postId, user.id, currentlyLiked);
+    if (result.error) {
+      setNotification({ type: 'error', text: 'Não foi possível salvar sua curtida: ' + result.error.message });
+      return;
+    }
+
+    const nextLiked = result.isLiked;
     const currentCount = targetPost.likesCount || 0;
-    const nextCount = nextLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
+    const nextCount = nextLiked === currentlyLiked
+      ? currentCount
+      : nextLiked ? currentCount + 1 : Math.max(0, currentCount - 1);
 
     const updatedPosts = posts.map((p) =>
       p.id === postId ? { ...p, isLiked: nextLiked, likesCount: nextCount } : p
     );
     setPosts(updatedPosts);
-    savePostsToStorage(updatedPosts);
-
-    if (isSupabaseConfigured) {
-      await togglePostLikeInSupabase(postId, user.id, currentlyLiked);
-    }
   };
 
   const handleAddComment = async (postId: string) => {
