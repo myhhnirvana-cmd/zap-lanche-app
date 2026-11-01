@@ -33,8 +33,9 @@ import {
   redeemRewardInSupabase,
   fetchRewardsFromSupabase,
   fetchRestaurantMenuFromSupabase,
+  fetchRestaurantPromotions,
 } from '../lib/supabase';
-import { Restaurant, MenuItem, SocialPost, LoyaltyReward, UserProfileDemo } from '../types';
+import { Restaurant, MenuItem, SocialPost, LoyaltyReward, UserProfileDemo, Promotion } from '../types';
 import {
   MOCK_MENU_ITEMS,
   MOCK_POSTS,
@@ -78,6 +79,9 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [showAntiFraudModal, setShowAntiFraudModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfileDemo>(() => loadUserProfile());
   const [rewardsList, setRewardsList] = useState<LoyaltyReward[]>(() => loadRestaurantRewards(restaurant.id));
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [isLoadingPromotions, setIsLoadingPromotions] = useState(false);
+  const [promotionLoadError, setPromotionLoadError] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => loadRestaurantMenu(restaurant.id));
   const [myRedemptions, setMyRedemptions] = useState<Array<{id:string; voucher_code:string; status:string; points_cost:number; created_at:string; expires_at:string; used_at:string|null; reward_title:string|null}>>([]);
   const [isLoadingRedemptions, setIsLoadingRedemptions] = useState(false);
@@ -397,6 +401,43 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
     return () => { isMounted = false; };
   }, [restaurant.id, restaurant.supabaseId, restaurant.name]);
 
+
+  // A aba pública "Prêmios" apresenta também os prêmios/ofertas cadastrados no painel do comerciante.
+  // A consulta é sempre limitada à loja atual e não usa conteúdo demonstrativo de outra loja.
+  useEffect(() => {
+    let isMounted = true;
+    const loadPromotions = async () => {
+      if (!isSupabaseConfigured) {
+        setPromotions([]);
+        setIsLoadingPromotions(false);
+        setPromotionLoadError(false);
+        return;
+      }
+
+      setIsLoadingPromotions(true);
+      const data = await fetchRestaurantPromotions(
+        restaurant.supabaseId || restaurant.id,
+        restaurant.name
+      );
+
+      if (!isMounted) return;
+      if (data === null) {
+        setPromotions([]);
+        setPromotionLoadError(true);
+      } else {
+        const now = Date.now();
+        setPromotions(data.filter((item) =>
+          item.isActive !== false &&
+          (!item.validUntil || new Date(item.validUntil).getTime() >= now)
+        ));
+        setPromotionLoadError(false);
+      }
+      setIsLoadingPromotions(false);
+    };
+
+    loadPromotions();
+    return () => { isMounted = false; };
+  }, [restaurant.id, restaurant.supabaseId, restaurant.name]);
 
   const posts = MOCK_POSTS.filter((p) => p.restaurantId === restaurant.id);
 
@@ -878,6 +919,68 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
         {/* Tab 4: Prêmios da Casa */}
         {activeTab === 'premios' && (
           <div className="mt-5 space-y-4">
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                  Prêmios especiais da loja ({promotions.length})
+                </h3>
+              </div>
+
+              {isLoadingPromotions ? (
+                <div className="text-center py-6 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                  Carregando prêmios desta loja...
+                </div>
+              ) : promotionLoadError ? (
+                <div className="text-center py-6 rounded-2xl bg-slate-900 border border-amber-500/20 text-xs text-slate-400">
+                  Não foi possível carregar os prêmios agora. Tente novamente mais tarde.
+                </div>
+              ) : promotions.length === 0 ? (
+                <div className="text-center py-6 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                  Nenhum prêmio especial cadastrado nesta loja no momento.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {promotions.map((promo) => (
+                    <article
+                      key={promo.id}
+                      className="rounded-2xl bg-gradient-to-br from-[#141622] to-[#1a1d2d] border border-amber-500/30 p-4 space-y-3 shadow-lg"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/40 mb-1.5">
+                            {promo.badge || 'Prêmio'}
+                          </span>
+                          <h4 className="text-base font-bold text-white">{promo.title}</h4>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs text-slate-400 line-through block tabular-nums">
+                            R$ {promo.regularPrice.toFixed(2).replace('.', ',')}
+                          </span>
+                          <span className="text-base font-extrabold text-amber-400 tabular-nums">
+                            R$ {promo.discountPrice.toFixed(2).replace('.', ',')}
+                          </span>
+                        </div>
+                      </div>
+                      {promo.description && (
+                        <p className="text-xs text-slate-300 leading-relaxed">{promo.description}</p>
+                      )}
+                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-xs">
+                        <span className="text-slate-400">{promo.validUntil || 'Consulte a loja'}</span>
+                        {promo.couponCode && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-400 text-[11px]">Cupom:</span>
+                            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 font-mono font-bold text-amber-400 text-xs">
+                              {promo.couponCode}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
             <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-[#161824] to-orange-500/10 border border-amber-500/25">
               <div className="flex items-center gap-2">
                 <Gift className="w-5 h-5 text-amber-400" />
