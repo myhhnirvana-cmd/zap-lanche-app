@@ -135,6 +135,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         diagnostic.recordFound = true;
         diagnostic.roleValue = rec.role;
         diagnostic.isAdminResult = rec.role === 'admin';
+
+        // Aplicação automática de código de indicação pendente
+        const pendingCode = localStorage.getItem('pending_referral_code');
+        if (pendingCode) {
+          import('../lib/supabase').then(({ applyReferralCode }) => {
+            applyReferralCode(pendingCode).then((res) => {
+              if (res.success) {
+                localStorage.removeItem('pending_referral_code');
+                console.log('Convite vinculado com sucesso!');
+              } else if (res.message.includes('autoindicação') || res.message.includes('inválido') || res.message.includes('perfil')) {
+                localStorage.removeItem('pending_referral_code');
+              }
+            });
+          }).catch(console.error);
+        }
       }
     } catch (err: any) {
       console.warn('Erro ao consultar public.profiles:', err);

@@ -216,8 +216,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const handleShareWhatsApp = () => {
     if (!referralCode) return;
     const appUrl = window.location.origin;
+    const referralUrl = `${appUrl}?ref=${referralCode}`;
     const message = encodeURIComponent(
-      `Oi! Estou usando o ZAP LANCHE para pedir lanches nos melhores pontos de Jacarepaguá e acumular pontos de fidelidade. Use meu código de indicação ${referralCode} e ganhe pontos no seu primeiro check-in! Acesse: ${appUrl}`
+      `Oi! Estou usando o ZAP LANCHE para pedir lanches nos melhores pontos de Jacarepaguá e acumular pontos de fidelidade. Use meu código de indicação ${referralCode} e ganhe pontos no seu primeiro check-in! Abra o link e crie sua conta para validar o convite: ${referralUrl}`
     );
     window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
   };

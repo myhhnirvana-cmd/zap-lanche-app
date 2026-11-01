@@ -37,7 +37,23 @@ export default function App() {
   const [isGitHubGuideOpen, setIsGitHubGuideOpen] = useState(false);
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
 
-  // Captura do parâmetro de convite (?convite=TOKEN ou ?token=TOKEN) e remoção segura da barra de navegação
+  // Captura do parâmetro de convite (?ref=CODIGO)
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const referralCode = searchParams.get('ref');
+      if (referralCode && referralCode.trim()) {
+        localStorage.setItem('pending_referral_code', referralCode.trim());
+        // Remove o parâmetro da URL
+        const cleanUrl = window.location.pathname + (window.location.hash || '');
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    } catch {
+      // Ignora erro de parsing de URL
+    }
+  }, []);
+
+  // Captura do parâmetro de convite antigo (?convite=TOKEN ou ?token=TOKEN)
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
