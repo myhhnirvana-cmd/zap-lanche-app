@@ -96,9 +96,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const [newPostImage, setNewPostImage] = useState<string | null>(null);
   const [newPostImageName, setNewPostImageName] = useState<string | null>(null);
   const [isCompressingNewImage, setIsCompressingNewImage] = useState(false);
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(
-    restaurants[0]?.id || 'rest-jorge-jpa'
-  );
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
 
   // Estado de edição de publicação própria
@@ -296,19 +294,20 @@ export const FeedView: React.FC<FeedViewProps> = ({
       return;
     }
 
-    const targetRestaurant =
-      restaurants.find((r) => r.id === selectedRestaurantId) || restaurants[0];
+    const targetRestaurant = selectedRestaurantId
+      ? restaurants.find((r) => r.id === selectedRestaurantId)
+      : undefined;
 
-    const restaurantIdToUse = targetRestaurant?.supabaseId || targetRestaurant?.id || 'rest-jorge-jpa';
+    const restaurantIdToUse = targetRestaurant?.supabaseId || targetRestaurant?.id || null;
 
     let createdId = `post-user-${Date.now()}`;
 
     if (isSupabaseConfigured) {
       const { data: dbPost, error: postErr } = await insertPostToSupabase({
         restaurant_id: restaurantIdToUse,
-        restaurant_name: targetRestaurant?.name || 'Lanchonete do Jorge',
-        restaurant_category: targetRestaurant?.categoryLabel || 'Lanches de Chapa',
-        neighborhood: targetRestaurant?.neighborhoodName || 'Freguesia (Jacarepaguá)',
+        restaurant_name: targetRestaurant?.name || 'Comunidade ZapLanche',
+        restaurant_category: targetRestaurant?.categoryLabel || 'Comunidade',
+        neighborhood: targetRestaurant?.neighborhoodName || 'Comunidade',
         profile_id: user.id,
         author_name: authenticatedAuthorName,
         author_avatar: currentAvatar,
@@ -331,10 +330,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
     const newPost: SocialPost = {
       id: createdId,
-      restaurantId: targetRestaurant?.id || 'rest-jorge-jpa',
-      restaurantName: targetRestaurant?.name || 'Lanchonete do Jorge',
-      restaurantCategory: targetRestaurant?.categoryLabel || 'Lanches de Chapa',
-      neighborhood: targetRestaurant?.neighborhoodName || 'Freguesia (Jacarepaguá)',
+      restaurantId: targetRestaurant?.id || '',
+      restaurantName: targetRestaurant?.name || 'Comunidade ZapLanche',
+      restaurantCategory: targetRestaurant?.categoryLabel || 'Comunidade',
+      neighborhood: targetRestaurant?.neighborhoodName || 'Comunidade',
       authorId: user.id,
       authorName: authenticatedAuthorName,
       authorAvatar: currentAvatar,
@@ -828,13 +827,14 @@ export const FeedView: React.FC<FeedViewProps> = ({
           {/* Selecionar Estabelecimento do Bairro */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
             <label className="text-slate-400 text-[11px] font-semibold">
-              Marcar lanchonete parceira:
+              Marcar uma lanchonete (opcional):
             </label>
             <select
               value={selectedRestaurantId}
               onChange={(e) => setSelectedRestaurantId(e.target.value)}
               className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 text-xs focus:outline-none focus:border-orange-500"
             >
+              <option value="">Publicação geral (sem restaurante)</option>
               {restaurants.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name} ({r.neighborhoodName})
