@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Restaurant, MenuItem, LoyaltyReward } from '../types';
+import { Restaurant, MenuItem, LoyaltyReward, Promotion } from '../types';
 
 // Obtenção das variáveis injetadas via Vite no ambiente cliente.
 const viteEnv =
@@ -157,7 +157,7 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
         priceRange: row.price_range || '$$',
         bannerUrl: row.image_url || getRestaurantFallbackImage(row.name),
         logoUrl: row.logo_url || undefined,
-        isOpen: row.status === 'ativo',
+        isOpen: row.is_open === true,
         openingHours: row.opening_hours || '18h às 23h30',
         address: cleanAddress,
         whatsappDemo: cleanWhatsapp,
@@ -236,7 +236,7 @@ export async function fetchMerchantRestaurant(
       priceRange: data.price_range || '$$',
       bannerUrl: data.image_url || '/images/lanchonete_front_1792014252947.jpg',
       logoUrl: data.logo_url || undefined,
-      isOpen: data.status === 'ativo',
+      isOpen: data.is_open === true,
       openingHours: data.opening_hours || '18h às 23h30',
       address: cleanAddress,
       whatsappDemo: cleanWhatsapp,
@@ -269,8 +269,7 @@ export async function fetchMenuItemsFromSupabase(
   try {
     const { data, error } = await supabase
       .from('menu_items')
-      .select('*')
-      .eq('available', true);
+      .select('*');
 
     if (error) {
       console.error('Falha ao consultar produtos:', error.message);
@@ -310,7 +309,10 @@ export async function fetchMenuItemsFromSupabase(
             ? row.price
             : parseFloat(row.price) || 0,
         imageUrl: row.image_url || '',
-        category: 'Lanches',
+        category: row.category || 'Lanches',
+        originalPrice: row.original_price == null ? undefined : Number(row.original_price),
+        badge: row.badge || undefined,
+        prepTimeMinutes: Number(row.prep_time_minutes) || 20,
         isAvailable: row.available ?? true,
       };
 
@@ -323,6 +325,123 @@ export async function fetchMenuItemsFromSupabase(
     console.warn('Falha na consulta de menu_items no Supabase:', err);
     return null;
   }
+}
+
+
+/** Consulta o cardápio persistente de um ou mais estabelecimentos. */
+export async function fetchRestaurantMenuFromSupabase(
+  restaurant: Restaurant
+): Promise<MenuItem[] | null> {
+  const result = await fetchMenuItemsFromSupabase([restaurant]);
+  if (!result) return null;
+  return result[restaurant.id] || (restaurant.supabaseId ? result[restaurant.supabaseId] : undefined) || [];
+}
+
+function mapDbRowToPromotion(row: any, restaurantName = ''): Promotion {
+  return {
+    id: row.id,
+    restaurantId: row.restaurant_id,
+    restaurantName,
+    title: row.title || 'Oferta',
+    description: row.description || '',
+    badge: row.badge || 'Oferta',
+    discountPrice: Number(row.discount_price) || 0,
+    regularPrice: Number(row.regular_price) || 0,
+    couponCode: row.coupon_code || undefined,
+    validUntil: row.valid_until || '',
+    imageUrl: row.image_url || '',
+  };
+}
+
+/** Busca somente promoções visíveis para o usuário atual, respeitando RLS. */
+export async function fetchRestaurantPromotions(
+  restaurantId: string,
+  restaurantName = ''
+): Promise<Promotion[] | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const resolvedId = await resolveRestaurantUuid(restaurantId);
+  if (!resolvedId) return null;
+
+  const { data, error } = await supabase
+    .from('restaurant_promotions')
+    .select('*')
+    .eq('restaurant_id', resolvedId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Falha ao consultar promoções:', error.message);
+    return null;
+  }
+  return (data || []).map((row: any) => mapDbRowToPromotion(row, restaurantName));
+}
+
+export async function insertRestaurantPromotion(
+  promotion: Omit<Promotion, 'id' | 'restaurantId' | 'restaurantName'> & { restaurantId: string }
+): Promise<{ data: Promotion | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
+  const restaurantId = await resolveRestaurantUuid(promotion.restaurantId);
+  if (!restaurantId) return { data: null, error: new Error('Não foi possível identificar a loja no Supabase.') };
+
+  const payload = {
+    restaurant_id: restaurantId,
+    title: promotion.title.trim(),
+    description: promotion.description.trim(),
+    badge: promotion.badge.trim() || 'Oferta',
+    discount_price: promotion.discountPrice,
+    regular_price: promotion.regularPrice,
+    coupon_code: promotion.couponCode?.trim() || null,
+    valid_until: promotion.validUntil || null,
+    image_url: promotion.imageUrl?.trim() || null,
+    is_active: true,
+  };
+  const { data, error } = await supabase.from('restaurant_promotions').insert(payload).select().single();
+  if (error || !data) return { data: null, error: new Error(error?.message || 'Não foi possível cadastrar a promoção.') };
+  return { data: mapDbRowToPromotion(data), error: null };
+}
+
+export async function updateRestaurantPromotion(
+  promotionId: string,
+  changes: Partial<Omit<Promotion, 'id' | 'restaurantId' | 'restaurantName'>> & { isActive?: boolean }
+): Promise<{ data: Promotion | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
+  const payload: Record<string, any> = { updated_at: new Date().toISOString() };
+  if (changes.title !== undefined) payload.title = changes.title.trim();
+  if (changes.description !== undefined) payload.description = changes.description.trim();
+  if (changes.badge !== undefined) payload.badge = changes.badge.trim() || 'Oferta';
+  if (changes.discountPrice !== undefined) payload.discount_price = changes.discountPrice;
+  if (changes.regularPrice !== undefined) payload.regular_price = changes.regularPrice;
+  if (changes.couponCode !== undefined) payload.coupon_code = changes.couponCode.trim() || null;
+  if (changes.validUntil !== undefined) payload.valid_until = changes.validUntil || null;
+  if (changes.imageUrl !== undefined) payload.image_url = changes.imageUrl.trim() || null;
+  if (changes.isActive !== undefined) payload.is_active = changes.isActive;
+
+  const { data, error } = await supabase.from('restaurant_promotions').update(payload).eq('id', promotionId).select().single();
+  if (error || !data) return { data: null, error: new Error(error?.message || 'Não foi possível atualizar a promoção.') };
+  return { data: mapDbRowToPromotion(data), error: null };
+}
+
+export async function deleteRestaurantPromotion(promotionId: string): Promise<{ error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) return { error: new Error('Supabase não configurado') };
+  const { error } = await supabase.from('restaurant_promotions').delete().eq('id', promotionId);
+  return { error: error ? new Error(error.message) : null };
+}
+
+/** Atualiza o status operacional sem alterar o status de cadastro/moderação da loja. */
+export async function updateRestaurantOperationalStatus(
+  restaurantId: string,
+  isOpen: boolean
+): Promise<{ success: boolean; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) return { success: false, error: new Error('Supabase não configurado') };
+  const resolvedId = await resolveRestaurantUuid(restaurantId);
+  if (!resolvedId) return { success: false, error: new Error('Não foi possível identificar a loja no Supabase.') };
+  const { data, error } = await supabase
+    .from('restaurants')
+    .update({ is_open: isOpen })
+    .eq('id', resolvedId)
+    .select('id, is_open')
+    .maybeSingle();
+  if (error || !data) return { success: false, error: new Error(error?.message || 'A loja não foi atualizada. Verifique a permissão do comerciante.') };
+  return { success: true, error: null };
 }
 
 /**
@@ -459,6 +578,8 @@ export interface UpdateRestaurantInput {
   whatsapp?: string;
   image_url?: string;
   logo_url?: string;
+  is_open?: boolean;
+  opening_hours?: string | null;
 }
 
 /**
@@ -495,6 +616,8 @@ export async function updateRestaurantInSupabase(input: UpdateRestaurantInput) {
   if (input.whatsapp !== undefined) payload.whatsapp = input.whatsapp?.trim() || null;
   if (input.image_url !== undefined) payload.image_url = input.image_url?.trim() || null;
   if (input.logo_url !== undefined) payload.logo_url = input.logo_url?.trim() || null;
+  if (input.is_open !== undefined) payload.is_open = input.is_open;
+  if (input.opening_hours !== undefined) payload.opening_hours = input.opening_hours?.trim() || null;
 
   let { data, error } = await supabase
     .from('restaurants')
@@ -651,11 +774,12 @@ function mapDbRowToMenuItem(row: any, originalInput?: Partial<MenuItem>): MenuIt
         : parseFloat(row.price) || (originalInput?.price ?? 0),
     originalPrice: originalInput?.originalPrice,
     imageUrl: row.image_url ?? originalInput?.imageUrl ?? '',
-    category: originalInput?.category || 'Lanches',
+    category: row.category || originalInput?.category || 'Lanches',
+    originalPrice: row.original_price == null ? originalInput?.originalPrice : Number(row.original_price),
     isAvailable: row.available ?? originalInput?.isAvailable ?? true,
     isPopular: originalInput?.isPopular,
-    badge: originalInput?.badge,
-    prepTimeMinutes: originalInput?.prepTimeMinutes ?? 20,
+    badge: row.badge || originalInput?.badge,
+    prepTimeMinutes: Number(row.prep_time_minutes) || originalInput?.prepTimeMinutes || 20,
   };
 }
 
@@ -692,6 +816,10 @@ export async function insertMenuItem(item: Omit<MenuItem, 'id'> & { restaurantId
     description: item.description?.trim() || null,
     price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price)) || 0,
     image_url: item.imageUrl?.trim() || null,
+    original_price: item.originalPrice ?? null,
+    category: item.category || 'Lanches',
+    badge: item.badge || null,
+    prep_time_minutes: item.prepTimeMinutes || 20,
     available: item.isAvailable ?? true,
   };
 
@@ -722,6 +850,10 @@ export async function updateMenuItem(item: MenuItem) {
     description: item.description?.trim() || null,
     price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price)) || 0,
     image_url: item.imageUrl?.trim() || null,
+    original_price: item.originalPrice ?? null,
+    category: item.category || 'Lanches',
+    badge: item.badge || null,
+    prep_time_minutes: item.prepTimeMinutes || 20,
     available: item.isAvailable ?? true,
   };
 
