@@ -9,14 +9,30 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const readStoredTheme = (): Theme => {
+  try {
+    const stored = window.localStorage.getItem('theme');
+    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
+  } catch {
+    // Alguns previews isolados bloqueiam o acesso ao armazenamento local.
+    return 'dark';
+  }
+};
+
+const persistTheme = (theme: Theme) => {
+  try {
+    window.localStorage.setItem('theme', theme);
+  } catch {
+    // O tema continua funcionando em memória mesmo sem persistência.
+  }
+};
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>(() => 
-    (localStorage.getItem('theme') as Theme) || 'dark'
-  );
+  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem('theme', newTheme);
+    persistTheme(newTheme);
   };
 
   useEffect(() => {
@@ -24,10 +40,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
     const applyTheme = () => {
-      let resolvedTheme = theme;
-      if (theme === 'system') {
-        resolvedTheme = mediaQuery.matches ? 'dark' : 'light';
-      }
+      const resolvedTheme = theme === 'system'
+        ? (mediaQuery.matches ? 'dark' : 'light')
+        : theme;
 
       root.classList.remove('light', 'dark');
       root.classList.add(resolvedTheme);
@@ -37,8 +52,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (theme === 'system') {
       const handler = () => applyTheme();
-      mediaQuery.addEventListener('change', handler);
-      return () => mediaQuery.removeEventListener('change', handler);
+      mediaQuery.addEventListener?.('change', handler);
+      return () => mediaQuery.removeEventListener?.('change', handler);
     }
   }, [theme]);
 
