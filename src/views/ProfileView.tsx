@@ -623,14 +623,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             <p className="text-xs text-slate-400">
               Você ainda não possui pontos acumulados em estabelecimentos específicos. Faça check-in pelo QR Code no balcão e ganhe 5 pontos!
             </p>
-            <button
-              type="button"
-              onClick={handleStartCheckin}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-extrabold text-xs shadow-md shadow-orange-500/20 transition-all"
-            >
-              <Camera className="w-4 h-4" />
-              Fazer Check-in no Balcão
-            </button>
           </div>
         ) : (
           <div className="divide-y divide-slate-800/80 rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden">
