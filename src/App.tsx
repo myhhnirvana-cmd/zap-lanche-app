@@ -7,7 +7,6 @@ import {
 } from './types';
 import { Header } from './components/layout/Header';
 import { BottomNav } from './components/layout/BottomNav';
-import { DemoBadge } from './components/common/DemoBadge';
 import { NeighborhoodModal } from './components/common/NeighborhoodModal';
 import { ExploreView } from './views/ExploreView';
 import { RestaurantDetailView } from './views/RestaurantDetailView';
@@ -149,9 +148,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary flex flex-col font-sans selection:bg-orange-500/30 selection:text-orange-200">
-      {/* Phase 1 Demonstration Badge */}
-      <DemoBadge onOpenInfo={() => setIsGitHubGuideOpen(true)} />
-
       {/* Top Header */}
       <Header
         currentNeighborhood={currentNeighborhood}
