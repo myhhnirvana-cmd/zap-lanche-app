@@ -37,6 +37,7 @@ import {
   HighlightStatus,
   RegionalHighlight,
   LoyaltyReward,
+  Promotion,
   RewardStatus,
 } from '../types';
 import {
@@ -73,6 +74,12 @@ import {
   fetchRewardsFromSupabase,
   insertRewardToSupabase,
   updateRewardInSupabase,
+  fetchRestaurantMenuFromSupabase,
+  fetchRestaurantPromotions,
+  insertRestaurantPromotion,
+  updateRestaurantPromotion,
+  deleteRestaurantPromotion,
+  updateRestaurantOperationalStatus,
   deleteRewardFromSupabase,
   markLoyaltyRedemptionUsed,
   isSupabaseConfigured,
@@ -124,6 +131,18 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const [rewardsList, setRewardsList] = useState<LoyaltyReward[]>(() =>
     loadRestaurantRewards(selectedRestaurantId)
   );
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [isPromotionFormOpen, setIsPromotionFormOpen] = useState(false);
+  const [editingPromotionId, setEditingPromotionId] = useState<string | null>(null);
+  const [promotionTitle, setPromotionTitle] = useState('');
+  const [promotionDescription, setPromotionDescription] = useState('');
+  const [promotionDiscountPrice, setPromotionDiscountPrice] = useState('');
+  const [promotionRegularPrice, setPromotionRegularPrice] = useState('');
+  const [promotionCouponCode, setPromotionCouponCode] = useState('');
+  const [promotionValidUntil, setPromotionValidUntil] = useState('');
+  const [promotionError, setPromotionError] = useState<string | null>(null);
+  const [isSavingPromotion, setIsSavingPromotion] = useState(false);
+  const [isUpdatingOpenStatus, setIsUpdatingOpenStatus] = useState(false);
 
   // Mensagens de feedback
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -151,11 +170,13 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const [selectedNeighborhood, setSelectedNeighborhood] = useState('freguesia');
 
   // Quando o lojista troca de restaurante no seletor de testes
-  const handleSelectStore = (storeId: string) => {
+  const handleSelectStore = async (storeId: string) => {
     setSelectedRestaurantId(storeId);
     const store = allRestaurants.find((r) => r.id === storeId) || allRestaurants[0];
-    const items = loadRestaurantMenu(storeId);
-    setMenuItems(items);
+    if (!store) return;
+
+    setMenuItems(loadRestaurantMenu(storeId));
+    setPromotions([]);
     setIsOpenToday(store.isOpen);
 
     const storeRewards = loadRestaurantRewards(storeId);
@@ -167,11 +188,20 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       null;
 
     if (isSupabaseConfigured && targetUuid) {
-      fetchRewardsFromSupabase(targetUuid).then((dbRewards) => {
-        if (dbRewards && dbRewards.length > 0) {
-          setRewardsList(dbRewards);
-        }
-      });
+      const [dbMenu, dbRewards, dbPromotions] = await Promise.all([
+        fetchRestaurantMenuFromSupabase(store),
+        fetchRewardsFromSupabase(targetUuid),
+        fetchRestaurantPromotions(targetUuid, store.name),
+      ]);
+      if (dbMenu !== null) {
+        setMenuItems(dbMenu);
+        saveRestaurantMenu(storeId, dbMenu);
+      }
+      if (dbRewards !== null) {
+        setRewardsList(dbRewards);
+        saveRestaurantRewards(storeId, dbRewards);
+      }
+      setPromotions(dbPromotions ?? []);
     }
 
     const storeStats = loadMerchantStats(storeId);
@@ -182,6 +212,11 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setCurrentHighlightStatus((storeHl?.status || storeStats.highlightStatus) as HighlightStatus);
     setHighlightHistory(storeStats.highlightHistory);
   };
+
+  // Carrega dados persistentes também para o painel administrativo e na primeira abertura.
+  useEffect(() => {
+    if (selectedRestaurantId) void handleSelectStore(selectedRestaurantId);
+  }, [selectedRestaurantId]);
 
   // Garante que o comerciante permaneça sempre sincronizado com a sua própria loja
   useEffect(() => {
@@ -736,6 +771,99 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   // -------------------------------------------------------------
   // HANDLERS: GESTÃO DE PRÊMIOS E FIDELIDADE
   // -------------------------------------------------------------
+
+  const resetPromotionForm = () => {
+    setEditingPromotionId(null);
+    setPromotionTitle('');
+    setPromotionDescription('');
+    setPromotionDiscountPrice('');
+    setPromotionRegularPrice('');
+    setPromotionCouponCode('');
+    setPromotionValidUntil('');
+    setPromotionError(null);
+  };
+
+  const openPromotionEditor = (promotion?: Promotion) => {
+    if (!promotion) {
+      resetPromotionForm();
+    } else {
+      setEditingPromotionId(promotion.id);
+      setPromotionTitle(promotion.title);
+      setPromotionDescription(promotion.description);
+      setPromotionDiscountPrice(String(promotion.discountPrice));
+      setPromotionRegularPrice(String(promotion.regularPrice));
+      setPromotionCouponCode(promotion.couponCode || '');
+      setPromotionValidUntil(promotion.validUntil ? new Date(promotion.validUntil).toISOString().slice(0, 10) : '');
+      setPromotionError(null);
+    }
+    setIsPromotionFormOpen(true);
+  };
+
+  const handleSavePromotion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const discountPrice = Number(promotionDiscountPrice.replace(',', '.'));
+    const regularPrice = Number(promotionRegularPrice.replace(',', '.'));
+    if (!promotionTitle.trim()) return setPromotionError('Informe o título da promoção.');
+    if (!Number.isFinite(discountPrice) || discountPrice < 0) return setPromotionError('Informe um preço promocional válido.');
+    if (!Number.isFinite(regularPrice) || regularPrice <= discountPrice) return setPromotionError('O preço original deve ser maior que o preço promocional.');
+    if (!isSupabaseConfigured) return setPromotionError('Conecte o Supabase para salvar promoções de forma persistente.');
+    setIsSavingPromotion(true);
+    setPromotionError(null);
+    const validUntil = promotionValidUntil ? new Date(`${promotionValidUntil}T23:59:59`).toISOString() : '';
+    const changes = {
+      title: promotionTitle.trim(),
+      description: promotionDescription.trim(),
+      badge: 'Oferta',
+      discountPrice,
+      regularPrice,
+      couponCode: promotionCouponCode.trim(),
+      validUntil,
+      imageUrl: '',
+    };
+    if (editingPromotionId) {
+      const result = await updateRestaurantPromotion(editingPromotionId, changes);
+      if (result.error || !result.data) {
+        setPromotionError(result.error?.message || 'Não foi possível atualizar a promoção.');
+        setIsSavingPromotion(false);
+        return;
+      }
+      setPromotions((current) => current.map((item) => item.id === editingPromotionId ? { ...result.data!, restaurantName: currentRestaurant.name } : item));
+      showToast('Promoção atualizada com sucesso!');
+    } else {
+      const result = await insertRestaurantPromotion({ ...changes, restaurantId: currentRestaurant.supabaseId || currentRestaurant.id });
+      if (result.error || !result.data) {
+        setPromotionError(result.error?.message || 'Não foi possível cadastrar a promoção.');
+        setIsSavingPromotion(false);
+        return;
+      }
+      setPromotions((current) => [{ ...result.data!, restaurantName: currentRestaurant.name }, ...current]);
+      showToast('Promoção cadastrada com sucesso!');
+    }
+    setIsSavingPromotion(false);
+    setIsPromotionFormOpen(false);
+    resetPromotionForm();
+  };
+
+  const togglePromotionStatus = async (promotion: Promotion) => {
+    const result = await updateRestaurantPromotion(promotion.id, { isActive: promotion.isActive === false });
+    if (result.error || !result.data) {
+      showToast(result.error?.message || 'Não foi possível alterar a promoção.', 'error');
+      return;
+    }
+    setPromotions((current) => current.map((item) => item.id === promotion.id ? { ...item, isActive: result.data!.isActive } : item));
+    showToast(promotion.isActive === false ? 'Promoção ativada.' : 'Promoção pausada.');
+  };
+
+  const handleDeletePromotion = async (promotion: Promotion) => {
+    const result = await deleteRestaurantPromotion(promotion.id);
+    if (result.error) {
+      showToast(result.error.message, 'error');
+      return;
+    }
+    setPromotions((current) => current.filter((item) => item.id !== promotion.id));
+    showToast('Promoção excluída.');
+  };
+
   const handleOpenAddReward = () => {
     setEditingReward(null);
     setRewardTitle('');
@@ -1195,22 +1323,30 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             </div>
 
             <button
-              onClick={() => {
+              disabled={isUpdatingOpenStatus}
+              onClick={async () => {
                 const nextState = !isOpenToday;
+                setIsUpdatingOpenStatus(true);
+                const result = await updateRestaurantOperationalStatus(currentRestaurant.supabaseId || currentRestaurant.id, nextState);
+                setIsUpdatingOpenStatus(false);
+                if (!result.success) {
+                  showToast(result.error?.message || 'Não foi possível atualizar o status do balcão.', 'error');
+                  return;
+                }
                 setIsOpenToday(nextState);
                 const updated = { ...currentRestaurant, isOpen: nextState };
                 updateSingleRestaurant(updated);
                 onUpdateRestaurant?.(updated);
                 showToast(`Balcão da loja ${nextState ? 'aberto' : 'fechado'}.`);
               }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 ${
                 isOpenToday
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20'
                   : 'bg-slate-800 text-slate-400 hover:text-white'
               }`}
             >
               <Power className="w-3.5 h-3.5" />
-              {isOpenToday ? 'Aberto' : 'Pausar'}
+              {isUpdatingOpenStatus ? 'Salvando...' : isOpenToday ? 'Aberto' : 'Pausar'}
             </button>
           </div>
         </div>
@@ -1433,6 +1569,69 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         )}
       </div>
 
+
+
+      {/* ============================================================ */}
+      {/* SEÇÃO: PROMOÇÕES PERSISTENTES DA LOJA                        */}
+      {/* ============================================================ */}
+      <div className="rounded-3xl bg-[#13151f] border border-orange-500/25 p-5 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-xl bg-orange-500/20 text-orange-400"><Tag className="w-5 h-5" /></span>
+              <h3 className="text-base font-bold text-white font-display">Promoções da Loja</h3>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Ofertas desta loja, com preço promocional, validade e cupom. ({promotions.length})</p>
+          </div>
+          <button onClick={() => openPromotionEditor()} className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-black font-bold text-xs flex items-center gap-1.5">
+            <Plus className="w-4 h-4" /> Nova promoção
+          </button>
+        </div>
+
+        {isPromotionFormOpen && (
+          <form onSubmit={handleSavePromotion} className="rounded-2xl bg-slate-900 border border-slate-700 p-4 space-y-3">
+            <h4 className="text-sm font-bold text-white">{editingPromotionId ? 'Editar promoção' : 'Cadastrar promoção'}</h4>
+            <input value={promotionTitle} onChange={(e) => setPromotionTitle(e.target.value)} placeholder="Nome da oferta ou combo" className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" required />
+            <textarea value={promotionDescription} onChange={(e) => setPromotionDescription(e.target.value)} placeholder="Descreva o que está incluído na oferta" className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" rows={2} />
+            <div className="grid grid-cols-2 gap-3">
+              <input value={promotionDiscountPrice} onChange={(e) => setPromotionDiscountPrice(e.target.value)} placeholder="Preço promocional (R$)" inputMode="decimal" className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" required />
+              <input value={promotionRegularPrice} onChange={(e) => setPromotionRegularPrice(e.target.value)} placeholder="Preço original (R$)" inputMode="decimal" className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" required />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <input value={promotionCouponCode} onChange={(e) => setPromotionCouponCode(e.target.value)} placeholder="Cupom (opcional)" className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" />
+              <input type="date" value={promotionValidUntil} onChange={(e) => setPromotionValidUntil(e.target.value)} className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" />
+            </div>
+            {promotionError && <p className="text-xs text-rose-400">{promotionError}</p>}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => { setIsPromotionFormOpen(false); resetPromotionForm(); }} className="flex-1 rounded-xl bg-slate-800 px-3 py-2.5 text-xs font-semibold text-slate-300">Cancelar</button>
+              <button type="submit" disabled={isSavingPromotion} className="flex-1 rounded-xl bg-orange-600 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50">{isSavingPromotion ? 'Salvando...' : 'Salvar promoção'}</button>
+            </div>
+          </form>
+        )}
+
+        {promotions.length === 0 ? (
+          <div className="rounded-2xl bg-slate-900/60 border border-slate-800 py-7 text-center text-xs text-slate-400">Nenhuma promoção cadastrada para esta loja.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {promotions.map((promotion) => (
+              <article key={promotion.id} className="rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div><h4 className="font-bold text-sm text-white">{promotion.title}</h4><p className="text-xs text-slate-400 mt-1">{promotion.description}</p></div>
+                  <span className={`text-[10px] rounded-full px-2 py-1 border ${promotion.isActive === false ? 'text-slate-400 border-slate-700' : 'text-emerald-300 border-emerald-500/30'}`}>{promotion.isActive === false ? 'Pausada' : 'Ativa'}</span>
+                </div>
+                <p className="text-xs"><strong className="text-orange-300">R$ {promotion.discountPrice.toFixed(2).replace('.', ',')}</strong> <span className="text-slate-500 line-through ml-1">R$ {promotion.regularPrice.toFixed(2).replace('.', ',')}</span></p>
+                {promotion.couponCode && <p className="text-[11px] text-slate-400">Cupom: <strong className="text-amber-300">{promotion.couponCode}</strong></p>}
+                {promotion.validUntil && <p className="text-[10px] text-slate-500">Válida até {new Date(promotion.validUntil).toLocaleDateString('pt-BR')}</p>}
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => togglePromotionStatus(promotion)} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-[11px] text-slate-300">{promotion.isActive === false ? 'Ativar' : 'Pausar'}</button>
+                  <button onClick={() => openPromotionEditor(promotion)} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-[11px] text-slate-300">Editar</button>
+                  <button onClick={() => handleDeletePromotion(promotion)} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-[11px] text-rose-300">Excluir</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ============================================================ */}
       {/* SEÇÃO PRINCIPAL: PRÊMIOS E FIDELIDADE DA LOJA                */}
