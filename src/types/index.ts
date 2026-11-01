@@ -136,7 +136,10 @@ export interface Restaurant {
   rating: number;
   reviewCount: number;
   deliveryTime: string;
+  prepTimeMinutes?: number;
   distanceKm: number;
+  latitude?: number;
+  longitude?: number;
   deliveryFee: number;
   minOrder: number;
   priceRange: '$' | '$$' | '$$$';
