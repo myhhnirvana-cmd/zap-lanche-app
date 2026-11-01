@@ -98,7 +98,7 @@ export async function resolveRestaurantUuid(
  * Retorna null quando não é possível consultar os dados reais.
  */
 function getRestaurantFallbackImage(name: string): string {
-  const normalizedName = String(name || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+  const normalizedName = String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
   if (normalizedName.includes('pizza') || normalizedName.includes('forno')) {
     return '/images/artisan_pizza_1792014251217.jpg';
