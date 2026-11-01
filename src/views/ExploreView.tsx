@@ -305,7 +305,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                   {/* Rating Badge */}
                   <div className="absolute top-3 right-3 px-2 py-1 rounded-lg bg-black/75 backdrop-blur-md border border-border-muted/60 text-text-primary text-xs font-bold flex items-center gap-1">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span className="tabular-nums">{restaurant.rating.toFixed(1)}</span>
+                    <span className="tabular-nums">{restaurant.reviewCount > 0 ? restaurant.rating.toFixed(1) : 'Sem avaliações'}</span>
                     <span className="text-[10px] text-text-secondary">({restaurant.reviewCount})</span>
                   </div>
 
@@ -326,7 +326,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                   <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-xs text-text-secondary">
                     <span className="flex items-center gap-1 font-medium text-amber-300 drop-shadow-sm">
                       <MapPin className="w-3 h-3 text-orange-400" />
-                      {restaurant.neighborhoodName} · {restaurant.distanceKm} km
+                      {restaurant.neighborhoodName}{restaurant.distanceKm > 0 ? ` · ${restaurant.distanceKm} km` : ''}
                     </span>
                     <span className="flex items-center gap-1 text-text-secondary">
                       <Clock className="w-3 h-3 text-text-secondary" />
