@@ -162,6 +162,7 @@ export const Header: React.FC<HeaderProps> = ({
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
+        fitViewport
       />
     </header>
   );
