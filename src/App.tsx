@@ -70,12 +70,10 @@ export default function App() {
   useEffect(() => {
     if (!user?.id || !pendingReferralCode || referralAttemptRef.current === pendingReferralCode) return;
 
-    let cancelled = false;
     referralAttemptRef.current = pendingReferralCode;
 
     const applyPendingReferral = async () => {
       const result = await applyReferralCode(pendingReferralCode);
-      if (cancelled) return;
 
       if (result.success) {
         try {
@@ -93,9 +91,6 @@ export default function App() {
     };
 
     void applyPendingReferral();
-    return () => {
-      cancelled = true;
-    };
   }, [user?.id, pendingReferralCode]);
 
   // Redireciona para 'explorar' se o usuário deslogar enquanto estiver na área de comerciante
