@@ -687,7 +687,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
 
           <div className="absolute top-4 left-4 flex items-center gap-2 flex-wrap">
             <span className="px-2.5 py-1 rounded-md bg-emerald-500 text-black text-xs font-extrabold uppercase">
-              {restaurant.isOpen ? 'Aberto Hoje' : 'Fechado'}
+              {restaurant.isOpen === true ? 'Aberto Hoje' : restaurant.isOpen === false ? 'Fechado' : 'Horário não informado'}
             </span>
             {restaurant.verifiedNeighborhoodSpot && (
               <span className="px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-md border border-amber-500/50 text-amber-300 text-xs font-semibold flex items-center gap-1">
