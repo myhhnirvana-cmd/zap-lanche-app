@@ -1027,7 +1027,7 @@ export async function deleteComment(
 
 export interface DbPostRow {
   id: string;
-  restaurant_id: string;
+  restaurant_id: string | null;
   restaurant_name: string;
   restaurant_category: string;
   neighborhood: string;
@@ -1043,7 +1043,7 @@ export interface DbPostRow {
 }
 
 export interface InsertPostInput {
-  restaurant_id: string;
+  restaurant_id?: string | null;
   restaurant_name: string;
   restaurant_category: string;
   neighborhood: string;
@@ -1096,16 +1096,16 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
     }
 
     const mappedPosts: DbPostRow[] = data.map((row: any) => {
-      const rest = restMap.get(row.restaurant_id);
+      const rest = row.restaurant_id ? restMap.get(row.restaurant_id) : null;
       const authorId = row.author_profile_id || row.profile_id;
       const authorProfile = profileMap.get(authorId);
 
       return {
         id: row.id,
-        restaurant_id: row.restaurant_id,
-        restaurant_name: rest?.name || 'Lanchonete Local',
-        restaurant_category: rest?.category || 'Lanches',
-        neighborhood: rest?.neighborhood || 'Jacarepaguá',
+        restaurant_id: row.restaurant_id || null,
+        restaurant_name: rest?.name || 'Comunidade ZapLanche',
+        restaurant_category: rest?.category || 'Comunidade',
+        neighborhood: rest?.neighborhood || 'Comunidade',
         profile_id: authorId,
         author_name: authorProfile?.full_name || authorProfile?.username || 'Morador',
         author_avatar: authorProfile?.avatar_url || null,
@@ -1130,7 +1130,9 @@ export async function insertPostToSupabase(input: InsertPostInput): Promise<{ da
   }
 
   try {
-    const resolvedRestId = (await resolveRestaurantUuid(input.restaurant_id)) || input.restaurant_id;
+    const resolvedRestId = input.restaurant_id
+      ? (await resolveRestaurantUuid(input.restaurant_id)) || input.restaurant_id
+      : null;
 
     const payload = {
       restaurant_id: resolvedRestId,
@@ -1151,7 +1153,7 @@ export async function insertPostToSupabase(input: InsertPostInput): Promise<{ da
 
     const mapped: DbPostRow = {
       id: data.id,
-      restaurant_id: data.restaurant_id,
+      restaurant_id: data.restaurant_id || null,
       restaurant_name: input.restaurant_name,
       restaurant_category: input.restaurant_category,
       neighborhood: input.neighborhood,
