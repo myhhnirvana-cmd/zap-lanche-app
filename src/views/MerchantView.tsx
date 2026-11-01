@@ -199,8 +199,13 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         saveRestaurantMenu(storeId, dbMenu);
       }
       if (dbRewards !== null) {
-        setRewardsList(dbRewards);
-        saveRestaurantRewards(storeId, dbRewards);
+        const localOnlyRewards = storeRewards.filter((reward) => String(reward.id).startsWith('rew-'));
+        const mergedRewards = [
+          ...dbRewards,
+          ...localOnlyRewards.filter((localReward) => !dbRewards.some((dbReward) => dbReward.id === localReward.id)),
+        ];
+        setRewardsList(mergedRewards);
+        saveRestaurantRewards(storeId, mergedRewards);
       }
       setPromotions(dbPromotions ?? []);
     }
@@ -992,7 +997,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     } else {
       let createdId = `rew-${Date.now()}`;
       if (isSupabaseConfigured && targetRestUuid) {
-        const { data: dbReward } = await insertRewardToSupabase({
+        const { data: dbReward, error: dbError } = await insertRewardToSupabase({
           restaurant_id: targetRestUuid,
           title: rewardTitle.trim(),
           description: rewardDescription.trim(),
@@ -1005,9 +1010,11 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           max_redemptions_per_user: maxPerUser,
           image_url: persistentRewardImg,
         });
-        if (dbReward?.id) {
-          createdId = dbReward.id;
+        if (dbError || !dbReward?.id) {
+          setRewardFormError(dbError?.message || 'Não foi possível salvar o prêmio no banco de dados.');
+          return;
         }
+        createdId = dbReward.id;
       }
 
       const newReward: LoyaltyReward = {
