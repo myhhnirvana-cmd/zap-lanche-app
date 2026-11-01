@@ -251,6 +251,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const [storeFormNeighborhoodId, setStoreFormNeighborhoodId] = useState(currentRestaurant.neighborhoodId);
   const [storeFormAddress, setStoreFormAddress] = useState(currentRestaurant.address);
   const [storeFormWhatsapp, setStoreFormWhatsapp] = useState(currentRestaurant.whatsappDemo);
+  const [storeFormOpeningHours, setStoreFormOpeningHours] = useState(currentRestaurant.openingHours || '');
+  const [storeFormPrepTime, setStoreFormPrepTime] = useState(currentRestaurant.prepTimeMinutes?.toString() || '');
+  const [storeFormLatitude, setStoreFormLatitude] = useState(currentRestaurant.latitude?.toString() || '');
+  const [storeFormLongitude, setStoreFormLongitude] = useState(currentRestaurant.longitude?.toString() || '');
   const [storeFormBannerUrl, setStoreFormBannerUrl] = useState(currentRestaurant.bannerUrl);
   const [storeFormLogoUrl, setStoreFormLogoUrl] = useState(currentRestaurant.logoUrl || '');
   const [isOptimizingBanner, setIsOptimizingBanner] = useState(false);
@@ -361,6 +365,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setStoreFormNeighborhoodId(currentRestaurant.neighborhoodId);
     setStoreFormAddress(currentRestaurant.address);
     setStoreFormWhatsapp(currentRestaurant.whatsappDemo);
+    setStoreFormOpeningHours(currentRestaurant.openingHours || '');
+    setStoreFormPrepTime(currentRestaurant.prepTimeMinutes?.toString() || '');
+    setStoreFormLatitude(currentRestaurant.latitude?.toString() || '');
+    setStoreFormLongitude(currentRestaurant.longitude?.toString() || '');
     setStoreFormBannerUrl(currentRestaurant.bannerUrl);
     setStoreFormLogoUrl(currentRestaurant.logoUrl || '');
     setBannerOptimizationInfo(null);
@@ -537,6 +545,19 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setStoreFormLogoUrl(publicUrl);
     }
 
+    const parsedPrepTime = storeFormPrepTime.trim() ? Number(storeFormPrepTime) : null;
+    const parsedLatitude = storeFormLatitude.trim() ? Number(storeFormLatitude.replace(',', '.')) : null;
+    const parsedLongitude = storeFormLongitude.trim() ? Number(storeFormLongitude.replace(',', '.')) : null;
+    if (parsedPrepTime !== null && (!Number.isInteger(parsedPrepTime) || parsedPrepTime < 1 || parsedPrepTime > 600)) {
+      setStoreFormError('Informe um tempo de preparo entre 1 e 600 minutos.');
+      return;
+    }
+    if ((parsedLatitude === null) !== (parsedLongitude === null) ||
+        (parsedLatitude !== null && (!Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90)) ||
+        (parsedLongitude !== null && (!Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180))) {
+      setStoreFormError('Informe latitude e longitude válidas, ou deixe os dois campos vazios.');
+      return;
+    }
     const nbObj = NEIGHBORHOODS.find((n) => n.id === storeFormNeighborhoodId) || NEIGHBORHOODS[1] || NEIGHBORHOODS[0];
     const trimmedOwnerName = storeFormOwner.trim();
 
@@ -559,6 +580,11 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         neighborhood: nbObj.name,
         image_url: persistentBannerUrl,
         logo_url: persistentLogoUrl || undefined,
+        opening_hours: storeFormOpeningHours.trim() || null,
+        delivery_time: parsedPrepTime ? `${parsedPrepTime} min` : null,
+        prep_time_minutes: parsedPrepTime,
+        latitude: parsedLatitude,
+        longitude: parsedLongitude,
       });
       if (restUpdateErr || !updatedRest) {
         const errorMsg = restUpdateErr?.message || 'Falha ao salvar dados da loja no Supabase (nenhuma linha atualizada).';
@@ -577,6 +603,11 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       neighborhoodName: nbObj.name,
       address: storeFormAddress.trim(),
       whatsappDemo: storeFormWhatsapp.trim(),
+      openingHours: storeFormOpeningHours.trim(),
+      deliveryTime: parsedPrepTime ? `${parsedPrepTime} min` : '',
+      prepTimeMinutes: parsedPrepTime || undefined,
+      latitude: parsedLatitude ?? undefined,
+      longitude: parsedLongitude ?? undefined,
       bannerUrl: persistentBannerUrl,
       logoUrl: persistentLogoUrl || undefined,
     };
@@ -2312,6 +2343,34 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 <p className="text-[10px] text-slate-400 mt-1">
                   O link wa.me utilizará este número para direcionar pedidos dos clientes.
                 </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Tempo de preparo (minutos):</label>
+                  <input type="number" min="1" max="600" value={storeFormPrepTime} onChange={(e) => setStoreFormPrepTime(e.target.value)} placeholder="Ex.: 35" className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white" />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Horário de atendimento:</label>
+                  <input type="text" value={storeFormOpeningHours} onChange={(e) => setStoreFormOpeningHours(e.target.value)} placeholder="Ex.: Seg a sáb, 18h às 23h30" className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white" />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-3 space-y-2">
+                <p className="text-slate-200 font-semibold">Localização da loja</p>
+                <p className="text-[10px] text-slate-400">Usada para calcular a distância real até o cliente. Permita a localização estando no estabelecimento.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" step="any" value={storeFormLatitude} onChange={(e) => setStoreFormLatitude(e.target.value)} placeholder="Latitude" className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                  <input type="number" step="any" value={storeFormLongitude} onChange={(e) => setStoreFormLongitude(e.target.value)} placeholder="Longitude" className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                </div>
+                <button type="button" onClick={() => {
+                  if (!navigator.geolocation) { setStoreFormError('Seu navegador não oferece geolocalização.'); return; }
+                  navigator.geolocation.getCurrentPosition(
+                    (position) => { setStoreFormLatitude(String(position.coords.latitude)); setStoreFormLongitude(String(position.coords.longitude)); setStoreFormError(null); },
+                    () => setStoreFormError('Não foi possível obter a localização. Confira a permissão do navegador.'),
+                    {enableHighAccuracy:true, timeout:15000}
+                  );
+                }} className="px-3 py-2 rounded-lg bg-slate-800 text-orange-300 text-[11px] font-semibold border border-slate-700">Usar localização atual da loja</button>
               </div>
 
               {/* Descrição / Bio da Loja */}
