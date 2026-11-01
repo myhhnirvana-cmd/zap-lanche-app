@@ -2828,7 +2828,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 />
                 {rewardImageUrl ? (
                   <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3">
-                    <img src={rewardImageUrl} alt="Prévia do prêmio" className="h-20 w-20 rounded-lg object-cover" />
+                    <img src={rewardImageUrl} alt="Prévia do prêmio" className="h-20 w-20 object-contain rounded-lg" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-300">Imagem selecionada para este prêmio.</p>
                       <button
