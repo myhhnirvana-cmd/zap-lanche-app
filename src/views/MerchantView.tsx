@@ -2365,7 +2365,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 </div>
                 <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-[11px] leading-relaxed text-slate-300">
                   <span className="font-semibold text-sky-300">💡 Dica: </span>
-                  Não sabe onde encontrar as coordenadas? Abra o{" "}
+                  O preenchimento é opcional, mas recomendado: informar a localização ajuda o cliente a entender onde sua loja fica e permite calcular a distância até ele, melhorando a experiência no ZAP Lanche. Para encontrar as coordenadas gratuitamente, abra o{" "}
                   <a href="https://www.google.com.br/maps" target="_blank" rel="noopener noreferrer" className="font-semibold text-sky-300 underline underline-offset-2">Google Maps</a>, pesquise o endereço da loja e marque o ponto exato no mapa. No computador, clique com o botão direito no ponto; no celular, toque e segure. Copie os números exibidos: o primeiro é a latitude e o segundo é a longitude.
                 </div>
                 <button type="button" onClick={() => {
