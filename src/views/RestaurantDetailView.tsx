@@ -329,6 +329,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
       if (!restaurantUuid) {
         setMyRedemptions([]);
         setRedemptionHistoryError('O histórico estará disponível quando este estabelecimento estiver conectado ao sistema.');
+        setIsLoadingRedemptions(false);
         return;
       }
       setIsLoadingRedemptions(true);
