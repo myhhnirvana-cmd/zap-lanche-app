@@ -28,6 +28,7 @@ import {
   ExternalLink,
   Loader2,
   Share2,
+  Trash2,
 } from 'lucide-react';
 import {
   AdminDemoStats,
@@ -308,6 +309,16 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
     });
   };
 
+  const handleDeleteHighlight = (id: string) => {
+    const item = highlights.find((highlight) => highlight.id === id);
+    if (!item || !window.confirm(`Excluir a solicitação de destaque de "${item.restaurantName}"? Esta ação não poderá ser desfeita.`)) return;
+    setHighlights((prev) => {
+      const updated = prev.filter((highlight) => highlight.id !== id);
+      saveRegionalHighlights(updated);
+      return updated;
+    });
+  };
+
   // Publicar novo aviso comunitário
   const handlePublishNotice = (e: React.FormEvent) => {
     e.preventDefault();
@@ -330,6 +341,22 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
     setNewNoticeTitle('');
     setNewNoticeContent('');
     setShowNoticeForm(false);
+  };
+
+  const handleDeleteNotice = (id: string) => {
+    const item = notices.find((notice) => notice.id === id);
+    if (!item || !window.confirm(`Excluir o aviso "${item.title}"? Esta ação não poderá ser desfeita.`)) return;
+    setNotices((prev) => {
+      const updated = prev.filter((notice) => notice.id !== id);
+      saveAdminNotices(updated);
+      return updated;
+    });
+  };
+
+  const handleDeleteAuditLog = (id: string) => {
+    const item = stats.auditLogs.find((log) => log.id === id);
+    if (!item || !window.confirm(`Excluir o registro "${item.action}"? Esta ação não poderá ser desfeita.`)) return;
+    setStats((prev) => ({ ...prev, auditLogs: prev.auditLogs.filter((log) => log.id !== id) }));
   };
 
   const handleToggleNotice = (id: string) => {
@@ -879,8 +906,16 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
                 </div>
               </div>
 
-              {/* Moderation Actions for the 5 states */}
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-0 border-slate-800">
+              {/* Ações de moderação e remoção individual */}
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-0 border-slate-800 flex-wrap">
+                <button
+                  onClick={() => handleDeleteHighlight(hl.id)}
+                  title="Excluir solicitação"
+                  aria-label={`Excluir solicitação de ${hl.restaurantName}`}
+                  className="p-2 rounded-lg border border-rose-500/30 text-rose-300 hover:bg-rose-500/20"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
                 {hl.status === 'solicitado' && (
                   <>
                     <button
@@ -1082,6 +1117,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
                 </p>
               </div>
 
+              <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => handleToggleNotice(nt.id)}
                 className={`px-3 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0 ${
@@ -1093,6 +1129,15 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
                 <Power className="w-3 h-3" />
                 {nt.active ? 'Ativo' : 'Desativado'}
               </button>
+              <button
+                onClick={() => handleDeleteNotice(nt.id)}
+                title="Excluir aviso"
+                aria-label={`Excluir aviso ${nt.title}`}
+                className="p-2 rounded-lg border border-rose-500/30 text-rose-300 hover:bg-rose-500/20"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              </div>
             </div>
           ))}
         </div>
@@ -1124,9 +1169,19 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
                   {log.detail}
                 </span>
               </div>
-              <div className="text-right text-[10px] text-slate-400 shrink-0 ml-2">
-                <span>{log.performedBy}</span>
-                <span className="block">{log.timestamp}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="text-right text-[10px] text-slate-400">
+                  <span>{log.performedBy}</span>
+                  <span className="block">{log.timestamp}</span>
+                </div>
+                <button
+                  onClick={() => handleDeleteAuditLog(log.id)}
+                  title="Excluir registro"
+                  aria-label={`Excluir registro ${log.action}`}
+                  className="p-2 rounded-lg border border-rose-500/30 text-rose-300 hover:bg-rose-500/20"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
           ))}
