@@ -799,11 +799,13 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
         {/* Tab 2: Promoções */}
         {activeTab === 'promocoes' && (
           <div className="mt-5 space-y-4">
-            {promotionsError && <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">{promotionsError}</div>
+            {promotionsError && (
+              <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">{promotionsError}</div>
+            )}
             <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
               <span className="font-semibold">Ofertas e Combos Especiais</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 font-bold border border-amber-500/30">
-                Demonstrativo de Lançamento
+                Ofertas da loja
               </span>
             </div>
 
