@@ -299,14 +299,21 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
 
     if (isSupabaseConfigured && targetUuid) {
       fetchRewardsFromSupabase(targetUuid).then((dbRewards) => {
-        if (isMounted && dbRewards && dbRewards.length > 0) {
-          setRewardsList(dbRewards);
-        }
+        if (!isMounted || dbRewards === null) return;
+        const localOnlyRewards = loadRestaurantRewards(restaurant.id).filter((reward) =>
+          String(reward.id).startsWith('rew-')
+        );
+        const mergedRewards = [
+          ...dbRewards,
+          ...localOnlyRewards.filter((localReward) => !dbRewards.some((dbReward) => dbReward.id === localReward.id)),
+        ];
+        setRewardsList(mergedRewards);
+        saveRestaurantRewards(restaurant.id, mergedRewards);
       });
     }
 
     if (initialTab) {
-      setActiveTab(initialTab);
+      setActiveTab(initialTab === 'promocoes' ? 'premios' : initialTab);
     }
 
     return () => {
@@ -387,7 +394,17 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
         setPromotions(dbPromotions.filter((promotion) => promotion.isActive !== false && (!promotion.validUntil || new Date(promotion.validUntil).getTime() >= Date.now())));
         setPromotionsError(null);
       }
-      if (dbRewards !== null) setRewardsList(dbRewards);
+      if (dbRewards !== null) {
+        const localOnlyRewards = loadRestaurantRewards(restaurant.id).filter((reward) =>
+          String(reward.id).startsWith('rew-')
+        );
+        const mergedRewards = [
+          ...dbRewards,
+          ...localOnlyRewards.filter((localReward) => !dbRewards.some((dbReward) => dbReward.id === localReward.id)),
+        ];
+        setRewardsList(mergedRewards);
+        saveRestaurantRewards(restaurant.id, mergedRewards);
+      }
     };
 
     loadRestaurantContent();
@@ -656,15 +673,15 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('promocoes')}
+            onClick={() => setActiveTab('premios')}
             className={`py-3 px-3 border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5 ${
-              activeTab === 'promocoes'
-                ? 'border-orange-500 text-orange-400 font-bold'
+              activeTab === 'premios' || activeTab === 'promocoes'
+                ? 'border-amber-400 text-amber-300 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Tag className="w-4 h-4" />
-            Promoções ({promotions.length})
+            <Gift className="w-4 h-4 text-amber-400" />
+            Prêmios ({rewards.length})
           </button>
 
           <button
@@ -677,14 +694,6 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
           >
             <Gift className="w-4 h-4 text-amber-400" />
             Clube Fidelidade
-          </button>
-
-          <button
-            onClick={() => setActiveTab('premios')}
-            className={`py-3 px-3 border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5 ${activeTab === 'premios' ? 'border-amber-400 text-amber-300 font-bold' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
-          >
-            <Gift className="w-4 h-4 text-amber-400" />
-            Prêmios da Casa ({rewards.length})
           </button>
 
           <button
@@ -797,73 +806,6 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
         )}
 
         {/* Tab 2: Promoções */}
-        {activeTab === 'promocoes' && (
-          <div className="mt-5 space-y-4">
-            {promotionsError && (
-              <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">{promotionsError}</div>
-            )}
-            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
-              <span className="font-semibold">Ofertas e Combos Especiais</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 font-bold border border-amber-500/30">
-                Ofertas da loja
-              </span>
-            </div>
-
-            {promotions.length === 0 ? (
-              <div className="text-center py-10 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-xs">
-                Nenhuma promoção ativa no momento para esta lanchonete.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {promotions.map((promo) => (
-                  <div
-                    key={promo.id}
-                    className="rounded-2xl bg-gradient-to-br from-[#141622] to-[#1a1d2d] border border-amber-500/30 p-4.5 space-y-3 relative overflow-hidden shadow-lg"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <span className="inline-block px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/40 mb-1.5">
-                          {promo.badge}
-                        </span>
-                        <h4 className="text-base font-bold text-white">
-                          {promo.title}
-                        </h4>
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <span className="text-xs text-slate-400 line-through block tabular-nums">
-                          R$ {promo.regularPrice.toFixed(2).replace('.', ',')}
-                        </span>
-                        <span className="text-base font-extrabold text-amber-400 tabular-nums">
-                          R$ {promo.discountPrice.toFixed(2).replace('.', ',')}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      {promo.description}
-                    </p>
-
-                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
-                      <span className="text-slate-400">
-                        {promo.validUntil}
-                      </span>
-                      {promo.couponCode && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-400 text-[11px]">Cupom:</span>
-                          <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 font-mono font-bold text-amber-400 text-xs">
-                            {promo.couponCode}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Tab 3: Clube de Fidelidade (Programa de Pontos 70/30) */}
         {activeTab === 'fidelidade' && (
           <div className="mt-5 space-y-4">
