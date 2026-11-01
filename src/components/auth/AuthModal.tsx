@@ -8,6 +8,8 @@ interface AuthModalProps {
   initialMode?: 'login' | 'signup';
   customTitle?: string;
   customSubtitle?: string;
+  /** Constrains the header login dialog to the visible viewport. */
+  fitViewport?: boolean;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -16,6 +18,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialMode = 'login',
   customTitle,
   customSubtitle,
+  fitViewport = false,
 }) => {
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
@@ -94,11 +97,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+      className={`fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 bg-black/80 backdrop-blur-sm animate-fade-in ${fitViewport ? 'overscroll-contain' : ''}`}
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-[#13151f] border border-slate-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative"
+        className={`w-full max-w-md bg-[#13151f] border border-slate-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl relative ${fitViewport ? 'my-auto max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Botão Fechar */}
