@@ -850,7 +850,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                 <img
                   src={newPostImage}
                   alt="Pré-visualização do lanche"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
               </div>
@@ -1092,7 +1092,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
                     src={post.imageUrl}
                     alt="Foto do lanche compartilhada"
                     referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 

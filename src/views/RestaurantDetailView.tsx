@@ -1013,7 +1013,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                         src={post.imageUrl}
                         alt="Foto do lanche"
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                       />
                     </div>
                   )}
