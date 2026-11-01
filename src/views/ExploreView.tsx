@@ -313,12 +313,12 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                   <div className="absolute top-3 left-3 flex items-center gap-2">
                     <span
                       className={`px-2.5 py-0.5 rounded-md text-[11px] font-semibold ${
-                        restaurant.isOpen
+                        restaurant.isOpen === true
                           ? 'bg-emerald-500 text-black font-bold'
                           : 'bg-slate-800 text-text-secondary'
                       }`}
                     >
-                      {restaurant.isOpen ? 'Aberto' : 'Fechado'}
+                      {restaurant.isOpen === true ? 'Aberto' : restaurant.isOpen === false ? 'Fechado' : 'Status não informado'}
                     </span>
                   </div>
 
