@@ -20,10 +20,9 @@ import { MerchantGate } from './components/auth/MerchantGate';
 import { DishDetailModal } from './views/DishDetailModal';
 import { GitHubGuideModal } from './views/GitHubGuideModal';
 import { AcceptInvitationModal } from './components/merchant/AcceptInvitationModal';
-import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseConfigured } from './lib/supabase';
+import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseConfigured, applyReferralCode } from './lib/supabase';
 import { loadAllMenuItems, MOCK_MENU_ITEMS, saveCurrentNeighborhood } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
-import { applyReferralCode } from './lib/supabase';
 
 export default function App() {
   const { user } = useAuth();
@@ -52,8 +51,12 @@ export default function App() {
       const savedReferral = window.localStorage.getItem('zap_pending_referral_code');
       const referralCode = referralFromUrl?.trim() || savedReferral?.trim();
       if (referralCode) {
-        window.localStorage.setItem('zap_pending_referral_code', referralCode);
         setPendingReferralCode(referralCode);
+        try {
+          window.localStorage.setItem('zap_pending_referral_code', referralCode);
+        } catch {
+          // A indicação ainda pode ser aplicada nesta sessão, mesmo sem armazenamento local.
+        }
       }
 
       if (token || referralFromUrl) {
