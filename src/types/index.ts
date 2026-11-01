@@ -52,6 +52,7 @@ export interface Promotion {
   couponCode?: string;
   validUntil: string;
   imageUrl: string;
+  isActive?: boolean;
 }
 
 // -------------------------------------------------------------

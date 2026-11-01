@@ -169,7 +169,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
           return {
             id: p.id,
-            restaurantId: p.restaurant_id,
+            restaurantId: p.restaurant_id || '',
             restaurantName: p.restaurant_name,
             restaurantCategory: p.restaurant_category,
             neighborhood: p.neighborhood,
