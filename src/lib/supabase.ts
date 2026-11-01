@@ -97,6 +97,24 @@ export async function resolveRestaurantUuid(
  * Busca os restaurantes ativos no Supabase.
  * Retorna null quando não é possível consultar os dados reais.
  */
+function getRestaurantFallbackImage(name: string): string {
+  const normalizedName = String(name || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+
+  if (normalizedName.includes('pizza') || normalizedName.includes('forno')) {
+    return '/images/artisan_pizza_1792014251217.jpg';
+  }
+  if (normalizedName.includes('dogao') || normalizedName.includes('dogão')) {
+    return '/images/brazilian_dogao_1792014252458.jpg';
+  }
+  if (normalizedName.includes('smash') || normalizedName.includes('hamburg')) {
+    return '/images/brazilian_burger_1792014250928.jpg';
+  }
+  if (normalizedName.includes('jorge')) {
+    return '/images/lanchonete_front_1792014252947.jpg';
+  }
+  return '/images/brazilian_burger_1792014250928.jpg';
+}
+
 export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | null> {
   if (!isSupabaseConfigured || !supabase) {
     return null;
@@ -137,7 +155,7 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
         deliveryFee: typeof row.delivery_fee === 'number' ? row.delivery_fee : 0,
         minOrder: typeof row.min_order === 'number' ? row.min_order : 20.0,
         priceRange: row.price_range || '$$',
-        bannerUrl: row.image_url || '/images/lanchonete_front_1792014252947.jpg',
+        bannerUrl: row.image_url || getRestaurantFallbackImage(row.name),
         logoUrl: row.logo_url || undefined,
         isOpen: row.status === 'ativo',
         openingHours: row.opening_hours || '18h às 23h30',
