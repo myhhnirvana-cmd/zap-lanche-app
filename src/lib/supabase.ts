@@ -267,9 +267,24 @@ export async function fetchMenuItemsFromSupabase(
   }
 
   try {
+    if (restaurants.length === 0) {
+      supabaseMenuCache = {};
+      return {};
+    }
+
+    const resolvedRestaurantIds = await Promise.all(
+      restaurants.map((restaurant) => resolveRestaurantUuid(restaurant.supabaseId || restaurant.id))
+    );
+    const restaurantIds = [...new Set(resolvedRestaurantIds.filter((id): id is string => Boolean(id)))];
+    if (restaurantIds.length === 0) {
+      supabaseMenuCache = {};
+      return {};
+    }
+
     const { data, error } = await supabase
       .from('menu_items')
-      .select('*');
+      .select('*')
+      .in('restaurant_id', restaurantIds);
 
     if (error) {
       console.error('Falha ao consultar produtos:', error.message);
@@ -277,6 +292,7 @@ export async function fetchMenuItemsFromSupabase(
     }
 
     if (!data || data.length === 0) {
+      supabaseMenuCache = {};
       return {};
     }
 
@@ -285,6 +301,8 @@ export async function fetchMenuItemsFromSupabase(
     for (const restaurant of restaurants) {
       if (restaurant.supabaseId) {
         uuidToSlugMap.set(restaurant.supabaseId, restaurant.id);
+      } else if (UUID_REGEX.test(restaurant.id)) {
+        uuidToSlugMap.set(restaurant.id, restaurant.id);
       }
     }
 
