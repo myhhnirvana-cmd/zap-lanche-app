@@ -906,7 +906,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                 <button onClick={() => setActiveTab('resgates')} className="px-2.5 py-1 rounded-lg bg-orange-500/15 border border-orange-500/30 text-[11px] font-semibold text-orange-300 hover:bg-orange-500/25">Ver meus resgates</button>
               </div>
             </div>
-                        {/* Rewards Grid */}
+                        {/* Catálogo de recompensas da loja */}
             <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
                 Recompensas Disponíveis da Casa ({rewards.length})
@@ -1069,7 +1069,6 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
           </div>
         )}
 
-        {/* Tab 6: Publicações & Fotos */}
         {/* Publicações & Fotos */}
         {activeTab === 'publicacoes' && (
           <div className="mt-5 space-y-4">
