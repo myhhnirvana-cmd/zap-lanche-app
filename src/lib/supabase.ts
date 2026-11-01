@@ -1666,9 +1666,14 @@ export async function fetchRewardsFromSupabase(
   if (!isSupabaseConfigured || !supabase) return null;
 
   try {
+    const resolvedRestaurantId = restaurantId
+      ? await resolveRestaurantUuid(restaurantId)
+      : null;
+    if (restaurantId && !resolvedRestaurantId) return null;
+
     let query = supabase.from('loyalty_rewards').select('*');
-    if (restaurantId) {
-      query = query.eq('restaurant_id', restaurantId);
+    if (resolvedRestaurantId) {
+      query = query.eq('restaurant_id', resolvedRestaurantId);
     }
 
     const { data, error } = await query;
