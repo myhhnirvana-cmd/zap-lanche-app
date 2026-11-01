@@ -30,7 +30,7 @@ export default function App() {
   const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>({ id: 'todos', name: 'Todos os Bairros', zone: '', city: '', state: '', activeSpotsCount: 0 });
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
-  const [selectedRestaurantInitialTab, setSelectedRestaurantInitialTab] = useState<'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes'>('cardapio');
+  const [selectedRestaurantInitialTab, setSelectedRestaurantInitialTab] = useState<'cardapio' | 'promocoes' | 'fidelidade' | 'premios' | 'resgates' | 'publicacoes'>('cardapio');
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
   const [dishModalRestaurant, setDishModalRestaurant] = useState<Restaurant | undefined>(undefined);
   const [isNeighborhoodModalOpen, setIsNeighborhoodModalOpen] = useState(false);
@@ -113,7 +113,7 @@ export default function App() {
   };
 
   // Navigate to restaurant details
-  const handleSelectRestaurant = (restaurant: Restaurant, initialTab: 'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes' = 'cardapio') => {
+  const handleSelectRestaurant = (restaurant: Restaurant, initialTab: 'cardapio' | 'promocoes' | 'fidelidade' | 'premios' | 'resgates' | 'publicacoes' = 'cardapio') => {
     // Sincroniza com versão mais recente da loja
     const current = restaurants.find((r) => r.id === restaurant.id) || restaurant;
     setSelectedRestaurant(current);
@@ -123,7 +123,7 @@ export default function App() {
   };
 
   // Navigate to restaurant by ID (e.g. from Feed or Profile)
-  const handleSelectRestaurantById = (id: string, initialTab: 'cardapio' | 'promocoes' | 'fidelidade' | 'publicacoes' = 'cardapio') => {
+  const handleSelectRestaurantById = (id: string, initialTab: 'cardapio' | 'promocoes' | 'fidelidade' | 'premios' | 'resgates' | 'publicacoes' = 'cardapio') => {
     const found = restaurants.find((r) => r.id === id) || restaurants[0];
     handleSelectRestaurant(found, initialTab);
   };
