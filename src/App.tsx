@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ActiveTab,
   Restaurant,
@@ -20,12 +20,14 @@ import { MerchantGate } from './components/auth/MerchantGate';
 import { DishDetailModal } from './views/DishDetailModal';
 import { GitHubGuideModal } from './views/GitHubGuideModal';
 import { AcceptInvitationModal } from './components/merchant/AcceptInvitationModal';
-import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseConfigured } from './lib/supabase';
+import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseConfigured, applyReferralCode } from './lib/supabase';
 import { loadAllMenuItems, MOCK_MENU_ITEMS, saveCurrentNeighborhood } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
 
 export default function App() {
   const { user } = useAuth();
+  const [pendingReferralCode, setPendingReferralCode] = useState<string | null>(null);
+  const referralAttemptRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('explorar');
   const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>({ id: 'todos', name: 'Todos os Bairros', zone: '', city: '', state: '', activeSpotsCount: 0 });
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -37,21 +39,62 @@ export default function App() {
   const [isGitHubGuideOpen, setIsGitHubGuideOpen] = useState(false);
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
 
-  // Captura do parâmetro de convite (?convite=TOKEN ou ?token=TOKEN) e remoção segura da barra de navegação
+  // Captura convites de comerciante e códigos de indicação antes de qualquer login/cadastro.
+  // O código de indicação fica persistido até o vínculo ser confirmado pelo Supabase.
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
       const token = searchParams.get('convite') || searchParams.get('token');
-      if (token && token.trim()) {
-        setPendingInviteToken(token.trim());
-        // Remove o token da URL para não permanecer no histórico nem ser copiado indevidamente
+      const referralFromUrl = searchParams.get('ref') || searchParams.get('referral');
+      if (token && token.trim()) setPendingInviteToken(token.trim());
+
+      const savedReferral = window.localStorage.getItem('zap_pending_referral_code');
+      const referralCode = referralFromUrl?.trim() || savedReferral?.trim();
+      if (referralCode) {
+        setPendingReferralCode(referralCode);
+        try {
+          window.localStorage.setItem('zap_pending_referral_code', referralCode);
+        } catch {
+          // A indicação ainda pode ser aplicada nesta sessão, mesmo sem armazenamento local.
+        }
+      }
+
+      if (token || referralFromUrl) {
         const cleanUrl = window.location.pathname + (window.location.hash || '');
         window.history.replaceState({}, document.title, cleanUrl);
       }
-    } catch {
-      // Ignora erro de parsing de URL
+    } catch (error) {
+      console.warn('Não foi possível recuperar o convite da URL:', error);
     }
   }, []);
+
+  // Aplica a indicação automaticamente assim que houver uma sessão autenticada.
+  // Em caso de falha, mantém o código salvo para permitir nova tentativa sem bloquear o acesso.
+  useEffect(() => {
+    if (!user?.id || !pendingReferralCode || referralAttemptRef.current === pendingReferralCode) return;
+
+    referralAttemptRef.current = pendingReferralCode;
+
+    const applyPendingReferral = async () => {
+      const result = await applyReferralCode(pendingReferralCode);
+
+      if (result.success) {
+        try {
+          window.localStorage.removeItem('zap_pending_referral_code');
+        } catch {
+          // O vínculo já foi confirmado no servidor.
+        }
+        setPendingReferralCode(null);
+        referralAttemptRef.current = null;
+        console.info('Código de indicação vinculado automaticamente.');
+      } else {
+        console.warn('Não foi possível vincular automaticamente o código de indicação:', result.message);
+        referralAttemptRef.current = null;
+      }
+    };
+
+    void applyPendingReferral();
+  }, [user?.id, pendingReferralCode]);
 
   // Redireciona para 'explorar' se o usuário deslogar enquanto estiver na área de comerciante
   useEffect(() => {
