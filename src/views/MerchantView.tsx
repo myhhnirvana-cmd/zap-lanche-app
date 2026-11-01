@@ -744,7 +744,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setRewardStock('20');
     setRewardStatus('ativo');
     setRewardMaxPerUser('1');
-    setRewardImageUrl(currentRestaurant.bannerUrl);
+    setRewardImageUrl('');
     setRewardOptimizationInfo(null);
     setRewardFormError(null);
     setIsRewardModalOpen(true);
@@ -758,7 +758,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setRewardStock(reward.stock.toString());
     setRewardStatus(reward.status);
     setRewardMaxPerUser(reward.maxRedemptionsPerUser ? reward.maxRedemptionsPerUser.toString() : '1');
-    setRewardImageUrl(reward.imageUrl || currentRestaurant.bannerUrl);
+    setRewardImageUrl(reward.imageUrl || '');
     setRewardOptimizationInfo(null);
     setRewardFormError(null);
     setIsRewardModalOpen(true);
@@ -810,7 +810,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     const minStore = points - maxGlobal;
     const maxPerUser = parseInt(rewardMaxPerUser) || 1;
 
-    let persistentRewardImg = rewardImageUrl || currentRestaurant.bannerUrl;
+    let persistentRewardImg = rewardImageUrl || '';
 
     const targetRestUuid =
       (currentRestaurant.supabaseId && UUID_REGEX.test(currentRestaurant.supabaseId) && currentRestaurant.supabaseId) ||
@@ -946,7 +946,11 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     if (!deletingReward) return;
 
     if (isSupabaseConfigured && UUID_REGEX.test(deletingReward.id)) {
-      await deleteRewardFromSupabase(deletingReward.id);
+      const { error } = await deleteRewardFromSupabase(deletingReward.id);
+      if (error) {
+        showToast(`Não foi possível excluir o prêmio: ${error.message}`, 'error');
+        return;
+      }
     }
 
     const remaining = rewardsList.filter((r) => r.id !== deletingReward.id);
@@ -2490,6 +2494,25 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       {/* ============================================================ */}
       {/* MODAL: CRIAR OU EDITAR PRÊMIO DE FIDELIDADE                  */}
       {/* ============================================================ */}
+
+      {deletingReward && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-reward-title" className="w-full max-w-md rounded-2xl border border-rose-500/30 bg-[#13151f] p-5 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-rose-500/15 p-2 text-rose-400"><Trash2 className="h-5 w-5" /></span>
+              <div className="min-w-0 flex-1">
+                <h3 id="delete-reward-title" className="text-base font-bold text-white">Excluir prêmio?</h3>
+                <p className="mt-2 text-sm text-slate-300">Tem certeza de que deseja excluir <strong className="text-white">{deletingReward.title}</strong> do programa de fidelidade? Esta ação não poderá ser desfeita.</p>
+              </div>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button type="button" onClick={() => setDeletingReward(null)} className="flex-1 rounded-xl bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-700">Cancelar</button>
+              <button type="button" onClick={handleConfirmDeleteReward} className="flex-1 rounded-xl bg-rose-600 px-3 py-2.5 text-sm font-bold text-white hover:bg-rose-500">Excluir prêmio</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isRewardModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg bg-[#13151f] border border-slate-800 rounded-3xl p-6 shadow-2xl">
@@ -2517,6 +2540,47 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                   className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                   required
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-slate-300 font-semibold text-sm">Foto do prêmio (opcional):</label>
+                <input
+                  ref={rewardImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleRewardImageChange}
+                  className="hidden"
+                />
+                {rewardImageUrl ? (
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3">
+                    <img src={rewardImageUrl} alt="Prévia do prêmio" className="h-20 w-20 rounded-lg object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-slate-300">Imagem selecionada para este prêmio.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRewardImageUrl('');
+                          setRewardOptimizationInfo(null);
+                          if (rewardImageInputRef.current) rewardImageInputRef.current.value = '';
+                        }}
+                        className="mt-2 text-xs font-semibold text-rose-400 hover:text-rose-300"
+                      >
+                        Remover foto
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">Nenhuma foto selecionada. O prêmio será salvo sem imagem.</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => rewardImageInputRef.current?.click()}
+                  disabled={isOptimizingRewardImage}
+                  className="w-full rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm font-semibold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+                >
+                  {isOptimizingRewardImage ? 'Processando foto...' : rewardImageUrl ? 'Trocar foto' : 'Escolher foto'}
+                </button>
+                {rewardOptimizationInfo && <p className="text-xs text-emerald-400">{rewardOptimizationInfo}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
