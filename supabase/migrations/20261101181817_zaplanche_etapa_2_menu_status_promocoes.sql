@@ -41,6 +41,14 @@ create table if not exists public.menu_items (
   updated_at timestamptz not null default now()
 );
 
+-- Garante compatibilidade com a tabela menu_items que já existe no banco de produção.
+alter table public.menu_items
+  add column if not exists original_price numeric,
+  add column if not exists category text not null default 'Lanches',
+  add column if not exists badge text,
+  add column if not exists prep_time_minutes integer not null default 20,
+  add column if not exists updated_at timestamptz not null default now();
+
 alter table public.menu_items enable row level security;
 grant select on public.menu_items to anon, authenticated;
 grant insert, update, delete on public.menu_items to authenticated;
