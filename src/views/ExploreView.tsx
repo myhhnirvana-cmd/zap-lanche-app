@@ -305,7 +305,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                   {/* Rating Badge */}
                   <div className="absolute top-3 right-3 px-2 py-1 rounded-lg bg-black/75 backdrop-blur-md border border-border-muted/60 text-text-primary text-xs font-bold flex items-center gap-1">
                     <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span className="tabular-nums">{restaurant.rating.toFixed(1)}</span>
+                    <span className="tabular-nums">{restaurant.reviewCount > 0 ? restaurant.rating.toFixed(1) : 'Sem avaliações'}</span>
                     <span className="text-[10px] text-text-secondary">({restaurant.reviewCount})</span>
                   </div>
 
@@ -313,12 +313,12 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                   <div className="absolute top-3 left-3 flex items-center gap-2">
                     <span
                       className={`px-2.5 py-0.5 rounded-md text-[11px] font-semibold ${
-                        restaurant.isOpen
+                        restaurant.isOpen === true
                           ? 'bg-emerald-500 text-black font-bold'
                           : 'bg-slate-800 text-text-secondary'
                       }`}
                     >
-                      {restaurant.isOpen ? 'Aberto' : 'Fechado'}
+                      {restaurant.isOpen === true ? 'Aberto' : restaurant.isOpen === false ? 'Fechado' : 'Status não informado'}
                     </span>
                   </div>
 
@@ -326,7 +326,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                   <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-xs text-text-secondary">
                     <span className="flex items-center gap-1 font-medium text-amber-300 drop-shadow-sm">
                       <MapPin className="w-3 h-3 text-orange-400" />
-                      {restaurant.neighborhoodName} · {restaurant.distanceKm} km
+                      {restaurant.neighborhoodName}{restaurant.distanceKm > 0 ? ` · ${restaurant.distanceKm} km` : ''}
                     </span>
                     <span className="flex items-center gap-1 text-text-secondary">
                       <Clock className="w-3 h-3 text-text-secondary" />

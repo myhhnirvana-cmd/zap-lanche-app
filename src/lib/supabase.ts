@@ -148,17 +148,20 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
         neighborhoodName: row.neighborhood || 'Bairro',
         category: (row.category || 'hamburguer') as any,
         categoryLabel: row.category_label || 'Lanches de Bairro',
-        rating: typeof row.rating === 'number' ? row.rating : 5.0,
-        reviewCount: typeof row.review_count === 'number' ? row.review_count : 0,
-        deliveryTime: row.delivery_time || '30-40 min',
-        distanceKm: typeof row.distance_km === 'number' ? row.distance_km : 1.0,
+        rating: Number(row.rating) || 0,
+        reviewCount: Number(row.review_count) || 0,
+        deliveryTime: row.delivery_time || (row.prep_time_minutes ? `${row.prep_time_minutes} min` : ''),
+        prepTimeMinutes: typeof row.prep_time_minutes === 'number' ? row.prep_time_minutes : undefined,
+        distanceKm: 0,
+        latitude: typeof row.latitude === 'number' ? row.latitude : undefined,
+        longitude: typeof row.longitude === 'number' ? row.longitude : undefined,
         deliveryFee: typeof row.delivery_fee === 'number' ? row.delivery_fee : 0,
         minOrder: typeof row.min_order === 'number' ? row.min_order : 20.0,
         priceRange: row.price_range || '$$',
         bannerUrl: row.image_url || getRestaurantFallbackImage(row.name),
         logoUrl: row.logo_url || undefined,
-        isOpen: row.is_open === true,
-        openingHours: row.opening_hours || '18h às 23h30',
+        isOpen: typeof row.is_open === 'boolean' ? row.is_open : undefined,
+        openingHours: row.opening_hours || '',
         address: cleanAddress,
         whatsappDemo: cleanWhatsapp,
         verifiedNeighborhoodSpot: Boolean(row.owner_profile_id),
@@ -227,17 +230,20 @@ export async function fetchMerchantRestaurant(
       neighborhoodName: data.neighborhood || 'Bairro',
       category: (data.category || 'hamburguer') as any,
       categoryLabel: data.category_label || 'Lanches de Bairro',
-      rating: typeof data.rating === 'number' ? data.rating : 5.0,
-      reviewCount: typeof data.review_count === 'number' ? data.review_count : 0,
-      deliveryTime: data.delivery_time || '30-40 min',
-      distanceKm: typeof data.distance_km === 'number' ? data.distance_km : 1.0,
+      rating: Number(data.rating) || 0,
+      reviewCount: Number(data.review_count) || 0,
+      deliveryTime: data.delivery_time || (data.prep_time_minutes ? `${data.prep_time_minutes} min` : ''),
+      prepTimeMinutes: typeof data.prep_time_minutes === 'number' ? data.prep_time_minutes : undefined,
+      distanceKm: 0,
+      latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+      longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
       deliveryFee: typeof data.delivery_fee === 'number' ? data.delivery_fee : 0,
       minOrder: typeof data.min_order === 'number' ? data.min_order : 20.0,
       priceRange: data.price_range || '$$',
       bannerUrl: data.image_url || '/images/lanchonete_front_1792014252947.jpg',
       logoUrl: data.logo_url || undefined,
-      isOpen: data.is_open === true,
-      openingHours: data.opening_hours || '18h às 23h30',
+      isOpen: typeof data.is_open === 'boolean' ? data.is_open : undefined,
+      openingHours: data.opening_hours || '',
       address: cleanAddress,
       whatsappDemo: cleanWhatsapp,
       verifiedNeighborhoodSpot: true,
@@ -599,6 +605,10 @@ export interface UpdateRestaurantInput {
   logo_url?: string;
   is_open?: boolean;
   opening_hours?: string | null;
+  delivery_time?: string | null;
+  prep_time_minutes?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 /**
@@ -637,6 +647,10 @@ export async function updateRestaurantInSupabase(input: UpdateRestaurantInput) {
   if (input.logo_url !== undefined) payload.logo_url = input.logo_url?.trim() || null;
   if (input.is_open !== undefined) payload.is_open = input.is_open;
   if (input.opening_hours !== undefined) payload.opening_hours = input.opening_hours?.trim() || null;
+  if (input.delivery_time !== undefined) payload.delivery_time = input.delivery_time?.trim() || null;
+  if (input.prep_time_minutes !== undefined) payload.prep_time_minutes = input.prep_time_minutes;
+  if (input.latitude !== undefined) payload.latitude = input.latitude;
+  if (input.longitude !== undefined) payload.longitude = input.longitude;
 
   let { data, error } = await supabase
     .from('restaurants')
@@ -2005,3 +2019,64 @@ export async function cancelLoyaltyRedemption(
   }
 }
 
+
+
+export interface RestaurantReviewSummary {
+  average: number;
+  count: number;
+  myRating: number | null;
+  myComment: string | null;
+}
+
+export async function fetchRestaurantReviewSummary(restaurantId: string, profileId?: string): Promise<RestaurantReviewSummary | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const restaurantUuid = await resolveRestaurantUuid(restaurantId);
+  if (!restaurantUuid) return null;
+
+  const { data: restaurantRow, error: restaurantError } = await supabase
+    .from('restaurants')
+    .select('rating, review_count')
+    .eq('id', restaurantUuid)
+    .maybeSingle();
+  if (restaurantError || !restaurantRow) return null;
+
+  let myRating: number | null = null;
+  let myComment: string | null = null;
+  if (profileId) {
+    const { data: myReview } = await supabase
+      .from('restaurant_reviews')
+      .select('rating, comment')
+      .eq('restaurant_id', restaurantUuid)
+      .eq('profile_id', profileId)
+      .maybeSingle();
+    if (myReview) {
+      myRating = Number(myReview.rating);
+      myComment = myReview.comment || null;
+    }
+  }
+
+  return {
+    average: Number(restaurantRow.rating) || 0,
+    count: Number(restaurantRow.review_count) || 0,
+    myRating,
+    myComment,
+  };
+}
+
+export async function insertRestaurantReview(input: { restaurantId: string; profileId: string; rating: number; comment?: string }): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) return { success: false, error: 'Conexão indisponível.' };
+  const restaurantUuid = await resolveRestaurantUuid(input.restaurantId);
+  if (!restaurantUuid) return { success: false, error: 'Loja não identificada no sistema.' };
+  const { error } = await supabase.from('restaurant_reviews').insert({
+    restaurant_id: restaurantUuid,
+    profile_id: input.profileId,
+    rating: input.rating,
+    comment: input.comment?.trim() || null,
+  });
+  if (error) {
+    if (error.code === '23505') return { success: false, error: 'Você já avaliou esta loja.' };
+    console.error('Falha ao registrar avaliação:', error.message);
+    return { success: false, error: 'Não foi possível salvar sua avaliação agora.' };
+  }
+  return { success: true };
+}

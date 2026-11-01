@@ -136,13 +136,16 @@ export interface Restaurant {
   rating: number;
   reviewCount: number;
   deliveryTime: string;
+  prepTimeMinutes?: number;
   distanceKm: number;
+  latitude?: number;
+  longitude?: number;
   deliveryFee: number;
   minOrder: number;
   priceRange: '$' | '$$' | '$$$';
   bannerUrl: string;
   logoUrl?: string;
-  isOpen: boolean;
+  isOpen?: boolean;
   openingHours: string;
   address: string;
   whatsappDemo: string;
