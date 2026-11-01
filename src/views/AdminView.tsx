@@ -58,6 +58,7 @@ interface AdminViewProps {
 export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onRestaurantAdded }) => {
   const { session, user } = useAuth();
   const [stats, setStats] = useState<AdminDemoStats>(MOCK_ADMIN_STATS);
+  const [pendingDeletion, setPendingDeletion] = useState<{ type: 'highlight' | 'notice' | 'audit'; id: string; title: string } | null>(null);
   const [approvedList, setApprovedList] = useState<Record<string, 'approved' | 'rejected'>>({});
 
   // Parâmetros configuráveis do programa
@@ -311,12 +312,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
 
   const handleDeleteHighlight = (id: string) => {
     const item = highlights.find((highlight) => highlight.id === id);
-    if (!item || !window.confirm(`Excluir a solicitação de destaque de "${item.restaurantName}"? Esta ação não poderá ser desfeita.`)) return;
-    setHighlights((prev) => {
-      const updated = prev.filter((highlight) => highlight.id !== id);
-      saveRegionalHighlights(updated);
-      return updated;
-    });
+    if (item) setPendingDeletion({ type: 'highlight', id, title: item.restaurantName });
   };
 
   // Publicar novo aviso comunitário
@@ -345,18 +341,33 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
 
   const handleDeleteNotice = (id: string) => {
     const item = notices.find((notice) => notice.id === id);
-    if (!item || !window.confirm(`Excluir o aviso "${item.title}"? Esta ação não poderá ser desfeita.`)) return;
-    setNotices((prev) => {
-      const updated = prev.filter((notice) => notice.id !== id);
-      saveAdminNotices(updated);
-      return updated;
-    });
+    if (item) setPendingDeletion({ type: 'notice', id, title: item.title });
   };
 
   const handleDeleteAuditLog = (id: string) => {
     const item = stats.auditLogs.find((log) => log.id === id);
-    if (!item || !window.confirm(`Excluir o registro "${item.action}"? Esta ação não poderá ser desfeita.`)) return;
-    setStats((prev) => ({ ...prev, auditLogs: prev.auditLogs.filter((log) => log.id !== id) }));
+    if (item) setPendingDeletion({ type: 'audit', id, title: item.action });
+  };
+
+  const confirmPendingDeletion = () => {
+    if (!pendingDeletion) return;
+    const { type, id } = pendingDeletion;
+    if (type === 'highlight') {
+      setHighlights((prev) => {
+        const updated = prev.filter((highlight) => highlight.id !== id);
+        saveRegionalHighlights(updated);
+        return updated;
+      });
+    } else if (type === 'notice') {
+      setNotices((prev) => {
+        const updated = prev.filter((notice) => notice.id !== id);
+        saveAdminNotices(updated);
+        return updated;
+      });
+    } else {
+      setStats((prev) => ({ ...prev, auditLogs: prev.auditLogs.filter((log) => log.id !== id) }));
+    }
+    setPendingDeletion(null);
   };
 
   const handleToggleNotice = (id: string) => {
@@ -1221,6 +1232,48 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
           ))}
         </div>
       </div>
+
+      {pendingDeletion && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
+          role="presentation"
+          onClick={() => setPendingDeletion(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            className="w-full max-w-sm rounded-2xl border border-rose-500/30 bg-slate-900 p-5 shadow-2xl space-y-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <span className="rounded-xl bg-rose-500/15 p-2 text-rose-300">
+                <Trash2 className="h-5 w-5" />
+              </span>
+              <h3 id="delete-confirm-title" className="text-base font-bold text-white">Confirmar exclusão</h3>
+            </div>
+            <p className="text-sm text-slate-300">
+              Deseja realmente excluir <strong className="text-white">{pendingDeletion.title}</strong>? Esta ação não poderá ser desfeita.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDeletion(null)}
+                className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmPendingDeletion}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-500"
+              >
+                Confirmar exclusão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
