@@ -791,7 +791,6 @@ function mapDbRowToMenuItem(row: any, originalInput?: Partial<MenuItem>): MenuIt
       typeof row.price === 'number'
         ? row.price
         : parseFloat(row.price) || (originalInput?.price ?? 0),
-    originalPrice: originalInput?.originalPrice,
     imageUrl: row.image_url ?? originalInput?.imageUrl ?? '',
     category: row.category || originalInput?.category || 'Lanches',
     originalPrice: row.original_price == null ? originalInput?.originalPrice : Number(row.original_price),
