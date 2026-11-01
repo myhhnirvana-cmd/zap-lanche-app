@@ -9,7 +9,6 @@ import {
   Share2,
   CheckCircle,
   Sparkles,
-  Tag,
   Plus,
   Flame,
   MessageSquare,
@@ -34,9 +33,8 @@ import {
   redeemRewardInSupabase,
   fetchRewardsFromSupabase,
   fetchRestaurantMenuFromSupabase,
-  fetchRestaurantPromotions,
 } from '../lib/supabase';
-import { Restaurant, MenuItem, Promotion, SocialPost, LoyaltyReward, UserProfileDemo } from '../types';
+import { Restaurant, MenuItem, SocialPost, LoyaltyReward, UserProfileDemo } from '../types';
 import {
   MOCK_MENU_ITEMS,
   MOCK_POSTS,
@@ -81,8 +79,6 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [userProfile, setUserProfile] = useState<UserProfileDemo>(() => loadUserProfile());
   const [rewardsList, setRewardsList] = useState<LoyaltyReward[]>(() => loadRestaurantRewards(restaurant.id));
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => loadRestaurantMenu(restaurant.id));
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
-  const [promotionsError, setPromotionsError] = useState<string | null>(null);
   const [myRedemptions, setMyRedemptions] = useState<Array<{id:string; voucher_code:string; status:string; points_cost:number; created_at:string; expires_at:string; used_at:string|null; reward_title:string|null}>>([]);
   const [isLoadingRedemptions, setIsLoadingRedemptions] = useState(false);
   const [redemptionHistoryError, setRedemptionHistoryError] = useState<string | null>(null);
@@ -362,21 +358,18 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
 
   const rewards = rewardsList;
 
-  // Cardápio, promoções e prêmios vêm da loja atual no Supabase.
+  // Cardápio e prêmios vêm da loja atual no Supabase.
   // Array vazio é uma resposta válida e substitui o cache antigo; erro mantém o cache local.
   useEffect(() => {
     let isMounted = true;
     const loadRestaurantContent = async () => {
       if (!isSupabaseConfigured) {
         setMenuItems(loadRestaurantMenu(restaurant.id));
-        setPromotions([]);
-        setPromotionsError(null);
         return;
       }
 
-      const [dbMenu, dbPromotions, dbRewards] = await Promise.all([
+      const [dbMenu, dbRewards] = await Promise.all([
         fetchRestaurantMenuFromSupabase(restaurant),
-        fetchRestaurantPromotions(restaurant.supabaseId || restaurant.id, restaurant.name),
         fetchRewardsFromSupabase(restaurant.supabaseId || restaurant.id),
       ]);
 
@@ -386,13 +379,6 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
         saveRestaurantMenu(restaurant.id, dbMenu);
       } else {
         setMenuItems(loadRestaurantMenu(restaurant.id));
-      }
-      if (dbPromotions === null) {
-        setPromotions([]);
-        setPromotionsError('Não foi possível carregar as promoções desta loja agora. Tente novamente mais tarde.');
-      } else {
-        setPromotions(dbPromotions.filter((promotion) => promotion.isActive !== false && (!promotion.validUntil || new Date(promotion.validUntil).getTime() >= Date.now())));
-        setPromotionsError(null);
       }
       if (dbRewards !== null) {
         const localOnlyRewards = loadRestaurantRewards(restaurant.id).filter((reward) =>
