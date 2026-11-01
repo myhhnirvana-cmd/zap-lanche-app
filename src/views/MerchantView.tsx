@@ -125,7 +125,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const currentRestaurant =
     allRestaurants.find((r) => r.id === selectedRestaurantId) || allRestaurants[0];
 
-  const [isOpenToday, setIsOpenToday] = useState(currentRestaurant.isOpen);
+  const [isOpenToday, setIsOpenToday] = useState(currentRestaurant.isOpen ?? false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() =>
     loadRestaurantMenu(selectedRestaurantId)
   );
@@ -178,7 +178,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
     setMenuItems(loadRestaurantMenu(storeId));
     setPromotions([]);
-    setIsOpenToday(store.isOpen);
+    setIsOpenToday(store.isOpen ?? false);
 
     const storeRewards = loadRestaurantRewards(storeId);
     setRewardsList(storeRewards);
