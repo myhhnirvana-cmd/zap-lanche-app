@@ -313,9 +313,16 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
     let isMounted = true;
     const loadRedemptions = async () => {
       if (activeTab !== 'resgates') return;
-      if (!isSupabaseConfigured || !supabase || !user?.id) {
+      if (!user?.id) {
         setMyRedemptions([]);
         setRedemptionHistoryError(null);
+        setIsLoadingRedemptions(false);
+        return;
+      }
+      if (!isSupabaseConfigured || !supabase) {
+        setMyRedemptions([]);
+        setRedemptionHistoryError('Não foi possível consultar seus resgates porque a conexão com o sistema está indisponível. Tente novamente mais tarde.');
+        setIsLoadingRedemptions(false);
         return;
       }
       const restaurantUuid = (restaurant.supabaseId && UUID_REGEX.test(restaurant.supabaseId) && restaurant.supabaseId) || (UUID_REGEX.test(restaurant.id) ? restaurant.id : null);
