@@ -82,6 +82,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [rewardsList, setRewardsList] = useState<LoyaltyReward[]>(() => loadRestaurantRewards(restaurant.id));
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => loadRestaurantMenu(restaurant.id));
   const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promotionsError, setPromotionsError] = useState<string | null>(null);
   const [myRedemptions, setMyRedemptions] = useState<Array<{id:string; voucher_code:string; status:string; points_cost:number; created_at:string; expires_at:string; used_at:string|null; reward_title:string|null}>>([]);
   const [isLoadingRedemptions, setIsLoadingRedemptions] = useState(false);
   const [redemptionHistoryError, setRedemptionHistoryError] = useState<string | null>(null);
@@ -362,6 +363,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
       if (!isSupabaseConfigured) {
         setMenuItems(loadRestaurantMenu(restaurant.id));
         setPromotions([]);
+        setPromotionsError(null);
         return;
       }
 
@@ -378,7 +380,13 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
       } else {
         setMenuItems(loadRestaurantMenu(restaurant.id));
       }
-      setPromotions(dbPromotions ?? []);
+      if (dbPromotions === null) {
+        setPromotions([]);
+        setPromotionsError('Não foi possível carregar as promoções desta loja agora. Tente novamente mais tarde.');
+      } else {
+        setPromotions(dbPromotions.filter((promotion) => promotion.isActive !== false && (!promotion.validUntil || new Date(promotion.validUntil).getTime() >= Date.now())));
+        setPromotionsError(null);
+      }
       if (dbRewards !== null) setRewardsList(dbRewards);
     };
 
@@ -791,6 +799,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
         {/* Tab 2: Promoções */}
         {activeTab === 'promocoes' && (
           <div className="mt-5 space-y-4">
+            {promotionsError && <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-300">{promotionsError}</div>
             <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
               <span className="font-semibold">Ofertas e Combos Especiais</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 font-bold border border-amber-500/30">
