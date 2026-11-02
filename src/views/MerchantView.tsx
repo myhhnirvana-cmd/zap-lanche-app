@@ -141,6 +141,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const [promotionRegularPrice, setPromotionRegularPrice] = useState('');
   const [promotionCouponCode, setPromotionCouponCode] = useState('');
   const [promotionValidUntil, setPromotionValidUntil] = useState('');
+  const [promotionImageData, setPromotionImageData] = useState<string | null>(null);
+  const [promotionImageUrl, setPromotionImageUrl] = useState('');
   const [promotionError, setPromotionError] = useState<string | null>(null);
   const [isSavingPromotion, setIsSavingPromotion] = useState(false);
   const [isUpdatingOpenStatus, setIsUpdatingOpenStatus] = useState(false);
@@ -817,6 +819,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setPromotionRegularPrice('');
     setPromotionCouponCode('');
     setPromotionValidUntil('');
+    setPromotionImageData(null);
+    setPromotionImageUrl('');
     setPromotionError(null);
   };
 
@@ -831,9 +835,27 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setPromotionRegularPrice(String(promotion.regularPrice));
       setPromotionCouponCode(promotion.couponCode || '');
       setPromotionValidUntil(promotion.validUntil ? new Date(promotion.validUntil).toISOString().slice(0, 10) : '');
+      setPromotionImageData(null);
+      setPromotionImageUrl(promotion.imageUrl || '');
       setPromotionError(null);
     }
     setIsPromotionFormOpen(true);
+  };
+
+  const handlePromotionImageChange = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setPromotionError('Selecione um arquivo de imagem válido.');
+      return;
+    }
+    try {
+      const optimized = await optimizeImage(file, 1600, 0.8);
+      setPromotionImageData(optimized.dataUrl);
+      setPromotionImageUrl('');
+      setPromotionError(null);
+    } catch (error) {
+      setPromotionError(error instanceof Error ? error.message : 'Não foi possível preparar a imagem.');
+    }
   };
 
   const handleSavePromotion = async (e: React.FormEvent) => {
@@ -847,6 +869,20 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setIsSavingPromotion(true);
     setPromotionError(null);
     const validUntil = promotionValidUntil ? new Date(`${promotionValidUntil}T23:59:59`).toISOString() : '';
+    let finalImageUrl = promotionImageUrl;
+    if (promotionImageData) {
+      const upload = await uploadRestaurantImage(
+        currentRestaurant.supabaseId || currentRestaurant.id,
+        promotionImageData,
+        'promotion'
+      );
+      if (upload.error || !upload.publicUrl) {
+        setPromotionError(upload.error?.message || 'Não foi possível enviar a imagem da promoção.');
+        setIsSavingPromotion(false);
+        return;
+      }
+      finalImageUrl = upload.publicUrl;
+    }
     const changes = {
       title: promotionTitle.trim(),
       description: promotionDescription.trim(),
@@ -855,7 +891,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       regularPrice,
       couponCode: promotionCouponCode.trim(),
       validUntil,
-      imageUrl: '',
+      imageUrl: finalImageUrl,
     };
     if (editingPromotionId) {
       const result = await updateRestaurantPromotion(editingPromotionId, changes);
@@ -1645,6 +1681,24 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             <h4 className="text-sm font-bold text-white">{editingPromotionId ? 'Editar promoção' : 'Cadastrar promoção'}</h4>
             <input value={promotionTitle} onChange={(e) => setPromotionTitle(e.target.value)} placeholder="Nome da oferta ou combo" className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" required />
             <textarea value={promotionDescription} onChange={(e) => setPromotionDescription(e.target.value)} placeholder="Descreva o que está incluído na oferta" className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" rows={2} />
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                <ImageIcon className="w-4 h-4 text-orange-400" /> Imagem da promoção
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handlePromotionImageChange(e.target.files?.[0])}
+                className="block w-full text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-500 file:px-3 file:py-2 file:font-bold file:text-black"
+              />
+              {(promotionImageData || promotionImageUrl) && (
+                <div className="relative w-full max-w-xs">
+                  <img src={promotionImageData || promotionImageUrl} alt="Prévia da promoção" className="h-36 w-full rounded-xl border border-slate-700 object-cover" />
+                  <button type="button" onClick={() => { setPromotionImageData(null); setPromotionImageUrl(''); }} className="mt-1 text-xs text-rose-300">Remover imagem</button>
+                </div>
+              )}
+              <p className="text-[11px] text-slate-500">Escolha uma foto do produto ou da oferta. A imagem será otimizada antes do envio.</p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <input value={promotionDiscountPrice} onChange={(e) => setPromotionDiscountPrice(e.target.value)} placeholder="Preço promocional (R$)" inputMode="decimal" className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" required />
               <input value={promotionRegularPrice} onChange={(e) => setPromotionRegularPrice(e.target.value)} placeholder="Preço original (R$)" inputMode="decimal" className="w-full rounded-xl bg-[#13151f] border border-slate-700 px-3 py-2.5 text-sm text-white" required />
