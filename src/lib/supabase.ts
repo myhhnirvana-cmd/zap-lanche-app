@@ -1855,7 +1855,7 @@ export async function updateRewardInSupabase(
       pointsCost: data.points_cost,
       stock: data.stock,
       status: data.status,
-      isAvailable: data.status === 'ativo' && data.stock > 0,
+      isAvailable: data.is_active !== false && data.status === 'ativo' && data.stock > 0,
       maxGlobalPointsAllowed: Math.round(data.points_cost * 0.3),
       minStorePointsRequired: Math.round(data.points_cost * 0.7),
       maxRedemptionsPerUser: data.max_redemptions_per_user || 1,
