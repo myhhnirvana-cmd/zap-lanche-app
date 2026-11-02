@@ -175,6 +175,7 @@ export interface SocialPost {
   restaurantCategory: string;
   neighborhood: string;
   authorId?: string; // Identificador estável do autor (regra de interface para o protótipo)
+  authorProfileId?: string; // UUID do perfil autoritativo retornado pelo Supabase
   authorName: string;
   authorAvatar: string;
   authorRole: 'morador' | 'comerciante' | 'critico_do_bairro';
