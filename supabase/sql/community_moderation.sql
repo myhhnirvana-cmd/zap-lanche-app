@@ -83,14 +83,14 @@ language plpgsql security definer
 set search_path = public, pg_temp
 as $$
 begin
-  if auth.uid() = old.id and not public.is_admin() and (
+  if (
     new.is_suspended is distinct from old.is_suspended or
     new.suspension_reason is distinct from old.suspension_reason or
     new.suspended_at is distinct from old.suspended_at or
     new.suspended_until is distinct from old.suspended_until or
     new.suspended_by is distinct from old.suspended_by
-  ) then
-    raise exception 'Os dados de moderação não podem ser alterados pelo próprio usuário.'
+  ) and not public.is_admin() then
+    raise exception 'Somente administradores podem alterar os campos de moderação.'
       using errcode = '42501';
   end if;
   return new;
@@ -143,7 +143,12 @@ declare v_role text;
 begin
   if not public.is_admin() then raise exception 'Acesso restrito a administradores.' using errcode = '42501'; end if;
   if p_profile_id = auth.uid() then raise exception 'Não é permitido suspender a própria conta.' using errcode = '42501'; end if;
+  if p_suspend is null then raise exception 'A ação de moderação é obrigatória.'; end if;
   if nullif(btrim(p_reason), '') is null then raise exception 'O motivo é obrigatório.'; end if;
+  if length(btrim(p_reason)) > 1000 then raise exception 'O motivo deve ter no máximo 1000 caracteres.'; end if;
+  if p_suspend and p_suspended_until is not null and p_suspended_until <= now() then
+    raise exception 'O fim da suspensão deve ser uma data futura.';
+  end if;
   select role into v_role from public.profiles where id = p_profile_id for update;
   if not found then raise exception 'Usuário não encontrado.'; end if;
   if v_role = 'admin' then raise exception 'Contas administrativas estão protegidas.' using errcode = '42501'; end if;
