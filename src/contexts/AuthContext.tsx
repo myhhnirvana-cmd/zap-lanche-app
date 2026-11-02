@@ -10,6 +10,9 @@ export interface UserProfileRecord {
   username: string | null;
   role: string | null;
   created_at: string | null;
+  is_suspended?: boolean;
+  suspension_reason?: string | null;
+  suspended_until?: string | null;
 }
 
 export interface AdminDiagnostic {
@@ -104,7 +107,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, username, role, created_at')
+        .select('id, full_name, username, role, created_at, is_suspended, suspension_reason, suspended_until')
         .eq('id', currentUser.id)
         .maybeSingle();
 
