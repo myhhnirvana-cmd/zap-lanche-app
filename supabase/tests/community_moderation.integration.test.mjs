@@ -57,7 +57,6 @@ test('authenticated community moderation lifecycle', async () => {
     adminId = await createDisposableUser(adminEmail);
     memberId = await createDisposableUser(memberEmail);
 
-    // Auth signup trigger should provision the matching public profiles.
     let profiles = [];
     for (let attempt = 0; attempt < 15; attempt++) {
       const result = await adminApi.from('profiles')
@@ -70,7 +69,6 @@ test('authenticated community moderation lifecycle', async () => {
     }
     assert.equal(profiles.length, 2, 'Auth signup did not provision both profile rows.');
 
-    // Promote only this newly-created disposable account, using the server-only key.
     await dataOrThrow(
       await adminApi.from('profiles').update({ role: 'admin' }).eq('id', adminId),
       'Promote disposable admin fixture'
@@ -100,9 +98,7 @@ test('authenticated community moderation lifecycle', async () => {
     postId = createdPost.id;
 
     await dataOrThrow(await admin.rpc('admin_moderate_community_post', {
-      p_post_id: postId,
-      p_remove: true,
-      p_reason: 'Automated integration test: hide'
+      p_post_id: postId, p_remove: true, p_reason: 'Automated integration test: hide'
     }), 'Hide test post');
 
     let post = await dataOrThrow(
@@ -114,9 +110,7 @@ test('authenticated community moderation lifecycle', async () => {
     assert.equal(post.moderation_original_status, 'publicado');
 
     await dataOrThrow(await admin.rpc('admin_moderate_community_post', {
-      p_post_id: postId,
-      p_remove: false,
-      p_reason: 'Automated integration test: restore'
+      p_post_id: postId, p_remove: false, p_reason: 'Automated integration test: restore'
     }), 'Restore test post');
 
     post = await dataOrThrow(
@@ -141,25 +135,19 @@ test('authenticated community moderation lifecycle', async () => {
     assert.equal(suspension.is_suspended, true);
 
     const blockedPost = await member.from('posts').insert({
-      author_profile_id: memberId,
-      title: 'Must be blocked',
-      content: 'Suspended account write attempt',
-      status: 'publicado',
-      post_type: 'publicacao'
+      author_profile_id: memberId, title: 'Must be blocked',
+      content: 'Suspended account write attempt', status: 'publicado', post_type: 'publicacao'
     });
     assert.ok(blockedPost.error, 'Suspended member unexpectedly published a post.');
 
     const blockedComment = await member.from('comments').insert({
-      post_id: postId,
-      profile_id: memberId,
-      author_name: 'Automated test',
-      text: 'Must be blocked'
+      post_id: postId, profile_id: memberId,
+      author_name: 'Automated test', text: 'Must be blocked'
     });
     assert.ok(blockedComment.error, 'Suspended member unexpectedly commented.');
 
     const blockedLike = await member.from('post_likes').insert({
-      post_id: postId,
-      profile_id: memberId
+      post_id: postId, profile_id: memberId
     });
     assert.ok(blockedLike.error, 'Suspended member unexpectedly liked a post.');
 
@@ -183,9 +171,23 @@ test('authenticated community moderation lifecycle', async () => {
     assert.equal(reinstated.suspension_reason, null);
     assert.equal(reinstated.suspended_until, null);
   } finally {
-    // Best-effort cleanup always targets only IDs created in this test run.
-    if (postId) await adminApi.from('posts').delete().eq('id', postId);
-    if (memberId) await adminApi.auth.admin.deleteUser(memberId);
-    if (adminId) await adminApi.auth.admin.deleteUser(adminId);
+    // Remove only this run's fixtures. Audit rows reference the acting admin,
+    // so delete those disposable log rows before deleting that Auth user.
+    if (postId) await dataOrThrow(
+      await adminApi.from('posts').delete().eq('id', postId),
+      'Clean up disposable post'
+    );
+    if (adminId) await dataOrThrow(
+      await adminApi.from('community_moderation_logs').delete().eq('performed_by', adminId),
+      'Clean up disposable moderation audit rows'
+    );
+    if (memberId) await dataOrThrow(
+      await adminApi.auth.admin.deleteUser(memberId),
+      'Delete disposable member'
+    );
+    if (adminId) await dataOrThrow(
+      await adminApi.auth.admin.deleteUser(adminId),
+      'Delete disposable admin'
+    );
   }
 });
