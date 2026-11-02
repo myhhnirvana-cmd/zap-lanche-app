@@ -9,6 +9,15 @@ alter table public.profiles
   add column if not exists suspended_until timestamptz,
   add column if not exists suspended_by uuid references public.profiles(id);
 
+-- A remoção por moderação é reversível e preserva o status anterior da publicação.
+alter table public.posts
+  add column if not exists moderation_original_status text;
+
+alter table public.posts drop constraint if exists posts_status_check;
+alter table public.posts
+  add constraint posts_status_check
+  check (status = any (array['rascunho'::text, 'publicado'::text, 'encerrado'::text, 'removido_moderacao'::text));
+
 create table if not exists public.community_moderation_logs (
   id uuid primary key default gen_random_uuid(),
   target_profile_id uuid references public.profiles(id) on delete set null,
@@ -164,9 +173,21 @@ begin
   select status into v_status from public.posts where id = p_post_id for update;
   if not found then raise exception 'Publicação não encontrada.'; end if;
   if p_remove then
-    update public.posts set status = 'removido_moderacao' where id = p_post_id;
+    if v_status = 'removido_moderacao' then
+      raise exception 'Publicação já está oculta pela moderação.';
+    end if;
+    update public.posts
+      set moderation_original_status = v_status,
+          status = 'removido_moderacao'
+      where id = p_post_id;
   else
-    update public.posts set status = 'publicado' where id = p_post_id and status = 'removido_moderacao';
+    if v_status <> 'removido_moderacao' then
+      raise exception 'Publicação não está oculta pela moderação.';
+    end if;
+    update public.posts
+      set status = coalesce(moderation_original_status, 'publicado'),
+          moderation_original_status = null
+      where id = p_post_id;
   end if;
   insert into public.community_moderation_logs(target_post_id, action, reason, performed_by)
   values (p_post_id, case when p_remove then 'post_hidden' else 'post_restored' end, btrim(p_reason), auth.uid());
