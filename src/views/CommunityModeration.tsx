@@ -12,6 +12,7 @@ type Member = {
   suspended_until: string | null;
   created_at: string;
 };
+type ModerationLog = { id: string; action: string; reason: string; performed_by_name: string | null; target_name: string | null; created_at: string };
 type CommunityPost = {
   id: string;
   title: string | null;
@@ -26,6 +27,7 @@ const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-950 px-3 
 export const CommunityModeration: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [history, setHistory] = useState<ModerationLog[]>([]);
   const [selectedUser, setSelectedUser] = useState<Member | null>(null);
   const [reason, setReason] = useState('');
   const [duration, setDuration] = useState<'1' | '7' | '30' | '90' | 'permanent'>('7');
@@ -45,12 +47,14 @@ export const CommunityModeration: React.FC = () => {
     const [memberResult, postResult] = await Promise.all([
       supabase.rpc('admin_list_community_members'),
       supabase.rpc('admin_list_community_posts'),
+      supabase.rpc('admin_list_community_moderation_history'),
     ]);
-    if (memberResult.error || postResult.error) {
-      setError(memberResult.error?.message || postResult.error?.message || 'Não foi possível carregar a moderação. Verifique se o SQL de moderação foi aplicado no ambiente de teste.');
+    if (memberResult.error || postResult.error || historyResult.error) {
+      setError(memberResult.error?.message || postResult.error?.message || historyResult.error?.message || 'Não foi possível carregar a moderação. Verifique se o SQL de moderação foi aplicado no ambiente de teste.');
     } else {
       setMembers((memberResult.data || []) as Member[]);
       setPosts((postResult.data || []) as CommunityPost[]);
+      setHistory((historyResult.data || []) as ModerationLog[]);
     }
     setLoading(false);
   }, []);
@@ -174,6 +178,16 @@ export const CommunityModeration: React.FC = () => {
             </button>
           </div>;
         })}
+      </div>
+      <div className="space-y-2 border-t border-slate-800 pt-4">
+        <h4 className="flex items-center gap-2 text-xs font-bold text-slate-200"><Clock3 className="h-4 w-4 text-orange-400" /> Histórico de moderação</h4>
+        {history.length === 0 ? <p className="rounded-xl bg-slate-900 p-3 text-xs text-slate-400">Nenhuma ação registrada ainda.</p> : history.map(item => (
+          <div key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-xs">
+            <p className="font-semibold text-white">{item.action.replaceAll('_', ' ')} · {item.target_name || 'Alvo não disponível'}</p>
+            <p className="mt-1 text-slate-300">{item.reason}</p>
+            <p className="mt-1 text-[10px] text-slate-500">{item.performed_by_name || 'Administrador'} · {new Date(item.created_at).toLocaleString('pt-BR')}</p>
+          </div>
+        ))}
       </div>
       <p className="flex items-center gap-2 border-t border-slate-800 pt-3 text-[10px] text-slate-500"><Clock3 className="h-3.5 w-3.5" /> Suspensões temporárias expiram automaticamente. As ações administrativas são gravadas no histórico do banco.</p>
     </section>
