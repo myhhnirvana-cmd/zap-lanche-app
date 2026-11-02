@@ -685,7 +685,7 @@ export async function updateRestaurantInSupabase(input: UpdateRestaurantInput) {
 export async function uploadRestaurantImage(
   restaurantId: string,
   dataUrlOrFile: string | File | Blob,
-  imageType: 'banner' | 'logo' | 'reward'
+  imageType: 'banner' | 'logo' | 'reward' | 'promotion'
 ): Promise<{ publicUrl: string | null; error: Error | null }> {
   if (!isSupabaseConfigured || !supabase) {
     return { publicUrl: null, error: new Error('Supabase não configurado') };
