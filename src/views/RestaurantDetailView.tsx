@@ -815,9 +815,21 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('promocoes')}
+            className={`py-3 px-3 border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5 ${
+              activeTab === 'promocoes'
+                ? 'border-orange-400 text-orange-300 font-bold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Tag className="w-4 h-4 text-orange-400" />
+            Promoções ({promotions.length})
+          </button>
+
+          <button
             onClick={() => setActiveTab('premios')}
             className={`py-3 px-3 border-b-2 whitespace-nowrap transition-colors flex items-center justify-center gap-1.5 ${
-              activeTab === 'premios' || activeTab === 'promocoes'
+              activeTab === 'premios'
                 ? 'border-amber-400 text-amber-300 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
@@ -1031,79 +1043,84 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
           </div>
         )}
 
-        {/* Tab 4: Prêmios da Casa */}
-        {activeTab === 'premios' && (
+        {/* Tab: Promoções comerciais da loja */}
+        {activeTab === 'promocoes' && (
           <div className="mt-5 space-y-4">
-            <section className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                  Ofertas da loja ({promotions.length})
-                </h3>
-              </div>
-
-              {isLoadingPromotions ? (
-                <div className="text-center py-6 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
-                  Carregando prêmios desta loja...
+              <section className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                    Promoções da loja ({promotions.length})
+                  </h3>
                 </div>
-              ) : promotionLoadError ? (
-                <div className="text-center py-6 rounded-2xl bg-slate-900 border border-amber-500/20 text-xs text-slate-400">
-                  Não foi possível carregar os prêmios agora. Tente novamente mais tarde.
-                </div>
-              ) : promotions.length === 0 ? (
-                <div className="text-center py-6 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
-                  Nenhuma oferta cadastrada nesta loja no momento.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {promotions.map((promo) => (
-                    <article
-                      key={promo.id}
-                      className="rounded-2xl bg-gradient-to-br from-[#141622] to-[#1a1d2d] border border-amber-500/30 p-4 space-y-3 shadow-lg"
-                    >
-                      {promo.imageUrl && (
-                        <img
-                          src={promo.imageUrl}
-                          alt={`Imagem da promoção ${promo.title}`}
-                          loading="lazy"
-                          className="w-full h-44 rounded-xl object-cover"
-                        />
-                      )}
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <span className="inline-block px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/40 mb-1.5">
-                            {promo.badge || 'Prêmio'}
-                          </span>
-                          <h4 className="text-base font-bold text-white">{promo.title}</h4>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span className="text-xs text-slate-400 line-through block tabular-nums">
-                            R$ {promo.regularPrice.toFixed(2).replace('.', ',')}
-                          </span>
-                          <span className="text-base font-extrabold text-amber-400 tabular-nums">
-                            R$ {promo.discountPrice.toFixed(2).replace('.', ',')}
-                          </span>
-                        </div>
-                      </div>
-                      {promo.description && (
-                        <p className="text-xs text-slate-300 leading-relaxed">{promo.description}</p>
-                      )}
-                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-xs">
-                        <span className="text-slate-400">{promo.validUntil || 'Consulte a loja'}</span>
-                        {promo.couponCode && (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-slate-400 text-[11px]">Cupom:</span>
-                            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 font-mono font-bold text-amber-400 text-xs">
-                              {promo.couponCode}
+  
+                {isLoadingPromotions ? (
+                  <div className="text-center py-6 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                    Carregando promoções desta loja...
+                  </div>
+                ) : promotionLoadError ? (
+                  <div className="text-center py-6 rounded-2xl bg-slate-900 border border-amber-500/20 text-xs text-slate-400">
+                    Não foi possível carregar as promoções agora. Tente novamente mais tarde.
+                  </div>
+                ) : promotions.length === 0 ? (
+                  <div className="text-center py-6 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                    Nenhuma oferta cadastrada nesta loja no momento.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {promotions.map((promo) => (
+                      <article
+                        key={promo.id}
+                        className="rounded-2xl bg-gradient-to-br from-[#141622] to-[#1a1d2d] border border-amber-500/30 p-4 space-y-3 shadow-lg"
+                      >
+                        {promo.imageUrl && (
+                          <img
+                            src={promo.imageUrl}
+                            alt={`Imagem da promoção ${promo.title}`}
+                            loading="lazy"
+                            className="w-full h-44 rounded-xl object-cover"
+                          />
+                        )}
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <span className="inline-block px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/40 mb-1.5">
+                              {promo.badge || 'Oferta'}
+                            </span>
+                            <h4 className="text-base font-bold text-white">{promo.title}</h4>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-xs text-slate-400 line-through block tabular-nums">
+                              R$ {promo.regularPrice.toFixed(2).replace('.', ',')}
+                            </span>
+                            <span className="text-base font-extrabold text-amber-400 tabular-nums">
+                              R$ {promo.discountPrice.toFixed(2).replace('.', ',')}
                             </span>
                           </div>
+                        </div>
+                        {promo.description && (
+                          <p className="text-xs text-slate-300 leading-relaxed">{promo.description}</p>
                         )}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
+                        <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-xs">
+                          <span className="text-slate-400">{promo.validUntil || 'Consulte a loja'}</span>
+                          {promo.couponCode && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-400 text-[11px]">Cupom:</span>
+                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 font-mono font-bold text-amber-400 text-xs">
+                                {promo.couponCode}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+          </div>
+        )}
 
+        {/* Tab: Prêmios resgatáveis com pontos */}
+        {activeTab === 'premios' && (
+          <div className="mt-5 space-y-4">
             <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-[#161824] to-orange-500/10 border border-amber-500/25">
               <div className="flex items-center gap-2">
                 <Gift className="w-5 h-5 text-amber-400" />
