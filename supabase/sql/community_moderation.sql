@@ -37,7 +37,7 @@ create or replace function public.enforce_community_suspension()
 returns trigger
 language plpgsql security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare v_profile_id uuid;
 begin
   if tg_table_name = 'posts' then
