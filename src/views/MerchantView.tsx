@@ -979,6 +979,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
     const targetRestUuid =
       (currentRestaurant.supabaseId && UUID_REGEX.test(currentRestaurant.supabaseId) && currentRestaurant.supabaseId) ||
+      (currentRestaurant.id && UUID_REGEX.test(currentRestaurant.id) && currentRestaurant.id) ||
       (selectedRestaurantId && UUID_REGEX.test(selectedRestaurantId) && selectedRestaurantId) ||
       null;
 
@@ -992,7 +993,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     let updatedList: LoyaltyReward[];
     if (editingReward) {
       if (isSupabaseConfigured && UUID_REGEX.test(editingReward.id)) {
-        await updateRewardInSupabase({
+        const { data: updatedReward, error: updateError } = await updateRewardInSupabase({
           id: editingReward.id,
           title: rewardTitle.trim(),
           description: rewardDescription.trim(),
@@ -1005,6 +1006,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           max_redemptions_per_user: maxPerUser,
           image_url: persistentRewardImg,
         });
+        if (updateError || !updatedReward) {
+          setRewardFormError(updateError?.message || 'Não foi possível atualizar o prêmio no banco de dados.');
+          return;
+        }
       }
 
       updatedList = rewardsList.map((r) =>
@@ -1089,11 +1094,15 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     const nextAvail = nextStatus === 'ativo';
 
     if (isSupabaseConfigured && UUID_REGEX.test(rewardId)) {
-      await updateRewardInSupabase({
+      const { data, error } = await updateRewardInSupabase({
         id: rewardId,
         status: nextStatus,
         is_available: nextAvail,
       });
+      if (error || !data) {
+        showToast(error?.message || 'Não foi possível atualizar o status do prêmio.', 'error');
+        return;
+      }
     }
 
     const updated = rewardsList.map((r) => {
