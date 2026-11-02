@@ -100,6 +100,8 @@ drop trigger if exists protect_community_suspension_fields on public.profiles;
 create trigger protect_community_suspension_fields before update on public.profiles
 for each row execute function public.protect_community_suspension_fields();
 
+revoke all on function public.protect_community_suspension_fields() from public, anon, authenticated;
+
 create or replace function public.admin_list_community_members()
 returns table (
   profile_id uuid, full_name text, username text, role text,
