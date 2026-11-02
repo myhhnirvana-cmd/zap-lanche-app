@@ -1072,26 +1072,21 @@ export interface DbCommentRow {
  * Se postId for fornecido, filtra pelos comentários da publicação específica.
  */
 export async function fetchComments(
-  postId?: string
+  postIds?: string | string[]
 ): Promise<{ data: DbCommentRow[] | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) {
-    return { data: null, error: new Error('Supabase não configurado') };
-  }
-
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
   try {
-    let query = supabase
-      .from('comments')
+    let query = supabase.from('comments')
       .select('id, post_id, profile_id, author_name, author_avatar, text, created_at')
       .order('created_at', { ascending: true });
-
-    if (postId) {
-      query = query.eq('post_id', postId);
+    if (Array.isArray(postIds)) {
+      if (!postIds.length) return { data: [], error: null };
+      query = query.in('post_id', postIds);
+    } else if (postIds) {
+      query = query.eq('post_id', postIds);
     }
-
     const { data, error } = await query;
-    if (error) {
-      return { data: null, error: new Error(error.message) };
-    }
+    if (error) return { data: null, error: new Error(error.message) };
     return { data: (data as DbCommentRow[]) ?? [], error: null };
   } catch (err: any) {
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
@@ -1239,59 +1234,52 @@ export interface InsertPostInput {
 }
 
 export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) {
-    return { data: null, error: new Error('Supabase não configurado') };
-  }
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
 
   try {
     const { data, error } = await supabase
       .from('posts')
-      .select('id, restaurant_id, author_profile_id, content, image_url, created_at')
+      .select('id, restaurant_id, author_profile_id, content, image_url, created_at, edited_at')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      return { data: null, error: new Error(error.message) };
-    }
+    if (error) return { data: null, error: new Error(error.message) };
+    if (!data?.length) return { data: [], error: null };
 
-    if (!data || data.length === 0) {
-      return { data: [], error: null };
-    }
+    const authorIds = [...new Set(data.map((row: any) => row.author_profile_id).filter(Boolean))];
+    const restaurantIds = [...new Set(data.map((row: any) => row.restaurant_id).filter(Boolean))];
+    const [restaurantsRes, authorsRes] = await Promise.all([
+      restaurantIds.length
+        ? supabase.from('restaurants').select('id, slug, name, neighborhood, category').in('id', restaurantIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      authorIds.length
+        ? supabase.rpc('get_public_post_authors', { author_ids: authorIds })
+        : Promise.resolve({ data: [], error: null } as any),
+    ]);
 
-    // Busca restaurantes e perfis para enriquecer os dados das postagens
-    const { data: restaurants } = await supabase
-      .from('restaurants')
-      .select('id, slug, name, neighborhood, category');
+    if (authorsRes.error) console.warn('Falha ao carregar autores do feed:', authorsRes.error.message);
+    if (restaurantsRes.error) console.warn('Falha ao carregar restaurantes do feed:', restaurantsRes.error.message);
 
     const restMap = new Map<string, any>();
-    for (const r of restaurants || []) {
-      restMap.set(r.id, r);
-      if (r.slug) restMap.set(r.slug, r);
+    for (const restaurant of restaurantsRes.data || []) {
+      restMap.set(restaurant.id, restaurant);
+      if (restaurant.slug) restMap.set(restaurant.slug, restaurant);
     }
-
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, full_name, username, avatar_url, role');
-
-    const profileMap = new Map<string, any>();
-    for (const p of profiles || []) {
-      profileMap.set(p.id, p);
-    }
+    const authorMap = new Map<string, any>();
+    for (const author of authorsRes.data || []) authorMap.set(author.id, author);
 
     const mappedPosts: DbPostRow[] = data.map((row: any) => {
-      const rest = row.restaurant_id ? restMap.get(row.restaurant_id) : null;
-      const authorId = row.author_profile_id || row.profile_id;
-      const authorProfile = profileMap.get(authorId);
-
+      const restaurant = row.restaurant_id ? restMap.get(row.restaurant_id) : null;
+      const author = authorMap.get(row.author_profile_id);
       return {
         id: row.id,
         restaurant_id: row.restaurant_id || null,
-        restaurant_name: rest?.name || 'Comunidade ZapLanche',
-        restaurant_category: rest?.category || 'Comunidade',
-        neighborhood: rest?.neighborhood || 'Comunidade',
-        profile_id: authorId,
-        author_name: authorProfile?.full_name || authorProfile?.username || 'Morador',
-        author_avatar: authorProfile?.avatar_url || null,
-        author_role: (authorProfile?.role === 'comerciante' ? 'comerciante' : 'morador') as any,
+        restaurant_name: restaurant?.name || 'Comunidade ZapLanche',
+        restaurant_category: restaurant?.category || 'Comunidade',
+        neighborhood: restaurant?.neighborhood || 'Comunidade',
+        profile_id: row.author_profile_id,
+        author_name: author?.full_name?.trim() || author?.username?.trim() || 'Morador',
+        author_avatar: null,
+        author_role: (author?.role === 'comerciante' ? 'comerciante' : 'morador') as any,
         content: row.content,
         image_url: row.image_url,
         is_demo: false,
@@ -1299,7 +1287,6 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
         edited_at: row.edited_at || null,
       };
     });
-
     return { data: mappedPosts, error: null };
   } catch (err: any) {
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
@@ -1424,20 +1411,14 @@ export async function deletePostInSupabase(postId: string): Promise<{ error: Err
   }
 }
 
-export async function fetchPostLikesFromSupabase(): Promise<{ data: { post_id: string; profile_id: string }[] | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) {
-    return { data: null, error: new Error('Supabase não configurado') };
-  }
-
+export async function fetchPostLikesFromSupabase(postIds?: string[]): Promise<{ data: { post_id: string; profile_id: string }[] | null; error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
   try {
-    const { data, error } = await supabase
-      .from('post_likes')
-      .select('post_id, profile_id');
-
-    if (error) {
-      return { data: null, error: new Error(error.message) };
-    }
-
+    if (postIds && postIds.length === 0) return { data: [], error: null };
+    let query = supabase.from('post_likes').select('post_id, profile_id');
+    if (postIds) query = query.in('post_id', postIds);
+    const { data, error } = await query;
+    if (error) return { data: null, error: new Error(error.message) };
     return { data: data || [], error: null };
   } catch (err: any) {
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
