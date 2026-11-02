@@ -1072,26 +1072,21 @@ export interface DbCommentRow {
  * Se postId for fornecido, filtra pelos comentários da publicação específica.
  */
 export async function fetchComments(
-  postId?: string
+  postIds?: string | string[]
 ): Promise<{ data: DbCommentRow[] | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) {
-    return { data: null, error: new Error('Supabase não configurado') };
-  }
-
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
   try {
-    let query = supabase
-      .from('comments')
+    let query = supabase.from('comments')
       .select('id, post_id, profile_id, author_name, author_avatar, text, created_at')
       .order('created_at', { ascending: true });
-
-    if (postId) {
-      query = query.eq('post_id', postId);
+    if (Array.isArray(postIds)) {
+      if (!postIds.length) return { data: [], error: null };
+      query = query.in('post_id', postIds);
+    } else if (postIds) {
+      query = query.eq('post_id', postIds);
     }
-
     const { data, error } = await query;
-    if (error) {
-      return { data: null, error: new Error(error.message) };
-    }
+    if (error) return { data: null, error: new Error(error.message) };
     return { data: (data as DbCommentRow[]) ?? [], error: null };
   } catch (err: any) {
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
@@ -1417,19 +1412,13 @@ export async function deletePostInSupabase(postId: string): Promise<{ error: Err
 }
 
 export async function fetchPostLikesFromSupabase(postIds?: string[]): Promise<{ data: { post_id: string; profile_id: string }[] | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) {
-    return { data: null, error: new Error('Supabase não configurado') };
-  }
-
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
   try {
-    const { data, error } = await supabase
-      .from('post_likes')
-      .select('post_id, profile_id');
-
-    if (error) {
-      return { data: null, error: new Error(error.message) };
-    }
-
+    if (postIds && postIds.length === 0) return { data: [], error: null };
+    let query = supabase.from('post_likes').select('post_id, profile_id');
+    if (postIds) query = query.in('post_id', postIds);
+    const { data, error } = await query;
+    if (error) return { data: null, error: new Error(error.message) };
     return { data: data || [], error: null };
   } catch (err: any) {
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
