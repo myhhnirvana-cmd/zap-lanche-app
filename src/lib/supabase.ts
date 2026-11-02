@@ -1252,7 +1252,7 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
         ? supabase.from('restaurants').select('id, slug, name, neighborhood, category').in('id', restaurantIds)
         : Promise.resolve({ data: [], error: null } as any),
       authorIds.length
-        ? supabase.rpc('get_public_post_authors', { p_profile_ids: authorIds })
+        ? supabase.rpc('get_public_post_authors', { author_ids: authorIds })
         : Promise.resolve({ data: [], error: null } as any),
     ]);
 
