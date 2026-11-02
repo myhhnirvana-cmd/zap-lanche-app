@@ -35,14 +35,20 @@ GRANT INSERT, UPDATE, DELETE ON public.loyalty_rewards TO authenticated;
 ALTER TABLE public.loyalty_rewards ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "loyalty_rewards_select_active_or_manager" ON public.loyalty_rewards;
-CREATE POLICY "loyalty_rewards_select_active_or_manager"
-ON public.loyalty_rewards FOR SELECT TO public
+DROP POLICY IF EXISTS "loyalty_rewards_public_read_active" ON public.loyalty_rewards;
+DROP POLICY IF EXISTS "loyalty_rewards_authenticated_read" ON public.loyalty_rewards;
+
+-- Visitors can read active rewards without needing access to private helper functions.
+CREATE POLICY "loyalty_rewards_public_read_active"
+ON public.loyalty_rewards FOR SELECT TO anon
+USING (is_active = true AND status = 'ativo');
+
+CREATE POLICY "loyalty_rewards_authenticated_read"
+ON public.loyalty_rewards FOR SELECT TO authenticated
 USING (
     (is_active = true AND status = 'ativo')
-    OR (auth.uid() IS NOT NULL AND (
-        public.is_restaurant_owner(restaurant_id)
-        OR public.is_admin()
-    ))
+    OR public.is_restaurant_owner(restaurant_id)
+    OR public.is_admin()
 );
 
 DROP POLICY IF EXISTS "loyalty_rewards_insert_owner_admin" ON public.loyalty_rewards;
