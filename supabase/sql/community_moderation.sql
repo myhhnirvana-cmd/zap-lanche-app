@@ -229,4 +229,9 @@ grant execute on function public.admin_set_community_suspension(uuid,text,timest
 grant execute on function public.admin_moderate_community_post(uuid,boolean,text) to authenticated;
 grant execute on function public.admin_list_community_moderation_history() to authenticated;
 
+-- Trigger functions are internal and must not be callable as Data API RPC endpoints.
+revoke all on function public.protect_community_suspension_fields() from public, anon, authenticated;
+revoke all on function public.enforce_community_suspension() from public, anon, authenticated;
+revoke all on function public.is_community_user_suspended(uuid) from public, anon, authenticated;
+
 commit;
