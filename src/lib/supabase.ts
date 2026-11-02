@@ -1239,7 +1239,7 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
   try {
     const { data, error } = await supabase
       .from('posts')
-      .select('id, restaurant_id, author_profile_id, content, image_url, created_at, edited_at')
+      .select('id, restaurant_id, author_profile_id, content, image_url, created_at')
       .order('created_at', { ascending: false });
 
     if (error) return { data: null, error: new Error(error.message) };
@@ -1360,9 +1360,10 @@ export async function updatePostInSupabase(
   }
 
   try {
+    // A tabela public.posts não possui a coluna edited_at.
+    // A indicação de edição permanece apenas na interface durante a sessão.
     const payload: Record<string, any> = {
       content: content.trim(),
-      edited_at: new Date().toISOString(),
     };
     if (imageUrl !== undefined) {
       payload.image_url = imageUrl;
