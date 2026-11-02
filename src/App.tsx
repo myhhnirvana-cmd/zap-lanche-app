@@ -24,7 +24,7 @@ import { loadAllMenuItems, MOCK_MENU_ITEMS, saveCurrentNeighborhood } from './da
 import { useAuth } from './contexts/AuthContext';
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('explorar');
   const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>({ id: 'todos', name: 'Todos os Bairros', zone: '', city: '', state: '', activeSpotsCount: 0 });
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -158,6 +158,16 @@ export default function App() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
+
+      {profile?.is_suspended && (!profile.suspended_until || new Date(profile.suspended_until).getTime() > Date.now()) && (
+        <div role="status" className="mx-auto mt-3 w-full max-w-6xl px-4 sm:px-6">
+          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">
+            <p className="font-bold">Acesso às interações da comunidade suspenso</p>
+            <p className="mt-1 text-xs text-rose-100/90">Motivo: {profile.suspension_reason || 'Medida administrativa de moderação.'}</p>
+            <p className="mt-1 text-xs text-rose-200">{profile.suspended_until ? `Sua suspensão termina em ${new Date(profile.suspended_until).toLocaleString('pt-BR')}.` : 'Suspensão por prazo indeterminado. Entre em contato com a equipe para solicitar revisão.'} Você continua podendo acessar e consultar o conteúdo público.</p>
+          </div>
+        </div>
+      )}
 
       {/* Main Responsive Canvas */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-5 pb-20 md:pb-10">

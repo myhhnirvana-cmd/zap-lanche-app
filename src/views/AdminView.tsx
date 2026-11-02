@@ -49,6 +49,7 @@ import {
 } from '../data/mockData';
 import { supabase, isSupabaseConfigured, insertRestaurantToSupabase, fetchRestaurantsFromSupabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { CommunityModeration } from './CommunityModeration';
 
 interface AdminViewProps {
   onOpenGitHubGuide: () => void;
@@ -476,6 +477,8 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
           </button>
         </div>
       </div>
+
+      <CommunityModeration />
 
       {/* Formulário de Convite de Comerciante */}
       {showInviteForm && (
