@@ -37,7 +37,7 @@ create or replace function public.enforce_community_suspension()
 returns trigger
 language plpgsql security definer
 set search_path = public, pg_temp
-as $$
+as $
 declare v_profile_id uuid;
 begin
   if tg_table_name = 'posts' then
@@ -45,7 +45,7 @@ begin
   else
     v_profile_id := new.profile_id;
   end if;
-  if v_profile_id is not null and public.is_community_user_suspended(v_profile_id) then
+  if v_profile_id is not null and v_profile_id = auth.uid() and public.is_community_user_suspended(v_profile_id) then
     raise exception 'CONTA_SUSPENSA: sua conta está temporariamente impedida de interagir com a comunidade.'
       using errcode = '42501';
   end if;
@@ -70,7 +70,7 @@ for each row execute function public.enforce_community_suspension();
 -- Impede que o próprio usuário altere os campos de suspensão no seu perfil.
 create or replace function public.protect_community_suspension_fields()
 returns trigger
-language plpgsql
+language plpgsql security definer
 set search_path = public, pg_temp
 as $$
 begin
