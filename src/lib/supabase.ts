@@ -1373,9 +1373,10 @@ export async function updatePostInSupabase(
   }
 
   try {
+    // A tabela public.posts não possui a coluna edited_at.
+    // A indicação "Editado agora" é mantida apenas no estado local da interface.
     const payload: Record<string, any> = {
       content: content.trim(),
-      edited_at: new Date().toISOString(),
     };
     if (imageUrl !== undefined) {
       payload.image_url = imageUrl;
