@@ -1296,7 +1296,6 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
         image_url: row.image_url,
         is_demo: false,
         created_at: row.created_at,
-        edited_at: row.edited_at || null,
       };
     });
 
