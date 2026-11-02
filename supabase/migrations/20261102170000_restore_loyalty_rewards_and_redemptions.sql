@@ -493,7 +493,7 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.redeem_loyalty_reward(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.redeem_loyalty_reward(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.redeem_loyalty_reward(uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.cancel_loyalty_redemption(
@@ -642,7 +642,7 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.cancel_loyalty_redemption(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.cancel_loyalty_redemption(uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.cancel_loyalty_redemption(uuid, text) TO authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -756,7 +756,7 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.mark_loyalty_redemption_used(text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.mark_loyalty_redemption_used(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.mark_loyalty_redemption_used(text) TO authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -889,6 +889,6 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.get_user_loyalty_balance(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_user_loyalty_balance(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_user_loyalty_balance(uuid) TO authenticated;
 commit;
