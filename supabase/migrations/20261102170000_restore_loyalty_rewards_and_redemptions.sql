@@ -1,6 +1,10 @@
 -- Restore the persistent loyalty rewards and redemption schema used by the app.
 -- This is intentionally scoped to rewards only; referral/check-in migrations are not replayed.
 begin;
+
+-- RLS policies below call these safe, caller-scoped helper functions.
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_restaurant_owner(uuid) to authenticated;
 -- 4. PRÊMIOS DE FIDELIDADE (public.loyalty_rewards)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.loyalty_rewards (
@@ -36,8 +40,8 @@ ON public.loyalty_rewards FOR SELECT TO public
 USING (
     (is_active = true AND status = 'ativo')
     OR (auth.uid() IS NOT NULL AND (
-        public.is_admin()
-        OR public.is_restaurant_owner(restaurant_id)
+        public.is_restaurant_owner(restaurant_id)
+        OR public.is_admin()
     ))
 );
 
@@ -45,8 +49,8 @@ DROP POLICY IF EXISTS "loyalty_rewards_insert_owner_admin" ON public.loyalty_rew
 CREATE POLICY "loyalty_rewards_insert_owner_admin"
 ON public.loyalty_rewards FOR INSERT TO authenticated
 WITH CHECK (
-    public.is_admin()
-    OR public.is_restaurant_owner(restaurant_id)
+    public.is_restaurant_owner(restaurant_id)
+    OR public.is_admin()
 );
 
 DROP POLICY IF EXISTS "loyalty_rewards_update_owner_admin" ON public.loyalty_rewards;
