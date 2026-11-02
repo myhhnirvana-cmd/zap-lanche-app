@@ -11,6 +11,8 @@ create policy posts_delete_author
   to authenticated
   using (author_profile_id = (select auth.uid()));
 
+grant delete on public.posts to authenticated;
+
 -- Ao excluir uma publicação, remove curtidas e comentários relacionados.
 -- A FK das curtidas usa CASCADE; comentários usam post_id text e precisam do trigger.
 alter table public.post_likes
