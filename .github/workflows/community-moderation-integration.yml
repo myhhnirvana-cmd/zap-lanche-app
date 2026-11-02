@@ -1,0 +1,35 @@
+name: Community moderation integration tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: community-moderation-homologation
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    if: github.ref == 'refs/heads/feature/community-moderation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: https://nagrxownsslyeosuqzca.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_DZULIOUYOgYeTFQi4VBCDg_lfuesTcn
+      SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund --no-package-lock
+      - name: Check homologation-only configuration
+        shell: bash
+        run: |
+          test "$SUPABASE_URL" = "https://nagrxownsslyeosuqzca.supabase.co"
+          test -n "$SUPABASE_TEST_SERVICE_ROLE_KEY"
+      - name: Run authenticated moderation tests
+        run: node --test supabase/tests/community_moderation.integration.test.mjs
