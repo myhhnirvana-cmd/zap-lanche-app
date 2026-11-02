@@ -1060,6 +1060,14 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                       key={promo.id}
                       className="rounded-2xl bg-gradient-to-br from-[#141622] to-[#1a1d2d] border border-amber-500/30 p-4 space-y-3 shadow-lg"
                     >
+                      {promo.imageUrl && (
+                        <img
+                          src={promo.imageUrl}
+                          alt={`Imagem da promoção ${promo.title}`}
+                          loading="lazy"
+                          className="w-full h-44 rounded-xl object-cover"
+                        />
+                      )}
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <span className="inline-block px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/40 mb-1.5">
