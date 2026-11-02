@@ -16,7 +16,7 @@ alter table public.posts
 alter table public.posts drop constraint if exists posts_status_check;
 alter table public.posts
   add constraint posts_status_check
-  check (status = any (array['rascunho'::text, 'publicado'::text, 'encerrado'::text, 'removido_moderacao'::text));
+  check (status = any (array['rascunho'::text, 'publicado'::text, 'encerrado'::text, 'removido_moderacao'::text]));
 
 create table if not exists public.community_moderation_logs (
   id uuid primary key default gen_random_uuid(),
