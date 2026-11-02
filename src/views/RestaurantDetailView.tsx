@@ -1037,7 +1037,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                  Prêmios especiais da loja ({promotions.length})
+                  Ofertas da loja ({promotions.length})
                 </h3>
               </div>
 
@@ -1051,7 +1051,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                 </div>
               ) : promotions.length === 0 ? (
                 <div className="text-center py-6 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
-                  Nenhum prêmio especial cadastrado nesta loja no momento.
+                  Nenhuma oferta cadastrada nesta loja no momento.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1110,7 +1110,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                         {/* Catálogo de recompensas da loja */}
             <div className="space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                Recompensas Disponíveis da Casa ({rewards.length})
+                Prêmios para trocar por pontos ({rewards.length})
               </h4>
 
               {rewards.length === 0 ? (

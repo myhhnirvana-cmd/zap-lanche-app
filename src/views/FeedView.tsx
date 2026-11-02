@@ -416,7 +416,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
       return;
     }
 
-    if (isSupabaseConfigured && editingPost.id.startsWith('post-')) {
+    if (isSupabaseConfigured && UUID_REGEX.test(editingPost.id)) {
       const { error: updateErr } = await updatePostInSupabase(
         editingPost.id,
         editText.trim(),
@@ -466,7 +466,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
       return;
     }
 
-    if (isSupabaseConfigured && postToDelete.id.startsWith('post-')) {
+    if (isSupabaseConfigured && UUID_REGEX.test(postToDelete.id)) {
       const { error: delErr } = await deletePostInSupabase(postToDelete.id);
       if (delErr) {
         setNotification({

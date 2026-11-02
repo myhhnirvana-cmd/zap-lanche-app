@@ -1702,7 +1702,7 @@ export async function fetchRewardsFromSupabase(
       pointsCost: r.points_cost,
       stock: r.stock,
       status: r.status,
-      isAvailable: r.status === 'ativo' && r.stock > 0,
+      isAvailable: r.is_active !== false && r.status === 'ativo' && r.stock > 0,
       maxGlobalPointsAllowed: Math.round(r.points_cost * 0.3),
       minStorePointsRequired: Math.round(r.points_cost * 0.7),
       maxRedemptionsPerUser: r.max_redemptions_per_user || 1,
@@ -1751,6 +1751,7 @@ export async function insertRewardToSupabase(
       status: reward.status,
       image_url: imgUrl,
       max_redemptions_per_user: maxUser,
+      is_active: true,
     };
 
     const { data, error } = await supabase
@@ -1772,7 +1773,7 @@ export async function insertRewardToSupabase(
       pointsCost: data.points_cost,
       stock: data.stock,
       status: data.status,
-      isAvailable: data.status === 'ativo' && data.stock > 0,
+      isAvailable: data.is_active !== false && data.status === 'ativo' && data.stock > 0,
       maxGlobalPointsAllowed: Math.round(data.points_cost * 0.3),
       minStorePointsRequired: Math.round(data.points_cost * 0.7),
       maxRedemptionsPerUser: data.max_redemptions_per_user || 1,
@@ -1829,6 +1830,8 @@ export async function updateRewardInSupabase(
     }
     if (reward.imageUrl !== undefined) payload.image_url = reward.imageUrl;
     if (reward.image_url !== undefined) payload.image_url = reward.image_url;
+    if (reward.isAvailable !== undefined) payload.is_active = reward.isAvailable;
+    if (reward.is_available !== undefined) payload.is_active = reward.is_available;
     if (reward.maxRedemptionsPerUser !== undefined) payload.max_redemptions_per_user = reward.maxRedemptionsPerUser;
     if (reward.max_redemptions_per_user !== undefined) payload.max_redemptions_per_user = reward.max_redemptions_per_user;
 
@@ -1852,7 +1855,7 @@ export async function updateRewardInSupabase(
       pointsCost: data.points_cost,
       stock: data.stock,
       status: data.status,
-      isAvailable: data.status === 'ativo' && data.stock > 0,
+      isAvailable: data.is_active !== false && data.status === 'ativo' && data.stock > 0,
       maxGlobalPointsAllowed: Math.round(data.points_cost * 0.3),
       minStorePointsRequired: Math.round(data.points_cost * 0.7),
       maxRedemptionsPerUser: data.max_redemptions_per_user || 1,
@@ -1873,13 +1876,17 @@ export async function deleteRewardFromSupabase(
   }
 
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('loyalty_rewards')
       .delete()
-      .eq('id', rewardId);
+      .eq('id', rewardId)
+      .select('id');
 
     if (error) {
       return { error: new Error(error.message) };
+    }
+    if (!data || data.length === 0) {
+      return { error: new Error('O prêmio não foi excluído. Verifique se ele pertence à sua loja.') };
     }
 
     return { error: null };
