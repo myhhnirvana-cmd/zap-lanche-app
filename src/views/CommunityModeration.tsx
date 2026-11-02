@@ -44,7 +44,7 @@ export const CommunityModeration: React.FC = () => {
     }
     setLoading(true);
     setError('');
-    const [memberResult, postResult] = await Promise.all([
+    const [memberResult, postResult, historyResult] = await Promise.all([
       supabase.rpc('admin_list_community_members'),
       supabase.rpc('admin_list_community_posts'),
       supabase.rpc('admin_list_community_moderation_history'),
