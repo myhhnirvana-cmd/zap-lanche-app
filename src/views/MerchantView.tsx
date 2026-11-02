@@ -1721,6 +1721,14 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {promotions.map((promotion) => (
               <article key={promotion.id} className="rounded-2xl bg-slate-900 border border-slate-800 p-4 space-y-2">
+                {promotion.imageUrl && (
+                  <img
+                    src={promotion.imageUrl}
+                    alt={`Imagem da promoção ${promotion.title}`}
+                    loading="lazy"
+                    className="w-full h-40 rounded-xl object-cover"
+                  />
+                )}
                 <div className="flex items-start justify-between gap-2">
                   <div><h4 className="font-bold text-sm text-white">{promotion.title}</h4><p className="text-xs text-slate-400 mt-1">{promotion.description}</p></div>
                   <span className={`text-[10px] rounded-full px-2 py-1 border ${promotion.isActive === false ? 'text-slate-400 border-slate-700' : 'text-emerald-300 border-emerald-500/30'}`}>{promotion.isActive === false ? 'Pausada' : 'Ativa'}</span>
