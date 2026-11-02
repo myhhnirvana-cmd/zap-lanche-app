@@ -1098,7 +1098,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
               {/* Se o post for apenas texto, nenhum bloco vazio é exibido.    */}
               {/* ============================================================ */}
               {post.imageUrl && (
-                <div className="relative h-64 sm:h-80 w-full bg-slate-900 overflow-hidden">
+                <div className="relative h-72 sm:h-96 w-full bg-slate-900 overflow-hidden">
                   <img
                     src={post.imageUrl}
                     alt="Foto do lanche compartilhada"
