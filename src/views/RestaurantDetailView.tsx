@@ -925,7 +925,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-slate-900 shrink-0">
+                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden bg-slate-900 shrink-0 ring-1 ring-orange-500/20 shadow-lg">
                     <img
                       src={item.imageUrl}
                       alt={item.name}
@@ -1147,6 +1147,17 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                         }`}
                       >
                         <div>
+                          {rew.imageUrl && (
+                            <div className="mb-3 h-40 sm:h-48 w-full overflow-hidden rounded-xl bg-slate-900 ring-1 ring-amber-500/20">
+                              <img
+                                src={rew.imageUrl}
+                                alt={rew.title}
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          )}
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <h5 className="font-bold text-sm text-white">
@@ -1321,7 +1332,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                   </p>
 
                   {post.imageUrl && (
-                    <div className="relative h-48 sm:h-56 rounded-xl overflow-hidden bg-slate-900">
+                    <div className="relative h-64 sm:h-80 rounded-2xl overflow-hidden bg-slate-900 ring-1 ring-orange-500/20 shadow-lg">
                       <img
                         src={post.imageUrl}
                         alt="Foto do lanche"
