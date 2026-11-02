@@ -132,104 +132,115 @@ export const FeedView: React.FC<FeedViewProps> = ({
     return () => clearTimeout(timer);
   }, [notification]);
 
-  // Sincroniza publicações compartilhadas, curtidas e comentários do Supabase
+  // Carrega primeiro as publicações e consulta somente as interações ligadas a elas.
   useEffect(() => {
     let isMounted = true;
     async function syncSupabaseFeed() {
-      if (!isSupabaseConfigured) return;
-
+      if (!isSupabaseConfigured) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
       try {
-        const [postsRes, likesRes, commentsRes] = await Promise.all([
-          fetchPostsFromSupabase(),
-          fetchPostLikesFromSupabase(),
-          fetchComments(),
-        ]);
-
+        const postsRes = await fetchPostsFromSupabase();
         if (!isMounted) return;
+        if (postsRes.error) throw postsRes.error;
 
         const dbPosts = postsRes.data || [];
+        const dbPostIds = dbPosts.map((post) => post.id).filter((id) => UUID_REGEX.test(id));
+        const commentPostIds = [...new Set([...dbPosts.map((post) => post.id), ...MOCK_POSTS.map((post) => post.id)])];
+        const [likesRes, commentsRes] = await Promise.all([
+          fetchPostLikesFromSupabase(dbPostIds),
+          fetchComments(commentPostIds),
+        ]);
+        if (!isMounted) return;
+
         const dbLikes = likesRes.data || [];
         const dbComments = commentsRes.data || [];
+        const likesByPost = new Map<string, typeof dbLikes>();
+        for (const like of dbLikes) {
+          const group = likesByPost.get(like.post_id) || [];
+          group.push(like);
+          likesByPost.set(like.post_id, group);
+        }
+        const commentsByPost = new Map<string, typeof dbComments>();
+        for (const comment of dbComments) {
+          const group = commentsByPost.get(comment.post_id) || [];
+          group.push(comment);
+          commentsByPost.set(comment.post_id, group);
+        }
+        const formatDateTime = (value: string) =>
+          new Date(value).toLocaleDateString('pt-BR') + ' às ' +
+          new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-        // Mapear posts do banco de dados compartilhado
-        const mappedDbPosts: SocialPost[] = dbPosts.map((p) => {
-          const postLikes = dbLikes.filter((l) => l.post_id === p.id);
-          const postComments = dbComments.filter((c) => c.post_id === p.id);
-
-          const formattedComments: PostComment[] = postComments.map((c) => ({
-            id: c.id,
-            profile_id: c.profile_id,
-            authorId: c.profile_id,
-            authorName: c.author_name,
-            authorAvatar: c.author_avatar || DEFAULT_AVATAR_URL,
-            text: c.text,
-            createdAt: new Date(c.created_at).toLocaleDateString('pt-BR') + ' às ' + new Date(c.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            postId: c.post_id,
+        const mappedDbPosts: SocialPost[] = dbPosts.map((post) => {
+          const postLikes = likesByPost.get(post.id) || [];
+          const postComments = commentsByPost.get(post.id) || [];
+          const formattedComments: PostComment[] = postComments.map((comment) => ({
+            id: comment.id,
+            profile_id: comment.profile_id,
+            authorId: comment.profile_id,
+            authorName: comment.author_name,
+            authorAvatar: comment.author_avatar || DEFAULT_AVATAR_URL,
+            text: comment.text,
+            createdAt: formatDateTime(comment.created_at),
+            postId: comment.post_id,
           }));
-
           return {
-            id: p.id,
-            restaurantId: p.restaurant_id || '',
-            restaurantName: p.restaurant_name,
-            restaurantCategory: p.restaurant_category,
-            neighborhood: p.neighborhood,
-            authorId: p.profile_id,
-            authorName: p.author_name,
-            authorAvatar: p.author_avatar || DEFAULT_AVATAR_URL,
-            authorRole: p.author_role,
-            content: p.content,
-            imageUrl: p.image_url || undefined,
+            id: post.id,
+            restaurantId: post.restaurant_id || '',
+            restaurantName: post.restaurant_name,
+            restaurantCategory: post.restaurant_category,
+            neighborhood: post.neighborhood,
+            authorId: post.profile_id,
+            authorName: post.author_name,
+            authorAvatar: post.author_avatar || DEFAULT_AVATAR_URL,
+            authorRole: post.author_role,
+            content: post.content,
+            imageUrl: post.image_url || undefined,
             likesCount: postLikes.length,
-            isLiked: user?.id ? postLikes.some((l) => l.profile_id === user.id) : false,
+            isLiked: user?.id ? postLikes.some((like) => like.profile_id === user.id) : false,
             commentsCount: formattedComments.length,
             comments: formattedComments,
-            createdAt: new Date(p.created_at).toLocaleDateString('pt-BR') + ' às ' + new Date(p.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            editedAt: p.edited_at ? 'Editado recentemente' : undefined,
-            isOwnPost: user?.id ? p.profile_id === user.id : false,
-            hasPhotoValidation: Boolean(p.image_url),
-            is_demo: p.is_demo,
+            createdAt: formatDateTime(post.created_at),
+            editedAt: post.edited_at ? 'Editado recentemente' : undefined,
+            isOwnPost: user?.id ? post.profile_id === user.id : false,
+            hasPhotoValidation: Boolean(post.image_url),
+            is_demo: post.is_demo,
           };
         });
 
-        // Posts demonstrativos padrão identificados com selo de demonstração
-        const demoPostsWithComments: SocialPost[] = MOCK_POSTS.map((mp) => {
-          const postComments = dbComments.filter((c) => c.post_id === mp.id);
-          const postLikes = dbLikes.filter((l) => l.post_id === mp.id);
-          const formattedComments: PostComment[] = postComments.map((c) => ({
-            id: c.id,
-            profile_id: c.profile_id,
-            authorId: c.profile_id,
-            authorName: c.author_name,
-            authorAvatar: c.author_avatar || DEFAULT_AVATAR_URL,
-            text: c.text,
-            createdAt: new Date(c.created_at).toLocaleDateString('pt-BR'),
-            postId: c.post_id,
+        const demoPostsWithComments: SocialPost[] = MOCK_POSTS.map((mockPost) => {
+          const postComments = commentsByPost.get(mockPost.id) || [];
+          const postLikes = likesByPost.get(mockPost.id) || [];
+          const formattedComments: PostComment[] = postComments.map((comment) => ({
+            id: comment.id,
+            profile_id: comment.profile_id,
+            authorId: comment.profile_id,
+            authorName: comment.author_name,
+            authorAvatar: comment.author_avatar || DEFAULT_AVATAR_URL,
+            text: comment.text,
+            createdAt: new Date(comment.created_at).toLocaleDateString('pt-BR'),
+            postId: comment.post_id,
           }));
-
           return {
-            ...mp,
+            ...mockPost,
             is_demo: true,
-            comments: [...(mp.comments || []), ...formattedComments],
-            commentsCount: (mp.comments || []).length + formattedComments.length,
-            likesCount: (mp.likesCount || 0) + postLikes.length,
-            isLiked: user?.id ? postLikes.some((l) => l.profile_id === user.id) : mp.isLiked,
+            comments: [...(mockPost.comments || []), ...formattedComments],
+            commentsCount: (mockPost.comments || []).length + formattedComments.length,
+            likesCount: (mockPost.likesCount || 0) + postLikes.length,
+            isLiked: user?.id ? postLikes.some((like) => like.profile_id === user.id) : mockPost.isLiked,
           };
         });
-
-        if (mappedDbPosts.length > 0) {
-          setPosts([...mappedDbPosts, ...demoPostsWithComments]);
-        } else {
-          setPosts(demoPostsWithComments);
-        }
+        setPosts(mappedDbPosts.length ? [...mappedDbPosts, ...demoPostsWithComments] : demoPostsWithComments);
       } catch (err) {
         console.warn('Erro ao sincronizar feed com o Supabase:', err);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     }
-
     syncSupabaseFeed();
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [user?.id]);
 
   // Identificação do proprietário usando o ID real da sessão autenticada (auth.users.id)
