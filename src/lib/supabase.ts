@@ -403,7 +403,7 @@ export async function fetchRestaurantPromotions(
 export async function insertRestaurantPromotion(
   promotion: Omit<Promotion, 'id' | 'restaurantId' | 'restaurantName'> & { restaurantId: string }
 ): Promise<{ data: Promotion | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado'), hasMore: false };
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
   const restaurantId = await resolveRestaurantUuid(promotion.restaurantId);
   if (!restaurantId) return { data: null, error: new Error('Não foi possível identificar a loja no Supabase.') };
 
@@ -428,7 +428,7 @@ export async function updateRestaurantPromotion(
   promotionId: string,
   changes: Partial<Omit<Promotion, 'id' | 'restaurantId' | 'restaurantName'>> & { isActive?: boolean }
 ): Promise<{ data: Promotion | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado'), hasMore: false };
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
   const payload: Record<string, any> = { updated_at: new Date().toISOString() };
   if (changes.title !== undefined) payload.title = changes.title.trim();
   if (changes.description !== undefined) payload.description = changes.description.trim();
@@ -975,7 +975,7 @@ export async function fetchUserLoyaltyBalance(
 
     return { data: null, error: new Error('Formato de resposta inesperado de get_user_loyalty_balance.') };
   } catch (err: any) {
-    return { data: null, error: err instanceof Error ? err : new Error(String(err)), hasMore: false };
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
 
@@ -1234,13 +1234,14 @@ export interface InsertPostInput {
 }
 
 export async function fetchPostsFromSupabase(page = 0, pageSize = 20): Promise<{ data: DbPostRow[] | null; error: Error | null; hasMore: boolean }> {
-  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado'), hasMore: false };
 
   try {
     const { data, error } = await supabase
       .from('posts')
       .select('id, restaurant_id, author_profile_id, content, image_url, created_at')
       .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
       .range(Math.max(0, page) * pageSize, Math.max(0, page) * pageSize + pageSize - 1);
 
     if (error) return { data: null, error: new Error(error.message), hasMore: false };
@@ -1291,7 +1292,7 @@ export async function fetchPostsFromSupabase(page = 0, pageSize = 20): Promise<{
     });
     return { data: mappedPosts, error: null, hasMore };
   } catch (err: any) {
-    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)), hasMore: false };
   }
 }
 
