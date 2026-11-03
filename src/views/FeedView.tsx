@@ -193,6 +193,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
             restaurantCategory: post.restaurant_category,
             neighborhood: post.neighborhood,
             authorId: post.profile_id,
+            authorProfileId: post.profile_id,
             authorName: post.author_name,
             authorAvatar: post.author_avatar || DEFAULT_AVATAR_URL,
             authorRole: post.author_role,
@@ -251,8 +252,11 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   // Função para verificar se a publicação pertence ao usuário atual
   const isPostOwner = (post: SocialPost): boolean => {
-    if (user?.id && post.authorId === user.id) return true;
-    return post.isOwnPost === true;
+    // Publicações demonstrativas nunca recebem ações de proprietário.
+    if (post.is_demo || !user?.id) return false;
+    const authenticatedIds = new Set([user.id, profile?.id].filter((id): id is string => Boolean(id)));
+    const authorId = post.authorProfileId || post.authorId;
+    return Boolean(authorId && authenticatedIds.has(authorId));
   };
 
   // -------------------------------------------------------------
