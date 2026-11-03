@@ -1249,7 +1249,7 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
     const restaurantIds = [...new Set(data.map((row: any) => row.restaurant_id).filter(Boolean))];
     const [restaurantsRes, authorsRes] = await Promise.all([
       restaurantIds.length
-        ? supabase.from('restaurants').select('id, slug, name, neighborhood, category').in('id', restaurantIds)
+        ? supabase.from('restaurants').select('id, slug, name, neighborhood').in('id', restaurantIds)
         : Promise.resolve({ data: [], error: null } as any),
       authorIds.length
         ? supabase.rpc('get_public_post_authors', { author_ids: authorIds })
@@ -1274,7 +1274,7 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
         id: row.id,
         restaurant_id: row.restaurant_id || null,
         restaurant_name: restaurant?.name || 'Comunidade ZapLanche',
-        restaurant_category: restaurant?.category || 'Comunidade',
+        restaurant_category: 'Lanches de Bairro',
         neighborhood: restaurant?.neighborhood || 'Comunidade',
         profile_id: row.author_profile_id,
         author_name: author?.full_name?.trim() || author?.username?.trim() || 'Morador',
