@@ -57,6 +57,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [feedPage, setFeedPage] = useState(0);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
 
@@ -141,11 +143,12 @@ export const FeedView: React.FC<FeedViewProps> = ({
       }
       setLoading(true);
       try {
-        const postsRes = await fetchPostsFromSupabase();
+        const postsRes = await fetchPostsFromSupabase(feedPage, 20);
         if (!isMounted) return;
         if (postsRes.error) throw postsRes.error;
 
         const dbPosts = postsRes.data || [];
+        setHasMorePosts(postsRes.hasMore);
         const dbPostIds = dbPosts.map((post) => post.id).filter((id) => UUID_REGEX.test(id));
         const commentPostIds = [...new Set([...dbPosts.map((post) => post.id), ...MOCK_POSTS.map((post) => post.id)])];
         const [likesRes, commentsRes] = await Promise.all([
@@ -232,7 +235,12 @@ export const FeedView: React.FC<FeedViewProps> = ({
             isLiked: user?.id ? postLikes.some((like) => like.profile_id === user.id) : mockPost.isLiked,
           };
         });
-        setPosts(mappedDbPosts.length ? [...mappedDbPosts, ...demoPostsWithComments] : demoPostsWithComments);
+        setPosts((currentPosts) => {
+          const pagePosts = feedPage === 0 ? [...mappedDbPosts, ...demoPostsWithComments] : mappedDbPosts;
+          if (feedPage === 0) return pagePosts;
+          const existingIds = new Set(currentPosts.map((post) => post.id));
+          return [...currentPosts, ...pagePosts.filter((post) => !existingIds.has(post.id))];
+        });
       } catch (err) {
         console.warn('Erro ao sincronizar feed com o Supabase:', err);
       } finally {
@@ -241,7 +249,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
     }
     syncSupabaseFeed();
     return () => { isMounted = false; };
-  }, [user?.id]);
+  }, [user?.id, feedPage]);
 
   // Identificação do proprietário usando o ID real da sessão autenticada (auth.users.id)
   const isCommentOwner = (comment: PostComment): boolean => {
@@ -746,6 +754,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
       setIsDeletingComment(false);
     }
   };
+
+  const handleLoadMorePosts = () => setFeedPage((page) => page + 1);
 
   const filteredPosts = posts.filter((p) => {
     if (filterRole === 'todos') return true;
@@ -1290,6 +1300,15 @@ export const FeedView: React.FC<FeedViewProps> = ({
           );
         })}
       </div>
+
+      {hasMorePosts && (
+        <div className="flex justify-center pt-2">
+          <button type="button" onClick={handleLoadMorePosts} disabled={loading}
+            className="px-5 py-2.5 rounded-xl border border-orange-500/40 bg-orange-500/10 text-orange-300 text-sm font-bold hover:bg-orange-500/20 disabled:opacity-50">
+            {loading ? 'Carregando...' : 'Carregar mais publicações'}
+          </button>
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* MODAL DE EDIÇÃO DE PUBLICAÇÃO                                */}
