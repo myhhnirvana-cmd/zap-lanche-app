@@ -428,7 +428,7 @@ export async function updateRestaurantPromotion(
   promotionId: string,
   changes: Partial<Omit<Promotion, 'id' | 'restaurantId' | 'restaurantName'>> & { isActive?: boolean }
 ): Promise<{ data: Promotion | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado'), hasMore: false };
   const payload: Record<string, any> = { updated_at: new Date().toISOString() };
   if (changes.title !== undefined) payload.title = changes.title.trim();
   if (changes.description !== undefined) payload.description = changes.description.trim();
