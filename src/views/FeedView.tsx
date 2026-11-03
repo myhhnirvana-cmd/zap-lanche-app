@@ -58,17 +58,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Diagnóstico temporário: compara autoria persistida com a sessão após recarregar o feed.
-  const [ownershipDiagnostic, setOwnershipDiagnostic] = useState<{
-    totalPosts: number;
-    matchingPosts: number;
-    postsWithRestaurant: number;
-    matchingWithRestaurant: number;
-    postsWithoutRestaurant: number;
-    matchingWithoutRestaurant: number;
-    profileMatchesSession: boolean | null;
-  } | null>(null);
-
 
 
   // Identificação do usuário autenticado a partir do Supabase Auth e public.profiles
@@ -157,21 +146,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
         if (postsRes.error) throw postsRes.error;
 
         const dbPosts = postsRes.data || [];
-        const sessionAuthorId = user?.id || null;
-        const diagnosticIds = new Set([sessionAuthorId, profile?.id].filter((id): id is string => Boolean(id)));
-        const realDbPosts = dbPosts.filter((post) => !post.is_demo);
-        const ownedDbPosts = realDbPosts.filter((post) => Boolean(post.profile_id) && diagnosticIds.has(post.profile_id));
-        const postsWithRestaurant = realDbPosts.filter((post) => Boolean(post.restaurant_id));
-        const postsWithoutRestaurant = realDbPosts.filter((post) => !post.restaurant_id);
-        setOwnershipDiagnostic({
-          totalPosts: realDbPosts.length,
-          matchingPosts: ownedDbPosts.length,
-          postsWithRestaurant: postsWithRestaurant.length,
-          matchingWithRestaurant: postsWithRestaurant.filter((post) => Boolean(post.profile_id) && diagnosticIds.has(post.profile_id)).length,
-          postsWithoutRestaurant: postsWithoutRestaurant.length,
-          matchingWithoutRestaurant: postsWithoutRestaurant.filter((post) => Boolean(post.profile_id) && diagnosticIds.has(post.profile_id)).length,
-          profileMatchesSession: profile?.id && sessionAuthorId ? profile.id === sessionAuthorId : null,
-        });
         const dbPostIds = dbPosts.map((post) => post.id).filter((id) => UUID_REGEX.test(id));
         const commentPostIds = [...new Set([...dbPosts.map((post) => post.id), ...MOCK_POSTS.map((post) => post.id)])];
         const [likesRes, commentsRes] = await Promise.all([
@@ -780,17 +754,6 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-16 animate-fade-in">
-      {/* Diagnóstico temporário de autoria. Não exibe UUIDs nem dados pessoais. */}
-      {user?.id && ownershipDiagnostic && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-slate-300">
-          <div className="font-semibold text-amber-300 mb-1">Diagnóstico temporário do feed</div>
-          <div>Sessão e perfil: {ownershipDiagnostic.profileMatchesSession === null ? 'perfil ainda não confirmado' : ownershipDiagnostic.profileMatchesSession ? 'coincidem' : 'não coincidem'}</div>
-          <div>Publicações reais carregadas: {ownershipDiagnostic.totalPosts}</div>
-          <div>Reconhecidas como suas: {ownershipDiagnostic.matchingPosts}</div>
-          <div className="mt-1">Com restaurante: {ownershipDiagnostic.matchingWithRestaurant} reconhecidas de {ownershipDiagnostic.postsWithRestaurant}</div>
-          <div>Sem restaurante: {ownershipDiagnostic.matchingWithoutRestaurant} reconhecidas de {ownershipDiagnostic.postsWithoutRestaurant}</div>
-        </div>
-      )}
       {/* Feed Header */}
       <div className="flex items-center justify-between pb-2 border-b border-slate-800">
         <div>
