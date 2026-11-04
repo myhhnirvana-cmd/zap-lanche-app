@@ -3,6 +3,7 @@ import { MapPin, ChevronDown, Store, Shield, LogIn, LogOut, User as UserIcon } f
 import { Neighborhood, ActiveTab } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../auth/AuthModal';
+import { getEnvironmentStorageKey } from '../lib/environmentStorage';
 import { getAvatarUrl } from '../../data/avatars';
 
 interface HeaderProps {
@@ -26,8 +27,8 @@ export const Header: React.FC<HeaderProps> = ({
   const userAvatarChoice =
     (user?.user_metadata?.avatar_id as string | undefined) ||
     (user?.user_metadata?.avatar_url as string | undefined) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_url_${user.id}`) : null) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_${user.id}`) : null);
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(getEnvironmentStorageKey(`zap_lanche_avatar_url_${user.id}`)) : null) ||
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(getEnvironmentStorageKey(`zap_lanche_avatar_${user.id}`)) : null);
   const avatarUrl = getAvatarUrl(userAvatarChoice);
 
   return (
