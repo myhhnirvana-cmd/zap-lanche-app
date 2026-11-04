@@ -60,6 +60,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const [feedPage, setFeedPage] = useState(0);
   const [hasMorePosts, setHasMorePosts] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedRetryKey, setFeedRetryKey] = useState(0);
 
 
   // Identificação do usuário autenticado a partir do Supabase Auth e public.profiles
@@ -142,6 +143,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
         return;
       }
       setLoading(true);
+      setError(null);
       try {
         const postsRes = await fetchPostsFromSupabase(feedPage, 20);
         if (!isMounted) return;
@@ -243,13 +245,14 @@ export const FeedView: React.FC<FeedViewProps> = ({
         });
       } catch (err) {
         console.warn('Erro ao sincronizar feed com o Supabase:', err);
+        setError(err instanceof Error ? err.message : 'Não foi possível carregar as publicações. Verifique sua conexão e tente novamente.');
       } finally {
         if (isMounted) setLoading(false);
       }
     }
     syncSupabaseFeed();
     return () => { isMounted = false; };
-  }, [user?.id, feedPage]);
+  }, [user?.id, feedPage, feedRetryKey]);
 
   // Identificação do proprietário usando o ID real da sessão autenticada (auth.users.id)
   const isCommentOwner = (comment: PostComment): boolean => {
@@ -755,7 +758,14 @@ export const FeedView: React.FC<FeedViewProps> = ({
     }
   };
 
-  const handleLoadMorePosts = () => setFeedPage((page) => page + 1);
+  const handleLoadMorePosts = () => {
+    if (loading) return;
+    if (error) {
+      setFeedRetryKey((key) => key + 1);
+      return;
+    }
+    setFeedPage((page) => page + 1);
+  };
 
   const filteredPosts = posts.filter((p) => {
     if (filterRole === 'todos') return true;
@@ -1301,11 +1311,16 @@ export const FeedView: React.FC<FeedViewProps> = ({
         })}
       </div>
 
-      {hasMorePosts && (
-        <div className="flex justify-center pt-2">
+      {(hasMorePosts || error) && (
+        <div className="flex flex-col items-center gap-3 pt-2">
+          {error && (
+            <div role="alert" className="w-full rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-center text-sm text-rose-300">
+              {error}
+            </div>
+          )}
           <button type="button" onClick={handleLoadMorePosts} disabled={loading}
             className="px-5 py-2.5 rounded-xl border border-orange-500/40 bg-orange-500/10 text-orange-300 text-sm font-bold hover:bg-orange-500/20 disabled:opacity-50">
-            {loading ? 'Carregando...' : 'Carregar mais publicações'}
+            {loading ? 'Carregando...' : error ? 'Tentar novamente' : 'Carregar mais publicações'}
           </button>
         </div>
       )}
