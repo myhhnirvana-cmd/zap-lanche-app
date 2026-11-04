@@ -1,0 +1,8 @@
+# Convites: o preview por token é público; a ação de aceitar valida o JWT
+# do usuário dentro da função antes de executar a RPC.
+[functions.accept-invitation]
+verify_jwt = false
+
+# A emissão de convites exige sessão de usuário; mantém a validação de JWT no gateway.
+[functions.invite-merchant]
+verify_jwt = true
