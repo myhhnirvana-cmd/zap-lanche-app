@@ -320,7 +320,7 @@ export function saveMerchantStats(stats: MerchantDemoStats): boolean {
 export function loadCurrentNeighborhood(): Neighborhood {
   if (typeof window === 'undefined') return NEIGHBORHOODS[0];
   try {
-    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_neighborhood_v1');
+    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_neighborhood_v1'));
     if (!raw) return NEIGHBORHOODS[0];
     const parsed = JSON.parse(raw);
     const found = NEIGHBORHOODS.find((n) => n.id === parsed.id);
@@ -480,7 +480,7 @@ export function saveRestaurantRewards(restaurantId: string, rewards: LoyaltyRewa
 export function loadPostsFromStorage(): SocialPost[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_posts');
+    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_posts'));
     if (raw) return JSON.parse(raw);
   } catch {}
   return [];
@@ -496,7 +496,7 @@ export function savePostsFromStorage(posts: SocialPost[]): void {
 export const savePostsToStorage = savePostsFromStorage;
 
 export async function processAndCompressImage(file: File): Promise<string> {
-  if (!file.type.startsWith('image/') {
+  if (!file.type.startsWith('image/')) {
     throw new Error('Selecione um arquivo de imagem válido.');
   }
 
@@ -506,7 +506,7 @@ export async function processAndCompressImage(file: File): Promise<string> {
     image.src = imageUrl;
     await new Promise<void>((resolve, reject) => {
       image.onload = () => resolve();
-      image.onerror = () => reject(new Error('Não foi possível abrir esta imagem.');
+      image.onerror = () => reject(new Error('Não foi possível abrir esta imagem.'));
     });
 
     const maxDimension = 1600;
