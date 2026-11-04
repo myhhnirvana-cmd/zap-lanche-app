@@ -16,7 +16,7 @@ export function setEnvironment(mode: ZapLancheEnvironment): void {
   if (mode === 'homologation') {
     const hUrl = viteEnv.VITE_SUPABASE_HOMOLOGACAO_URL;
     const hKey = viteEnv.VITE_SUPABASE_HOMOLOGACAO_ANON_KEY;
-    if (!hUrl || !hKey?.trim() || hUrl.trim().replace(/\\/+$/, '') !== 'https://nagrxownsslyeosuqzca.supabase.co') {
+    if (!hUrl || !hKey?.trim() || hUrl.trim().replace(/\/+$/, '') !== 'https://nagrxownsslyeosuqzca.supabase.co') {
       alert('Erro: Configuração de homologação inválida.');
       return;
     }
@@ -39,7 +39,7 @@ let supabaseUrl: string | undefined;
 let supabaseAnonKey: string | undefined;
 
 if (currentEnv === 'homologation') {
-  if (homologUrl?.trim().replace(/\\/+$/, '') === 'https://nagrxownsslyeosuqzca.supabase.co' && homologKey?.trim()) {
+  if (homologUrl?.trim().replace(/\/+$/, '') === 'https://nagrxownsslyeosuqzca.supabase.co' && homologKey?.trim()) {
     supabaseUrl = homologUrl;
     supabaseAnonKey = homologKey;
   } else {
