@@ -333,7 +333,7 @@ export function loadCurrentNeighborhood(): Neighborhood {
 
 export function saveCurrentNeighborhood(neighborhood: Neighborhood): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem('zap_lanche_neighborhood_v1', JSON.stringify(neighborhood));
+  localStorage.setItem(getEnvironmentStorageKey('zap_lanche_neighborhood_v1'), JSON.stringify(neighborhood));
 }
 
 export function loadLoyaltyWallet(): LoyaltyPointWallet {
@@ -490,7 +490,7 @@ export const loadPostsToStorage = loadPostsFromStorage;
 export function savePostsFromStorage(posts: SocialPost[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem('zap_lanche_posts', JSON.stringify(posts));
+    localStorage.setItem(getEnvironmentStorageKey('zap_lanche_posts'), JSON.stringify(posts));
   } catch {}
 }
 export const savePostsToStorage = savePostsFromStorage;
