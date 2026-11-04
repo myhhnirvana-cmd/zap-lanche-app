@@ -1,5 +1,4 @@
 import { getEnvironmentStorageKey } from '../lib/environmentStorage';
-import { getEnvironmentStorageKey } from '../lib/environmentStorage';
 import {
   Neighborhood,
   CategoryInfo,
@@ -191,10 +190,10 @@ export const MOCK_ADMIN_STATS: AdminDemoStats = {
 // -------------------------------------------------------------
 // PERSISTÊNCIA LOCAL RESILIENTE (INTEGRAÇÃO DOS CIRCUITOS DO PROTÓTIPO)
 // -------------------------------------------------------------
-export const USER_PROFILE_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_user_profile_v1'));
-export const ADMIN_NOTICES_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_admin_notices_v1'));
-export const REGIONAL_HIGHLIGHTS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_highlights_v1'));
-export const MERCHANT_STATS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_merchant_stats_v1'));
+export const USER_PROFILE_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_user_profile_v1');
+export const ADMIN_NOTICES_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_admin_notices_v1');
+export const REGIONAL_HIGHLIGHTS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_highlights_v1');
+export const MERCHANT_STATS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_merchant_stats_v1');
 
 export function loadUserProfile(): UserProfileDemo {
   if (typeof window === 'undefined') return MOCK_USER_PROFILE;
@@ -321,7 +320,7 @@ export function saveMerchantStats(stats: MerchantDemoStats): boolean {
 export function loadCurrentNeighborhood(): Neighborhood {
   if (typeof window === 'undefined') return NEIGHBORHOODS[0];
   try {
-    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_neighborhood_v1'));
+    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_neighborhood_v1');
     if (!raw) return NEIGHBORHOODS[0];
     const parsed = JSON.parse(raw);
     const found = NEIGHBORHOODS.find((n) => n.id === parsed.id);
@@ -350,7 +349,7 @@ export function saveLoyaltyWallet(wallet: LoyaltyPointWallet): void {
 // -------------------------------------------------------------
 // PERSISTÊNCIA DE RESTAURANTES (EDIÇÃO DA LOJA PELO COMERCIANTE)
 // -------------------------------------------------------------
-export const RESTAURANTS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_restaurants_v2'));
+export const RESTAURANTS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_restaurants_v2');
 
 function isValidRestaurantArray(value: unknown): value is Restaurant[] {
   return Array.isArray(value) && value.every((item) => {
@@ -395,7 +394,7 @@ export function updateSingleRestaurant(updated: Restaurant): Restaurant[] {
 // -------------------------------------------------------------
 // PERSISTÊNCIA DE CARDÁPIOS (GESTÃO DE PRODUTOS PELO COMERCIANTE)
 // -------------------------------------------------------------
-export const MENU_ITEMS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_menu_items_v2'));
+export const MENU_ITEMS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_menu_items_v2');
 
 export function loadAllMenuItems(): Record<string, MenuItem[]> {
   if (typeof window === 'undefined') return {};
@@ -438,7 +437,7 @@ export function saveRestaurantMenu(restaurantId: string, items: MenuItem[]): Rec
 // -------------------------------------------------------------
 // PERSISTÊNCIA DE PRÊMIOS DE FIDELIDADE (REWARDS)
 // -------------------------------------------------------------
-export const REWARDS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_rewards_v2'));
+export const REWARDS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_rewards_v2');
 
 export function loadAllRewards(): Record<string, LoyaltyReward[]> {
   if (typeof window === 'undefined') return {};
@@ -481,7 +480,7 @@ export function saveRestaurantRewards(restaurantId: string, rewards: LoyaltyRewa
 export function loadPostsFromStorage(): SocialPost[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_posts'));
+    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_posts');
     if (raw) return JSON.parse(raw);
   } catch {}
   return [];
@@ -497,7 +496,7 @@ export function savePostsFromStorage(posts: SocialPost[]): void {
 export const savePostsToStorage = savePostsFromStorage;
 
 export async function processAndCompressImage(file: File): Promise<string> {
-  if (!file.type.startsWith('image/')) {
+  if (!file.type.startsWith('image/') {
     throw new Error('Selecione um arquivo de imagem válido.');
   }
 
@@ -507,7 +506,7 @@ export async function processAndCompressImage(file: File): Promise<string> {
     image.src = imageUrl;
     await new Promise<void>((resolve, reject) => {
       image.onload = () => resolve();
-      image.onerror = () => reject(new Error('Não foi possível abrir esta imagem.'));
+      image.onerror = () => reject(new Error('Não foi possível abrir esta imagem.');
     });
 
     const maxDimension = 1600;
