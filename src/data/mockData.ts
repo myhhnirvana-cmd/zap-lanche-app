@@ -1,3 +1,4 @@
+import { getEnvironmentStorageKey } from '../lib/environmentStorage';
 import {
   Neighborhood,
   CategoryInfo,
@@ -189,10 +190,10 @@ export const MOCK_ADMIN_STATS: AdminDemoStats = {
 // -------------------------------------------------------------
 // PERSISTÊNCIA LOCAL RESILIENTE (INTEGRAÇÃO DOS CIRCUITOS DO PROTÓTIPO)
 // -------------------------------------------------------------
-export const USER_PROFILE_STORAGE_KEY = 'zap_lanche_user_profile_v1';
-export const ADMIN_NOTICES_STORAGE_KEY = 'zap_lanche_admin_notices_v1';
-export const REGIONAL_HIGHLIGHTS_STORAGE_KEY = 'zap_lanche_highlights_v1';
-export const MERCHANT_STATS_STORAGE_KEY = 'zap_lanche_merchant_stats_v1';
+export const USER_PROFILE_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_user_profile_v1');
+export const ADMIN_NOTICES_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_admin_notices_v1');
+export const REGIONAL_HIGHLIGHTS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_highlights_v1');
+export const MERCHANT_STATS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_merchant_stats_v1');
 
 export function loadUserProfile(): UserProfileDemo {
   if (typeof window === 'undefined') return MOCK_USER_PROFILE;
@@ -278,7 +279,7 @@ export function loadMerchantStats(restaurantId?: string): MerchantDemoStats {
     return MOCK_MERCHANT_STATS_MAP[targetId] || MOCK_MERCHANT_STATS;
   }
   try {
-    const rawPerStore = localStorage.getItem(`zap_lanche_merchant_stats_${targetId}`);
+    const rawPerStore = localStorage.getItem(getEnvironmentStorageKey(`zap_lanche_merchant_stats_${targetId}`));
     if (rawPerStore) {
       const parsed = JSON.parse(rawPerStore);
       if (parsed && typeof parsed === 'object' && parsed.restaurantId) {
@@ -303,7 +304,7 @@ export function saveMerchantStats(stats: MerchantDemoStats): boolean {
   try {
     localStorage.setItem(MERCHANT_STATS_STORAGE_KEY, JSON.stringify(stats));
     if (stats.restaurantId) {
-      localStorage.setItem(`zap_lanche_merchant_stats_${stats.restaurantId}`, JSON.stringify(stats));
+      localStorage.setItem(getEnvironmentStorageKey(`zap_lanche_merchant_stats_${stats.restaurantId}`), JSON.stringify(stats));
     }
     return true;
   } catch (e) {
@@ -319,7 +320,7 @@ export function saveMerchantStats(stats: MerchantDemoStats): boolean {
 export function loadCurrentNeighborhood(): Neighborhood {
   if (typeof window === 'undefined') return NEIGHBORHOODS[0];
   try {
-    const raw = localStorage.getItem('zap_lanche_neighborhood_v1');
+    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_neighborhood_v1'));
     if (!raw) return NEIGHBORHOODS[0];
     const parsed = JSON.parse(raw);
     const found = NEIGHBORHOODS.find((n) => n.id === parsed.id);
@@ -332,7 +333,7 @@ export function loadCurrentNeighborhood(): Neighborhood {
 
 export function saveCurrentNeighborhood(neighborhood: Neighborhood): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem('zap_lanche_neighborhood_v1', JSON.stringify(neighborhood));
+  localStorage.setItem(getEnvironmentStorageKey('zap_lanche_neighborhood_v1'), JSON.stringify(neighborhood));
 }
 
 export function loadLoyaltyWallet(): LoyaltyPointWallet {
@@ -348,7 +349,7 @@ export function saveLoyaltyWallet(wallet: LoyaltyPointWallet): void {
 // -------------------------------------------------------------
 // PERSISTÊNCIA DE RESTAURANTES (EDIÇÃO DA LOJA PELO COMERCIANTE)
 // -------------------------------------------------------------
-export const RESTAURANTS_STORAGE_KEY = 'zap_lanche_restaurants_v2';
+export const RESTAURANTS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_restaurants_v2');
 
 function isValidRestaurantArray(value: unknown): value is Restaurant[] {
   return Array.isArray(value) && value.every((item) => {
@@ -393,7 +394,7 @@ export function updateSingleRestaurant(updated: Restaurant): Restaurant[] {
 // -------------------------------------------------------------
 // PERSISTÊNCIA DE CARDÁPIOS (GESTÃO DE PRODUTOS PELO COMERCIANTE)
 // -------------------------------------------------------------
-export const MENU_ITEMS_STORAGE_KEY = 'zap_lanche_menu_items_v2';
+export const MENU_ITEMS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_menu_items_v2');
 
 export function loadAllMenuItems(): Record<string, MenuItem[]> {
   if (typeof window === 'undefined') return {};
@@ -436,7 +437,7 @@ export function saveRestaurantMenu(restaurantId: string, items: MenuItem[]): Rec
 // -------------------------------------------------------------
 // PERSISTÊNCIA DE PRÊMIOS DE FIDELIDADE (REWARDS)
 // -------------------------------------------------------------
-export const REWARDS_STORAGE_KEY = 'zap_lanche_rewards_v2';
+export const REWARDS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_rewards_v2');
 
 export function loadAllRewards(): Record<string, LoyaltyReward[]> {
   if (typeof window === 'undefined') return {};
@@ -479,7 +480,7 @@ export function saveRestaurantRewards(restaurantId: string, rewards: LoyaltyRewa
 export function loadPostsFromStorage(): SocialPost[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem('zap_lanche_posts');
+    const raw = localStorage.getItem(getEnvironmentStorageKey('zap_lanche_posts'));
     if (raw) return JSON.parse(raw);
   } catch {}
   return [];
@@ -489,7 +490,7 @@ export const loadPostsToStorage = loadPostsFromStorage;
 export function savePostsFromStorage(posts: SocialPost[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem('zap_lanche_posts', JSON.stringify(posts));
+    localStorage.setItem(getEnvironmentStorageKey('zap_lanche_posts'), JSON.stringify(posts));
   } catch {}
 }
 export const savePostsToStorage = savePostsFromStorage;
