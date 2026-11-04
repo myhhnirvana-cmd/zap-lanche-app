@@ -50,6 +50,7 @@ import {
 import { supabase, isSupabaseConfigured, insertRestaurantToSupabase, fetchRestaurantsFromSupabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { CommunityModeration } from './CommunityModeration';
+import { EnvironmentModeControl } from '../components/admin/EnvironmentModeControl';
 
 interface AdminViewProps {
   onOpenGitHubGuide: () => void;
@@ -426,6 +427,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16 animate-fade-in">
+      <EnvironmentModeControl />
       {/* Admin Title */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
         <div>
