@@ -4,7 +4,6 @@ import { supabase, isSupabaseConfigured, fetchMerchantRestaurant } from '../lib/
 import { Restaurant } from '../types';
 import { getAvatarById } from '../data/avatars';
 import { getEnvironmentStorageKey } from '../lib/environmentStorage';
-import { getEnvironmentStorageKey } from '../lib/environmentStorage';
 
 export interface UserProfileRecord {
   id: string;
