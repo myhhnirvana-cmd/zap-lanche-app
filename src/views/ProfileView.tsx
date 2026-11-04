@@ -19,6 +19,7 @@ import {
   Info,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { getEnvironmentStorageKey } from '../lib/environment';
 import { AuthModal } from '../components/auth/AuthModal';
 import { AvatarGalleryModal } from '../components/profile/AvatarGalleryModal';
 import { getAvatarById, DEFAULT_AVATAR_ID } from '../data/avatars';
@@ -467,7 +468,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const userAvatarId =
     (authUser.user_metadata?.avatar_id as string | undefined) ||
-    (typeof window !== 'undefined' && authUser.id ? localStorage.getItem(`zap_lanche_avatar_${authUser.id}`) : null) ||
+    (typeof window !== 'undefined' && authUser.id ? localStorage.getItem(getEnvironmentStorageKey(`zap_lanche_avatar_${authUser.id}`)) : null) ||
     DEFAULT_AVATAR_ID;
 
   const currentAvatarData = getAvatarById(userAvatarId);

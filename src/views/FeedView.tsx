@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { SocialPost, Restaurant, PostComment } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { getEnvironmentStorageKey } from '../lib/environment';
 import { getAvatarUrl, DEFAULT_AVATAR_URL } from '../data/avatars';
 import {
   isSupabaseConfigured,
@@ -73,8 +74,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const userAvatarChoice =
     (user?.user_metadata?.avatar_id as string | undefined) ||
     (user?.user_metadata?.avatar_url as string | undefined) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_url_${user.id}`) : null) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_${user.id}`) : null);
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(getEnvironmentStorageKey(`zap_lanche_avatar_url_${user.id}`)) : null) ||
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(getEnvironmentStorageKey(`zap_lanche_avatar_${user.id}`)) : null);
 
   const currentAvatar = getAvatarUrl(userAvatarChoice);
 

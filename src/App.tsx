@@ -19,12 +19,14 @@ import { MerchantGate } from './components/auth/MerchantGate';
 import { DishDetailModal } from './views/DishDetailModal';
 import { GitHubGuideModal } from './views/GitHubGuideModal';
 import { AcceptInvitationModal } from './components/merchant/AcceptInvitationModal';
-import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseConfigured } from './lib/supabase';
+import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseConfigured, activeSupabaseEnvironment, switchSupabaseEnvironment } from './lib/supabase';
 import { loadAllMenuItems, MOCK_MENU_ITEMS, saveCurrentNeighborhood } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
+import { getEnvironmentStorageKey } from './lib/environment';
 
 export default function App() {
   const { user, profile } = useAuth();
+  const isHomologationMode = activeSupabaseEnvironment === 'homologation';
   const [activeTab, setActiveTab] = useState<ActiveTab>('explorar');
   const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>({ id: 'todos', name: 'Todos os Bairros', zone: '', city: '', state: '', activeSpotsCount: 0 });
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -42,7 +44,7 @@ export default function App() {
       const searchParams = new URLSearchParams(window.location.search);
       const referralCode = searchParams.get('ref');
       if (referralCode && referralCode.trim()) {
-        localStorage.setItem('pending_referral_code', referralCode.trim());
+        localStorage.setItem(getEnvironmentStorageKey('pending_referral_code'), referralCode.trim());
         // Remove o parâmetro da URL
         const cleanUrl = window.location.pathname + (window.location.hash || '');
         window.history.replaceState({}, document.title, cleanUrl);
@@ -158,6 +160,28 @@ export default function App() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
+
+      {isHomologationMode && (
+        <div role="alert" className="mx-auto mt-3 w-full max-w-6xl px-4 sm:px-6">
+          <div className="rounded-2xl border-2 border-amber-400/70 bg-amber-500/15 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-extrabold tracking-wide text-amber-200">MODO HOMOLOGAÇÃO ATIVO · AMBIENTE DE TESTES</p>
+              <p className="text-[11px] text-amber-100/80 mt-1">As operações deste acesso usam o banco de testes. Não cadastre dados reais aqui.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Voltar ao banco oficial de Produção? O aplicativo será recarregado.')) {
+                  switchSupabaseEnvironment('production');
+                }
+              }}
+              className="shrink-0 px-4 py-2 rounded-xl bg-amber-300 hover:bg-amber-200 text-slate-950 text-xs font-extrabold"
+            >
+              Voltar à Produção
+            </button>
+          </div>
+        </div>
+      )}
 
       {profile?.is_suspended && (!profile.suspended_until || new Date(profile.suspended_until).getTime() > Date.now()) && (
         <div role="status" className="mx-auto mt-3 w-full max-w-6xl px-4 sm:px-6">
