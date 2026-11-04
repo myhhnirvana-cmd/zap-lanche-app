@@ -50,9 +50,11 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
 
   const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
-  const supabaseUrl = viteEnv.VITE_SUPABASE_URL || 'https://ortuxqmqtngkvynmgpch.supabase.co';
+  // Usa exclusivamente o projeto Supabase configurado para este ambiente.
+  // Nunca direciona silenciosamente convites para o projeto de Produção.
+  const supabaseUrl = viteEnv.VITE_SUPABASE_URL as string | undefined;
   const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY as string | undefined;
-  const functionUrl = `${supabaseUrl}/functions/v1/accept-invitation`;
+  const functionUrl = supabaseUrl ? `${supabaseUrl}/functions/v1/accept-invitation` : null;
 
   // 1. Carrega os dados prévios do convite com segurança para confirmação explícita
   useEffect(() => {
@@ -63,6 +65,11 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
       setPreviewError(null);
 
       try {
+        if (!functionUrl) {
+          setPreviewError('Ambiente Supabase não configurado. Não foi feita nenhuma consulta de convite.');
+          setIsPreviewLoading(false);
+          return;
+        }
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
         };
