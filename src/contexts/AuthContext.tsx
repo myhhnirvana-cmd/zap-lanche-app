@@ -3,6 +3,7 @@ import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured, fetchMerchantRestaurant } from '../lib/supabase';
 import { Restaurant } from '../types';
 import { getAvatarById } from '../data/avatars';
+import { getEnvironmentStorageKey } from '../lib/environmentStorage';
 
 export interface UserProfileRecord {
   id: string;
@@ -140,15 +141,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         diagnostic.isAdminResult = rec.role === 'admin';
 
         // Aplicação automática de código de indicação pendente
-        const pendingCode = localStorage.getItem('pending_referral_code');
+        const pendingCode = localStorage.getItem(getEnvironmentStorageKey('pending_referral_code'));
         if (pendingCode) {
           import('../lib/supabase').then(({ applyReferralCode }) => {
             applyReferralCode(pendingCode).then((res) => {
               if (res.success) {
-                localStorage.removeItem('pending_referral_code');
+                localStorage.removeItem(getEnvironmentStorageKey('pending_referral_code'));
                 console.log('Convite vinculado com sucesso!');
               } else if (res.message.includes('autoindicação') || res.message.includes('inválido') || res.message.includes('perfil')) {
-                localStorage.removeItem('pending_referral_code');
+                localStorage.removeItem(getEnvironmentStorageKey('pending_referral_code'));
               }
             });
           }).catch(console.error);
@@ -373,8 +374,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // 2. Cache local resiliente por usuário
       try {
-        localStorage.setItem(`zap_lanche_avatar_${user.id}`, selected.id);
-        localStorage.setItem(`zap_lanche_avatar_url_${user.id}`, selected.dataUrl);
+        localStorage.setItem(getEnvironmentStorageKey(`zap_lanche_avatar_${user.id}`), selected.id);
+        localStorage.setItem(getEnvironmentStorageKey(`zap_lanche_avatar_url_${user.id}`), selected.dataUrl);
       } catch {
         // Silencioso
       }
