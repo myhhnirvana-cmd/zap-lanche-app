@@ -52,6 +52,10 @@ if (currentEnv === 'homologation') {
 
 export const isSupabaseConfigured = Boolean(supabaseUrl?.trim() && supabaseAnonKey?.trim());
 
+/** Credenciais públicas do ambiente atualmente selecionado; nunca usar service_role no cliente. */
+export const activeSupabaseUrl = supabaseUrl;
+export const activeSupabaseAnonKey = supabaseAnonKey;
+
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!, {
       auth: {
