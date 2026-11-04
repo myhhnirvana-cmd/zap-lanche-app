@@ -1233,17 +1233,20 @@ export interface InsertPostInput {
   is_demo?: boolean;
 }
 
-export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | null; error: Error | null }> {
-  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
+export async function fetchPostsFromSupabase(page = 0, pageSize = 20): Promise<{ data: DbPostRow[] | null; error: Error | null; hasMore: boolean }> {
+  if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado'), hasMore: false };
 
   try {
     const { data, error } = await supabase
       .from('posts')
       .select('id, restaurant_id, author_profile_id, content, image_url, created_at')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(Math.max(0, page) * pageSize, Math.max(0, page) * pageSize + pageSize - 1);
 
-    if (error) return { data: null, error: new Error(error.message) };
-    if (!data?.length) return { data: [], error: null };
+    if (error) return { data: null, error: new Error(error.message), hasMore: false };
+    if (!data?.length) return { data: [], error: null, hasMore: false };
+    const hasMore = data.length === pageSize;
 
     const authorIds = [...new Set(data.map((row: any) => row.author_profile_id).filter(Boolean))];
     const restaurantIds = [...new Set(data.map((row: any) => row.restaurant_id).filter(Boolean))];
@@ -1287,9 +1290,9 @@ export async function fetchPostsFromSupabase(): Promise<{ data: DbPostRow[] | nu
         edited_at: row.edited_at || null,
       };
     });
-    return { data: mappedPosts, error: null };
+    return { data: mappedPosts, error: null, hasMore };
   } catch (err: any) {
-    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)), hasMore: false };
   }
 }
 
