@@ -1,6 +1,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Restaurant, MenuItem, LoyaltyReward, Promotion } from '../types';
+import { getActiveEnvironment, persistActiveEnvironment, SupabaseEnvironment } from './environment';
 
 // Obtenção das variáveis injetadas via Vite no ambiente cliente.
 const viteEnv =
@@ -8,25 +9,60 @@ const viteEnv =
     ? ((import.meta as any).env ?? {})
     : {};
 
-const supabaseUrl = (viteEnv.VITE_SUPABASE_URL || (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : undefined)) as string | undefined;
-const supabaseAnonKey = (viteEnv.VITE_SUPABASE_ANON_KEY || (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_ANON_KEY : undefined)) as string | undefined;
+const readEnv = (viteName: string, processName: string): string | undefined =>
+  (viteEnv[viteName] || (typeof process !== 'undefined' ? process.env?.[processName] : undefined)) as string | undefined;
+
+export const activeSupabaseEnvironment = getActiveEnvironment();
+
+const supabaseUrl = activeSupabaseEnvironment === 'homologation'
+  ? readEnv('VITE_SUPABASE_HOMOLOGACAO_URL', 'VITE_SUPABASE_HOMOLOGACAO_URL')
+  : readEnv('VITE_SUPABASE_URL', 'VITE_SUPABASE_URL');
+
+const supabaseAnonKey = activeSupabaseEnvironment === 'homologation'
+  ? readEnv('VITE_SUPABASE_HOMOLOGACAO_ANON_KEY', 'VITE_SUPABASE_HOMOLOGACAO_ANON_KEY')
+  : readEnv('VITE_SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY');
+
+const homologationUrl = readEnv('VITE_SUPABASE_HOMOLOGACAO_URL', 'VITE_SUPABASE_HOMOLOGACAO_URL');
+const homologationAnonKey = readEnv('VITE_SUPABASE_HOMOLOGACAO_ANON_KEY', 'VITE_SUPABASE_HOMOLOGACAO_ANON_KEY');
+
+/** Homologação nunca usa as credenciais de Produção como fallback. */
+export const isHomologationConfigured = Boolean(homologationUrl?.trim() && homologationAnonKey?.trim());
+
+export const isHomologationMode = activeSupabaseEnvironment === 'homologation';
 
 /**
- * Indica se as credenciais do Supabase estão configuradas.
+ * Troca de ambiente com recarga completa para evitar módulos usando clientes
+ * diferentes na mesma sessão. A troca para Homologação falha fechada se faltarem
+ * as duas credenciais públicas específicas desse projeto.
  */
-export const isSupabaseConfigured = Boolean(
-  supabaseUrl?.trim() &&
-  supabaseAnonKey?.trim()
-);
+export function switchSupabaseEnvironment(environment: SupabaseEnvironment): boolean {
+  if (environment === 'homologation' && !isHomologationConfigured) return false;
+  try {
+    persistActiveEnvironment(environment);
+    window.location.reload();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Indica se as credenciais do Supabase do ambiente ativo estão configuradas.
+ */
+export const isSupabaseConfigured = Boolean(supabaseUrl?.trim() && supabaseAnonKey?.trim());
 
 /**
  * Instância centralizada do cliente Supabase.
+ * Cada ambiente usa uma chave de sessão própria para impedir mistura de tokens.
  */
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+        storageKey: activeSupabaseEnvironment === 'homologation'
+          ? 'zaplanche-auth-homologation'
+          : 'zaplanche-auth-production',
       },
     })
   : null;
