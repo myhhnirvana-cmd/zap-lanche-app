@@ -19,7 +19,7 @@ export function getActiveEnvironment(): SupabaseEnvironment {
 }
 
 export function getEnvironmentStorageKey(key: string): string {
-  return `${key}::${getActiveEnvironment()}`;
+  return getActiveEnvironment() === 'homologation' ? `${key}::homologation` : key;
 }
 
 export function persistActiveEnvironment(environment: SupabaseEnvironment): void {
