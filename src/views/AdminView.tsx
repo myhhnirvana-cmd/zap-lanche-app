@@ -478,8 +478,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
         </div>
       </div>
 
-      <CommunityModeration />
-
       {/* Formulário de Convite de Comerciante */}
       {showInviteForm && (
         <div className="p-5 rounded-3xl bg-slate-900 border border-amber-500/40 space-y-4 animate-fade-in shadow-xl">
@@ -787,6 +785,9 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
       </div>
 
       {/* ============================================================ */}
+
+      <CommunityModeration />
+
       {/* 1. CONFIGURAÇÕES GLOBAIS DO PROGRAMA DE LANÇAMENTO           */}
       {/* ============================================================ */}
       <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4">
