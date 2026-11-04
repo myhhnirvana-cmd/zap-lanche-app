@@ -24,6 +24,7 @@ import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseCon
 import { loadAllMenuItems, MOCK_MENU_ITEMS, saveCurrentNeighborhood } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
 import { getEnvironmentStorageKey } from './lib/environmentStorage';
+import { getEnvironmentStorageKey } from './lib/environmentStorage';
 
 export default function App() {
   const { user, profile } = useAuth();
