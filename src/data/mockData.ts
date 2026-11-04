@@ -1,4 +1,5 @@
 import { getEnvironmentStorageKey } from '../lib/environmentStorage';
+import { getEnvironmentStorageKey } from '../lib/environmentStorage';
 import {
   Neighborhood,
   CategoryInfo,
@@ -190,10 +191,10 @@ export const MOCK_ADMIN_STATS: AdminDemoStats = {
 // -------------------------------------------------------------
 // PERSISTÊNCIA LOCAL RESILIENTE (INTEGRAÇÃO DOS CIRCUITOS DO PROTÓTIPO)
 // -------------------------------------------------------------
-export const USER_PROFILE_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_user_profile_v1');
-export const ADMIN_NOTICES_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_admin_notices_v1');
-export const REGIONAL_HIGHLIGHTS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_highlights_v1');
-export const MERCHANT_STATS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_merchant_stats_v1');
+export const USER_PROFILE_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_user_profile_v1'));
+export const ADMIN_NOTICES_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_admin_notices_v1'));
+export const REGIONAL_HIGHLIGHTS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_highlights_v1'));
+export const MERCHANT_STATS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_merchant_stats_v1'));
 
 export function loadUserProfile(): UserProfileDemo {
   if (typeof window === 'undefined') return MOCK_USER_PROFILE;
@@ -349,7 +350,7 @@ export function saveLoyaltyWallet(wallet: LoyaltyPointWallet): void {
 // -------------------------------------------------------------
 // PERSISTÊNCIA DE RESTAURANTES (EDIÇÃO DA LOJA PELO COMERCIANTE)
 // -------------------------------------------------------------
-export const RESTAURANTS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_restaurants_v2');
+export const RESTAURANTS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_restaurants_v2'));
 
 function isValidRestaurantArray(value: unknown): value is Restaurant[] {
   return Array.isArray(value) && value.every((item) => {
@@ -394,7 +395,7 @@ export function updateSingleRestaurant(updated: Restaurant): Restaurant[] {
 // -------------------------------------------------------------
 // PERSISTÊNCIA DE CARDÁPIOS (GESTÃO DE PRODUTOS PELO COMERCIANTE)
 // -------------------------------------------------------------
-export const MENU_ITEMS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_menu_items_v2');
+export const MENU_ITEMS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_menu_items_v2'));
 
 export function loadAllMenuItems(): Record<string, MenuItem[]> {
   if (typeof window === 'undefined') return {};
@@ -437,7 +438,7 @@ export function saveRestaurantMenu(restaurantId: string, items: MenuItem[]): Rec
 // -------------------------------------------------------------
 // PERSISTÊNCIA DE PRÊMIOS DE FIDELIDADE (REWARDS)
 // -------------------------------------------------------------
-export const REWARDS_STORAGE_KEY = getEnvironmentStorageKey('zap_lanche_rewards_v2');
+export const REWARDS_STORAGE_KEY = getEnvironmentStorageKey(getEnvironmentStorageKey('zap_lanche_rewards_v2'));
 
 export function loadAllRewards(): Record<string, LoyaltyReward[]> {
   if (typeof window === 'undefined') return {};
