@@ -3,8 +3,7 @@ import { MapPin, ChevronDown, Store, Shield, LogIn, LogOut, User as UserIcon } f
 import { Neighborhood, ActiveTab } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../auth/AuthModal';
-import { getEnvironmentStorageKey } from '../lib/environmentStorage';
-import { getEnvironmentStorageKey } from '../lib/environmentStorage';
+import { getEnvironmentStorageKey } from '../../lib/environmentStorage';
 import { getAvatarUrl } from '../../data/avatars';
 
 interface HeaderProps {
