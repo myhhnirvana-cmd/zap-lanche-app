@@ -6,6 +6,7 @@ import {
   Neighborhood,
 } from './types';
 import { Header } from './components/layout/Header';
+import { HomologationBanner } from './components/common/HomologationBanner';
 import { BottomNav } from './components/layout/BottomNav';
 import { NeighborhoodModal } from './components/common/NeighborhoodModal';
 import { ExploreView } from './views/ExploreView';
@@ -148,6 +149,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary flex flex-col font-sans selection:bg-orange-500/30 selection:text-orange-200">
+      <HomologationBanner />
       {/* Top Header */}
       <Header
         currentNeighborhood={currentNeighborhood}

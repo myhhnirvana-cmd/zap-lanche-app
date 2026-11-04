@@ -47,7 +47,7 @@ import {
   loadAdminNotices,
   saveAdminNotices,
 } from '../data/mockData';
-import { supabase, isSupabaseConfigured, insertRestaurantToSupabase, fetchRestaurantsFromSupabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, insertRestaurantToSupabase, fetchRestaurantsFromSupabase, getCurrentEnvironment, setEnvironment } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { CommunityModeration } from './CommunityModeration';
 
@@ -426,6 +426,40 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16 animate-fade-in">
+      {/* Seletor de Ambiente (Produção vs Homologação) */}
+      <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-orange-500/20 text-orange-400">
+              <Layers className="w-5 h-5" />
+            </span>
+            <div>
+              <h3 className="font-bold text-white text-sm">Gerenciamento de Ambiente Supabase</h3>
+              <p className="text-xs text-slate-400">Alterne entre o ambiente oficial de Produção e o ambiente isolado de Homologação.</p>
+            </div>
+          </div>
+          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${getCurrentEnvironment() === 'homologation' ? 'bg-amber-500 text-black' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
+            {getCurrentEnvironment() === 'homologation' ? 'Homologação Ativa' : 'Produção Ativa'}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          <button
+            onClick={() => setEnvironment('production')}
+            className={`p-3 rounded-2xl border text-left transition-all ${getCurrentEnvironment() === 'production' ? 'bg-orange-500/10 border-orange-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'}`}
+          >
+            <div className="font-bold text-xs text-white">Produção (Oficial)</div>
+            <div className="text-[11px] text-slate-400 font-mono mt-0.5">ortuxqmqtngkvynmgpch</div>
+          </button>
+          <button
+            onClick={() => setEnvironment('homologation')}
+            className={`p-3 rounded-2xl border text-left transition-all ${getCurrentEnvironment() === 'homologation' ? 'bg-amber-500/10 border-amber-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'}`}
+          >
+            <div className="font-bold text-xs text-amber-400">Homologação (Testes)</div>
+            <div className="text-[11px] text-slate-400 font-mono mt-0.5">nagrxownsslyeosuqzca</div>
+          </button>
+        </div>
+      </div>
+
       {/* Admin Title */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
         <div>

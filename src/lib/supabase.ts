@@ -1,39 +1,66 @@
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Restaurant, MenuItem, LoyaltyReward, Promotion } from '../types';
 
-// Obtenção das variáveis injetadas via Vite no ambiente cliente.
-const viteEnv =
-  typeof import.meta !== 'undefined'
-    ? ((import.meta as any).env ?? {})
-    : {};
+const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
 
-const supabaseUrl = (viteEnv.VITE_SUPABASE_URL || (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : undefined)) as string | undefined;
-const supabaseAnonKey = (viteEnv.VITE_SUPABASE_ANON_KEY || (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_ANON_KEY : undefined)) as string | undefined;
+export type ZapLancheEnvironment = 'production' | 'homologation';
 
-/**
- * Indica se as credenciais do Supabase estão configuradas.
- */
-export const isSupabaseConfigured = Boolean(
-  supabaseUrl?.trim() &&
-  supabaseAnonKey?.trim()
-);
+export function getCurrentEnvironment(): ZapLancheEnvironment {
+  if (typeof window === 'undefined') return 'production';
+  return (localStorage.getItem('zaplanche_env_mode') as ZapLancheEnvironment) || 'production';
+}
 
-/**
- * Instância centralizada do cliente Supabase.
- */
+export function setEnvironment(mode: ZapLancheEnvironment): void {
+  if (typeof window === 'undefined') return;
+  if (mode === 'homologation') {
+    const hUrl = viteEnv.VITE_SUPABASE_HOMOLOGACAO_URL;
+    const hKey = viteEnv.VITE_SUPABASE_HOMOLOGACAO_ANON_KEY;
+    if (!hUrl || !hKey || !hUrl.trim().startsWith('https://nagrxownsslyeosuqzca.supabase.co')) {
+      alert('Erro: Configuração de homologação inválida.');
+      return;
+    }
+  }
+  const current = getCurrentEnvironment();
+  if (current !== mode) {
+    localStorage.setItem('zaplanche_env_mode', mode);
+    window.location.reload();
+  }
+}
+
+const currentEnv = getCurrentEnvironment();
+const prodUrl = (viteEnv.VITE_SUPABASE_URL || (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : undefined)) as string | undefined;
+const prodKey = (viteEnv.VITE_SUPABASE_ANON_KEY || (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_ANON_KEY : undefined)) as string | undefined;
+
+const homologUrl = viteEnv.VITE_SUPABASE_HOMOLOGACAO_URL as string | undefined;
+const homologKey = viteEnv.VITE_SUPABASE_HOMOLOGACAO_ANON_KEY as string | undefined;
+
+let supabaseUrl: string | undefined;
+let supabaseAnonKey: string | undefined;
+
+if (currentEnv === 'homologation') {
+  if (homologUrl?.trim().startsWith('https://nagrxownsslyeosuqzca.supabase.co') && homologKey?.trim()) {
+    supabaseUrl = homologUrl;
+    supabaseAnonKey = homologKey;
+  } else {
+    console.error('CRITICAL: Homologation configuration missing or invalid.');
+  }
+} else {
+  supabaseUrl = prodUrl;
+  supabaseAnonKey = prodKey;
+}
+
+export const isSupabaseConfigured = Boolean(supabaseUrl?.trim() && supabaseAnonKey?.trim());
+
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+        storageKey: currentEnv === 'homologation' ? 'zaplanche_auth_homologation' : 'zaplanche_auth_production',
       },
     })
   : null;
 
-/**
- * Bucket padrão de imagens do Supabase Storage.
- */
 export const SUPABASE_STORAGE_BUCKET = 'Zaplanche-images';
 
 /**
