@@ -54,6 +54,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   onOpenDishPreview,
 }) => {
   const { user, profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
 
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -471,10 +472,10 @@ export const FeedView: React.FC<FeedViewProps> = ({
   // -------------------------------------------------------------
   const handleConfirmDelete = async () => {
     if (!postToDelete) return;
-    if (!isPostOwner(postToDelete)) {
+    if (!isAdmin && !isPostOwner(postToDelete)) {
       setNotification({
         type: 'error',
-        text: 'Não é permitido excluir publicações de outros autores.',
+        text: 'Você não tem permissão para excluir esta publicação.',
       });
       setPostToDelete(null);
       return;
@@ -498,7 +499,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
     setNotification({
       type: 'success',
-      text: 'Sua publicação foi excluída do feed.',
+      text: isAdmin ? 'Publicação removida do feed pela administração.' : 'Sua publicação foi excluída do feed.',
     });
     setPostToDelete(null);
   };
@@ -1065,24 +1066,24 @@ export const FeedView: React.FC<FeedViewProps> = ({
                     @{post.restaurantName}
                   </button>
 
-                  {/* ============================================================ */}
-                  {/* CONTROLES DE EDITAR E EXCLUIR (APENAS PARA O AUTOR DO POST)  */}
-                  {/* Regra de interface do protótipo: outros autores NÃO possuem */}
-                  {/* esses botões no DOM.                                         */}
-                  {/* ============================================================ */}
-                  {userOwnsThisPost && (
+                  {/* Controles do autor e da administração */}
+                  {(userOwnsThisPost || isAdmin) && (
                     <div className="flex items-center gap-1 pl-2 border-l border-slate-800">
-                      <button
-                        onClick={() => handleStartEdit(post)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-slate-800 transition-colors"
-                        title="Editar sua publicação"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      {userOwnsThisPost && (
+                        <button
+                          onClick={() => handleStartEdit(post)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-slate-800 transition-colors"
+                          title="Editar sua publicação"
+                          aria-label="Editar sua publicação"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => setPostToDelete(post)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
-                        title="Excluir sua publicação"
+                        title={isAdmin ? "Excluir publicação (administração)" : "Excluir sua publicação"}
+                        aria-label={isAdmin ? "Excluir publicação" : "Excluir sua publicação"}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
