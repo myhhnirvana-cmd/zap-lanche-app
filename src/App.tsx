@@ -23,6 +23,7 @@ import { AcceptInvitationModal } from './components/merchant/AcceptInvitationMod
 import { fetchRestaurantsFromSupabase, fetchMenuItemsFromSupabase, isSupabaseConfigured } from './lib/supabase';
 import { loadAllMenuItems, MOCK_MENU_ITEMS, saveCurrentNeighborhood } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
+import { getEnvironmentStorageKey } from './lib/environmentStorage';
 
 export default function App() {
   const { user, profile } = useAuth();
@@ -43,7 +44,7 @@ export default function App() {
       const searchParams = new URLSearchParams(window.location.search);
       const referralCode = searchParams.get('ref');
       if (referralCode && referralCode.trim()) {
-        localStorage.setItem('pending_referral_code', referralCode.trim());
+        localStorage.setItem(getEnvironmentStorageKey('pending_referral_code'), referralCode.trim());
         // Remove o parâmetro da URL
         const cleanUrl = window.location.pathname + (window.location.hash || '');
         window.history.replaceState({}, document.title, cleanUrl);

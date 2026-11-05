@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../auth/AuthModal';
+import { activeSupabaseUrl, activeSupabaseAnonKey } from '../../lib/supabase';
 
 interface AcceptInvitationModalProps {
   token: string;
@@ -49,10 +50,11 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup'>('login');
 
-  const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
-  const supabaseUrl = viteEnv.VITE_SUPABASE_URL || 'https://ortuxqmqtngkvynmgpch.supabase.co';
-  const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY as string | undefined;
-  const functionUrl = `${supabaseUrl}/functions/v1/accept-invitation`;
+  // O endpoint e a chave pertencem sempre ao ambiente Supabase atualmente selecionado.
+  const anonKey = activeSupabaseAnonKey;
+  const functionUrl = activeSupabaseUrl
+    ? `${activeSupabaseUrl}/functions/v1/accept-invitation`
+    : null;
 
   // 1. Carrega os dados prévios do convite com segurança para confirmação explícita
   useEffect(() => {
@@ -63,6 +65,11 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
       setPreviewError(null);
 
       try {
+        if (!functionUrl) {
+          setPreviewError('Ambiente Supabase não configurado. Nenhuma consulta de convite foi realizada.');
+          setIsPreviewLoading(false);
+          return;
+        }
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
         };
@@ -146,6 +153,11 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
     setAcceptError(null);
 
     try {
+      if (!functionUrl) {
+        setAcceptError('Ambiente Supabase não configurado. Não foi possível consultar o serviço de convites.');
+        setIsAccepting(false);
+        return;
+      }
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session?.access_token}`
