@@ -12,7 +12,7 @@ ON public.posts
 FOR DELETE
 TO authenticated
 USING (
-  auth.uid() = profile_id
+  auth.uid() = author_profile_id
   OR public.is_admin()
 );
 
