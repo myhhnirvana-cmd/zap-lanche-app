@@ -132,7 +132,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
     return () => clearTimeout(timer);
   }, [notification]);
 
-  // Carrega primeiro as publicações e consulta somente as interações ligadas a elas.
+  // Renderiza as publicações assim que chegam; curtidas e comentários são enriquecidos em segundo plano.
   useEffect(() => {
     let isMounted = true;
     async function syncSupabaseFeed() {
@@ -147,6 +147,43 @@ export const FeedView: React.FC<FeedViewProps> = ({
         if (postsRes.error) throw postsRes.error;
 
         const dbPosts = postsRes.data || [];
+        const formatDateTime = (value: string) =>
+          new Date(value).toLocaleDateString('pt-BR') + ' às ' +
+          new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+        const baseDbPosts: SocialPost[] = dbPosts.map((post) => ({
+          id: post.id,
+          restaurantId: post.restaurant_id || '',
+          restaurantName: post.restaurant_name,
+          restaurantCategory: post.restaurant_category,
+          neighborhood: post.neighborhood,
+          authorId: post.profile_id,
+          authorProfileId: post.profile_id,
+          authorName: post.author_name,
+          authorAvatar: post.author_avatar || DEFAULT_AVATAR_URL,
+          authorRole: post.author_role,
+          content: post.content,
+          imageUrl: post.image_url || undefined,
+          likesCount: 0,
+          isLiked: false,
+          commentsCount: 0,
+          comments: [],
+          createdAt: formatDateTime(post.created_at),
+          editedAt: post.edited_at ? 'Editado recentemente' : undefined,
+          isOwnPost: user?.id ? post.profile_id === user.id : false,
+          hasPhotoValidation: Boolean(post.image_url),
+          is_demo: post.is_demo,
+        }));
+
+        const demoPosts: SocialPost[] = MOCK_POSTS.map((mockPost) => ({
+          ...mockPost,
+          is_demo: true,
+        }));
+        const initialPosts = dbPosts.length ? [...baseDbPosts, ...demoPosts] : demoPosts;
+        setPosts(initialPosts);
+        setLoading(false);
+
+        // Interações não bloqueiam a primeira pintura do feed.
         const dbPostIds = dbPosts.map((post) => post.id).filter((id) => UUID_REGEX.test(id));
         const commentPostIds = [...new Set([...dbPosts.map((post) => post.id), ...MOCK_POSTS.map((post) => post.id)])];
         const [likesRes, commentsRes] = await Promise.all([
@@ -169,11 +206,8 @@ export const FeedView: React.FC<FeedViewProps> = ({
           group.push(comment);
           commentsByPost.set(comment.post_id, group);
         }
-        const formatDateTime = (value: string) =>
-          new Date(value).toLocaleDateString('pt-BR') + ' às ' +
-          new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-        const mappedDbPosts: SocialPost[] = dbPosts.map((post) => {
+        const enrichedDbPosts = baseDbPosts.map((post) => {
           const postLikes = likesByPost.get(post.id) || [];
           const postComments = commentsByPost.get(post.id) || [];
           const formattedComments: PostComment[] = postComments.map((comment) => ({
@@ -187,33 +221,17 @@ export const FeedView: React.FC<FeedViewProps> = ({
             postId: comment.post_id,
           }));
           return {
-            id: post.id,
-            restaurantId: post.restaurant_id || '',
-            restaurantName: post.restaurant_name,
-            restaurantCategory: post.restaurant_category,
-            neighborhood: post.neighborhood,
-            authorId: post.profile_id,
-            authorProfileId: post.profile_id,
-            authorName: post.author_name,
-            authorAvatar: post.author_avatar || DEFAULT_AVATAR_URL,
-            authorRole: post.author_role,
-            content: post.content,
-            imageUrl: post.image_url || undefined,
+            ...post,
             likesCount: postLikes.length,
             isLiked: user?.id ? postLikes.some((like) => like.profile_id === user.id) : false,
             commentsCount: formattedComments.length,
             comments: formattedComments,
-            createdAt: formatDateTime(post.created_at),
-            editedAt: post.edited_at ? 'Editado recentemente' : undefined,
-            isOwnPost: user?.id ? post.profile_id === user.id : false,
-            hasPhotoValidation: Boolean(post.image_url),
-            is_demo: post.is_demo,
           };
         });
 
-        const demoPostsWithComments: SocialPost[] = MOCK_POSTS.map((mockPost) => {
-          const postComments = commentsByPost.get(mockPost.id) || [];
-          const postLikes = likesByPost.get(mockPost.id) || [];
+        const enrichedDemoPosts = demoPosts.map((post) => {
+          const postComments = commentsByPost.get(post.id) || [];
+          const postLikes = likesByPost.get(post.id) || [];
           const formattedComments: PostComment[] = postComments.map((comment) => ({
             id: comment.id,
             profile_id: comment.profile_id,
@@ -225,18 +243,16 @@ export const FeedView: React.FC<FeedViewProps> = ({
             postId: comment.post_id,
           }));
           return {
-            ...mockPost,
-            is_demo: true,
-            comments: [...(mockPost.comments || []), ...formattedComments],
-            commentsCount: (mockPost.comments || []).length + formattedComments.length,
-            likesCount: (mockPost.likesCount || 0) + postLikes.length,
-            isLiked: user?.id ? postLikes.some((like) => like.profile_id === user.id) : mockPost.isLiked,
+            ...post,
+            comments: [...(post.comments || []), ...formattedComments],
+            commentsCount: (post.comments || []).length + formattedComments.length,
+            likesCount: (post.likesCount || 0) + postLikes.length,
+            isLiked: user?.id ? postLikes.some((like) => like.profile_id === user.id) : post.isLiked,
           };
         });
-        setPosts(mappedDbPosts.length ? [...mappedDbPosts, ...demoPostsWithComments] : demoPostsWithComments);
+        setPosts(dbPosts.length ? [...enrichedDbPosts, ...enrichedDemoPosts] : enrichedDemoPosts);
       } catch (err) {
         console.warn('Erro ao sincronizar feed com o Supabase:', err);
-      } finally {
         if (isMounted) setLoading(false);
       }
     }
