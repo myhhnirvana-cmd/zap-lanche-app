@@ -64,43 +64,41 @@ export const NEIGHBORHOODS: Neighborhood[] = [
  * - 'jacarepagua': na Fase 1, todos os 4 estabelecimentos pertencem à macro-região de Jacarepaguá.
  * - Bairros específicos ('freguesia', 'cidade-de-deus', 'taquara'): filtram os estabelecimentos daquele bairro.
  */
-export function isRestaurantInNeighborhood(restaurant: Restaurant, neighborhoodId: string): boolean {
-  const normalizedId = String(neighborhoodId ?? '').trim().toLowerCase();
+function normalizeNeighborhoodKey(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
-  if (!normalizedId || normalizedId === 'todos' || normalizedId === 'all') {
+/**
+ * Compara o bairro selecionado com o nome e o identificador normalizado
+ * do restaurante. O seletor compartilhado usa IDs UUID do Supabase,
+ * enquanto os restaurantes mantêm o bairro como texto/slug.
+ */
+export function isRestaurantInNeighborhood(
+  restaurant: Restaurant,
+  neighborhoodId: string,
+  selectedNeighborhoodName?: string,
+): boolean {
+  const selectedKeys = [
+    normalizeNeighborhoodKey(neighborhoodId),
+    normalizeNeighborhoodKey(selectedNeighborhoodName),
+  ].filter(Boolean);
+
+  if (selectedKeys.some((key) => key === 'todos' || key === 'todos-os-bairros' || key === 'all')) {
     return true;
   }
 
-  if (normalizedId === 'jacarepagua') {
-    // Todos os 4 estabelecimentos demonstrativos operam na macro-região de Jacarepaguá
-    return true;
-  }
+  const restaurantKeys = [
+    normalizeNeighborhoodKey(restaurant.neighborhoodId),
+    normalizeNeighborhoodKey(restaurant.neighborhoodName),
+  ].filter(Boolean);
 
-  const neighborhoodName = String(restaurant.neighborhoodName ?? '').trim().toLowerCase();
-  const restaurantNeighborhoodId = String(restaurant.neighborhoodId ?? '').trim().toLowerCase();
-
-  if (normalizedId === 'freguesia') {
-    return (
-      restaurantNeighborhoodId === 'freguesia' ||
-      neighborhoodName.includes('freguesia')
-    );
-  }
-
-  if (normalizedId === 'cidade-de-deus') {
-    return (
-      restaurantNeighborhoodId === 'cidade-de-deus' ||
-      neighborhoodName.includes('cidade de deus')
-    );
-  }
-
-  if (normalizedId === 'taquara') {
-    return (
-      restaurantNeighborhoodId === 'taquara' ||
-      neighborhoodName.includes('taquara')
-    );
-  }
-
-  return restaurantNeighborhoodId === normalizedId;
+  return selectedKeys.some((key) => restaurantKeys.includes(key));
 }
 
 export const CATEGORIES: CategoryInfo[] = [
