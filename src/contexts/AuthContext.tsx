@@ -258,7 +258,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         options: { data: { full_name: name?.trim() || '', name: name?.trim() || '', role: 'cliente' } },
       });
       if (error) return { error: translateAuthError(error) };
-      if (data.user && !data.session) return { error: null, message: 'Cadastro realizado! Verifique seu e-mail para ativar a conta.' };
+      if (data.user && !data.session) return { error: null, message: 'Cadastro realizado! Verifique seu e-mail para ativar a conta. Depois da confirmação, volte ao ZAP Lanche para continuar.' };
       if (data.user) await fetchUserProfile(data.user);
       setSession(data.session);
       setUser(data.user);
