@@ -1584,6 +1584,7 @@ export async function fetchStoreLoyaltyBreakdown(
       .select('id, restaurant_id, points, expires_at')
       .eq('profile_id', userId)
       .not('restaurant_id', 'is', null)
+      .neq('transaction_type', 'convite')
       .gt('points', 0);
 
     if (creditErr) {
