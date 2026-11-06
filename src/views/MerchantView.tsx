@@ -16,7 +16,6 @@ import {
   Gift,
   ShieldCheck,
   MapPin,
-  Calendar,
   X,
   CheckCircle2,
   Info,
@@ -33,21 +32,15 @@ import {
 } from 'lucide-react';
 import {
   Restaurant,
-  MerchantDemoStats,
   MenuItem,
   LoyaltyReward,
   Promotion,
   RewardStatus,
 } from '../types';
 import {
-  MOCK_MERCHANT_STATS,
-  MOCK_MENU_ITEMS,
   MOCK_RESTAURANTS,
-  MOCK_LOYALTY_REWARDS,
   CATEGORIES,
   ANTI_FRAUD_RULES,
-  loadMerchantStats,
-  saveMerchantStats,
   loadRestaurants,
   saveRestaurants,
   updateSingleRestaurant,
@@ -114,10 +107,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
   const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(initialStoreId);
 
-  const [stats, setStats] = useState<MerchantDemoStats>(() => loadMerchantStats(selectedRestaurantId));
-
   const currentRestaurant =
-    allRestaurants.find((r) => r.id === selectedRestaurantId) || allRestaurants[0];
+    allRestaurants.find((r) => r.id === selectedRestaurantId) || allRestaurants[0] || MOCK_RESTAURANTS[0];
 
   const [isOpenToday, setIsOpenToday] = useState(currentRestaurant.isOpen ?? false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() =>
@@ -188,9 +179,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       }
       setPromotions(dbPromotions ?? []);
     }
-
-    const storeStats = loadMerchantStats(storeId);
-    setStats(storeStats);
 
   };
 
@@ -582,15 +570,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     } catch {
       // Ignora erro eventual de refresh
     }
-
-    const updatedStats: MerchantDemoStats = {
-      ...stats,
-      restaurantName: updatedRestaurant.name,
-      ownerName: trimmedOwnerName,
-      neighborhood: updatedRestaurant.neighborhoodName,
-    };
-    setStats(updatedStats);
-    saveMerchantStats(updatedStats);
 
     setIsEditStoreModalOpen(false);
     showToast(`Loja "${updatedRestaurant.name}" e responsável salvos com sucesso!`);
@@ -1277,7 +1256,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Responsável: <strong className="text-slate-300">{currentRestaurant.ownerName || stats.ownerName || 'Responsável não informado'}</strong> · Bairro {currentRestaurant.neighborhoodName}
+                Responsável: <strong className="text-slate-300">{currentRestaurant.ownerName || 'Responsável não informado'}</strong> · Bairro {currentRestaurant.neighborhoodName}
               </p>
               <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
                 <Phone className="w-3 h-3 text-emerald-400" />
@@ -1292,9 +1271,9 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           {/* Chapa Open/Closed switch */}
           <div className="flex items-center gap-3 p-2 rounded-2xl bg-slate-900 border border-slate-800 self-stretch sm:self-auto justify-between">
             <div className="text-left text-xs">
-              <span className="text-[10px] text-slate-400 block">Status do Balcão</span>
+              <span className="text-[10px] text-slate-400 block">Status da Loja</span>
               <span className={`font-bold ${isOpenToday ? 'text-emerald-400' : 'text-slate-400'}`}>
-                {isOpenToday ? 'Recebendo Pedidos' : 'Balcão Fechado'}
+                {isOpenToday ? 'Loja Aberta' : 'Loja Fechada'}
               </span>
             </div>
 
@@ -1322,7 +1301,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               }`}
             >
               <Power className="w-3.5 h-3.5" />
-              {isUpdatingOpenStatus ? 'Salvando...' : isOpenToday ? 'Aberto' : 'Pausar'}
+              {isUpdatingOpenStatus ? 'Salvando...' : isOpenToday ? 'Fechar loja' : 'Abrir loja'}
             </button>
           </div>
         </div>
