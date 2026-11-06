@@ -1085,6 +1085,69 @@ export async function fetchLoyaltyPoints(
 }
 
 /**
+ * Calcula exclusivamente os pontos globais de indicação.
+ * Não altera o saldo geral usado nos resgates nem os saldos locais por loja.
+ */
+export async function fetchGlobalReferralPoints(userId: string): Promise<number | null> {
+  if (!isSupabaseConfigured || !supabase || !userId?.trim()) return null;
+
+  const nowIso = new Date().toISOString();
+  const { data: credits, error: creditErr } = await supabase
+    .from('loyalty_transactions')
+    .select('id, points, expires_at')
+    .eq('profile_id', userId)
+    .eq('transaction_type', 'convite')
+    .gt('points', 0);
+
+  if (creditErr) {
+    lastLoyaltyError = {
+      message: creditErr.message,
+      details: creditErr.details,
+      hint: creditErr.hint,
+      code: creditErr.code,
+    };
+    return null;
+  }
+
+  const creditIds = (credits || []).map((tx: any) => tx.id);
+  if (creditIds.length === 0) return 0;
+
+  const { data: consumptions, error: consumptionErr } = await supabase
+    .from('loyalty_consumption')
+    .select('credit_transaction_id, points_consumed')
+    .eq('is_active', true)
+    .in('credit_transaction_id', creditIds);
+
+  if (consumptionErr) {
+    lastLoyaltyError = {
+      message: consumptionErr.message,
+      details: consumptionErr.details,
+      hint: consumptionErr.hint,
+      code: consumptionErr.code,
+    };
+    return null;
+  }
+
+  const consumedByCredit = new Map<string, number>();
+  for (const item of consumptions || []) {
+    const previous = consumedByCredit.get(item.credit_transaction_id) || 0;
+    consumedByCredit.set(
+      item.credit_transaction_id,
+      previous + (Number(item.points_consumed) || 0)
+    );
+  }
+
+  return (credits || []).reduce((total: number, tx: any) => {
+    if (tx.expires_at && tx.expires_at <= nowIso) return total;
+    const remaining = Math.max(
+      0,
+      (Number(tx.points) || 0) - (consumedByCredit.get(tx.id) || 0)
+    );
+    return total + remaining;
+  }, 0);
+}
+
+/**
  * Interface que espelha exatamente a estrutura da tabela public.comments no Supabase.
  */
 export interface DbCommentRow {
