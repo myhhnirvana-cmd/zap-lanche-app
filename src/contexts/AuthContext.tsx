@@ -37,7 +37,7 @@ interface AuthContextType {
   refreshMerchantStore: () => Promise<void>;
   adminDiagnostic: AdminDiagnostic | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, name?: string) => Promise<{ error: string | null; message?: string }>;
+  signUp: (email: string, password: string, name?: string, emailRedirectTo?: string) => Promise<{ error: string | null; message?: string }>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
   updateOwnerProfile: (fullName: string) => Promise<{ error: string | null }>;
@@ -249,16 +249,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (err: any) { return { error: translateAuthError(err) }; }
   };
 
-  const signUp = async (email: string, password: string, name?: string): Promise<{ error: string | null; message?: string }> => {
+  const signUp = async (email: string, password: string, name?: string, emailRedirectTo?: string): Promise<{ error: string | null; message?: string }> => {
     if (!isSupabaseConfigured || !supabase) return { error: 'Serviço de autenticação não configurado no ambiente.' };
     try {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { data: { full_name: name?.trim() || '', name: name?.trim() || '', role: 'cliente' } },
+        options: {
+          data: { full_name: name?.trim() || '', name: name?.trim() || '', role: 'cliente' },
+          ...(emailRedirectTo ? { emailRedirectTo } : {}),
+        },
       });
       if (error) return { error: translateAuthError(error) };
-      if (data.user && !data.session) return { error: null, message: 'Cadastro realizado! Verifique seu e-mail para ativar a conta.' };
+      if (data.user && !data.session) return { error: null, message: 'Cadastro realizado! Verifique seu e-mail para ativar a conta. Depois da confirmação, volte ao ZAP Lanche para continuar.' };
       if (data.user) await fetchUserProfile(data.user);
       setSession(data.session);
       setUser(data.user);

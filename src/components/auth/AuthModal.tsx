@@ -11,6 +11,7 @@ interface AuthModalProps {
   customSubtitle?: string;
   /** Constrains the header login dialog to the visible viewport. */
   fitViewport?: boolean;
+  signupRedirectTo?: string;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -20,6 +21,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   customTitle,
   customSubtitle,
   fitViewport = false,
+  signupRedirectTo,
 }) => {
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
@@ -71,7 +73,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           onClose();
         }
       } else {
-        const { error, message } = await signUp(email, password, name);
+        const { error, message } = await signUp(email, password, name, signupRedirectTo);
         if (error) {
           setErrorMessage(error);
         } else {
