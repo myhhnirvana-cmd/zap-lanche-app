@@ -1431,69 +1431,24 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
       </div>
 
-      {/* Analytics KPI strip com transparência */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs px-1">
-          <span className="text-slate-400 font-semibold">Desempenho Comercial</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-            Estimativas Demonstrativas
+      {/* Indicadores reais ainda não disponíveis */}
+      <section className="rounded-2xl bg-[#13151f] border border-slate-800 p-4 space-y-2" aria-labelledby="merchant-metrics-title">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-amber-400 shrink-0" />
+          <h3 id="merchant-metrics-title" className="text-sm font-bold text-white">
+            Indicadores de desempenho
+          </h3>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+            Ainda não disponíveis
           </span>
         </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>Visitas no Cardápio</span>
-              <Eye className="w-4 h-4 text-orange-400" />
-            </div>
-            <span className="text-xl font-extrabold text-white tabular-nums">
-              {stats.viewsThisWeek}
-            </span>
-            <span className="text-[10px] text-emerald-400 block mt-0.5">
-              +18% nesta semana
-            </span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>Cliques p/ WhatsApp</span>
-              <MessageCircle className="w-4 h-4 text-emerald-400" />
-            </div>
-            <span className="text-xl font-extrabold text-emerald-400 tabular-nums">
-              {stats.zapClicksThisWeek}
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">
-              Pedidos direcionados
-            </span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>Interações no Feed</span>
-              <Flame className="w-4 h-4 text-amber-400" />
-            </div>
-            <span className="text-xl font-extrabold text-amber-400 tabular-nums">
-              {stats.feedInteractions}
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">
-              Curtidas e comentários
-            </span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>Prato Campeão</span>
-              <Sparkles className="w-4 h-4 text-yellow-400" />
-            </div>
-            <span className="text-sm font-bold text-white truncate block">
-              {menuItems[0]?.name || stats.topDishName}
-            </span>
-            <span className="text-[10px] text-orange-400 font-semibold block mt-0.5">
-              {stats.topDishOrders} pedidos no mês
-            </span>
-          </div>
-        </div>
-      </div>
+        <p className="text-xs text-slate-300 leading-relaxed">
+          O ZapLanche ainda não mede visitas ao cardápio, alcance de público, cliques no WhatsApp ou faturamento nesta área. Por isso, não exibimos estimativas como resultados reais.
+        </p>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Os pedidos são encaminhados diretamente ao WhatsApp da loja. Atualmente, o aplicativo não mantém uma fila de pedidos nem permite ao comerciante acompanhar status ou vendas por aqui.
+        </p>
+      </section>
 
       {/* Guia do Comerciante */}
       <GuideSection
