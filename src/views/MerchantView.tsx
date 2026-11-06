@@ -1405,49 +1405,62 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-slate-800/80">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {menuItems.map((item) => (
-              <div
+              <article
                 key={item.id}
-                className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/70 shadow-lg"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0">
+                <div className="relative w-full aspect-[16/10] bg-slate-900 overflow-hidden">
+                  {item.imageUrl ? (
                     <img
                       src={item.imageUrl}
                       alt={item.name}
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
                     />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className={`font-bold text-sm ${item.isAvailable ? 'text-white' : 'text-slate-500 line-through'}`}>
-                        {item.name}
-                      </h4>
-                      {item.badge && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
-                          {item.badge}
-                        </span>
-                      )}
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-600">
+                      <Flame className="w-12 h-12" />
                     </div>
-                    <p className="text-[11px] text-slate-400 line-clamp-1 max-w-sm mt-0.5">
-                      {item.description}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="font-bold text-amber-400 text-xs tabular-nums">
+                  )}
+                  {item.badge && (
+                    <span className="absolute top-3 left-3 text-[10px] px-2.5 py-1 rounded-full bg-amber-400 text-slate-950 font-extrabold shadow">
+                      {item.badge}
+                    </span>
+                  )}
+                  {!item.isAvailable && (
+                    <span className="absolute top-3 right-3 text-[10px] px-2.5 py-1 rounded-full bg-slate-950/85 text-slate-300 font-bold border border-slate-600">
+                      Pausado
+                    </span>
+                  )}
+                </div>
+                <div className="p-3.5 space-y-3">
+                  <div className="min-w-0">
+                    <h4 className={`font-extrabold text-base ${item.isAvailable ? 'text-white' : 'text-slate-500 line-through'}`}>
+                      {item.name}
+                    </h4>
+                    {item.description && (
+                      <p className="text-xs text-slate-400 leading-relaxed line-clamp-2 mt-1">
+                        {item.description}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-baseline gap-2 mt-2">
+                      <span className="font-extrabold text-lg text-amber-400 tabular-nums">
                         R$ {item.price.toFixed(2).replace('.', ',')}
                       </span>
                       {item.originalPrice && (
-                        <span className="text-[10px] text-slate-500 line-through tabular-nums">
+                        <span className="text-xs text-slate-500 line-through tabular-nums">
                           R$ {item.originalPrice.toFixed(2).replace('.', ',')}
                         </span>
                       )}
                       <span className="text-[10px] text-slate-500">· {item.category}</span>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
+                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                   {/* Toggle Rápido de Chapa */}
                   <button
                     onClick={() => toggleItemAvailability(item.id)}
@@ -1488,8 +1501,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         )}
