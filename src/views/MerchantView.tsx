@@ -2053,7 +2053,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       </div>
 
       {!isRealMerchant && (
-      {/* Destaque Regional por Bairro (5 Estados) */}
       <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
