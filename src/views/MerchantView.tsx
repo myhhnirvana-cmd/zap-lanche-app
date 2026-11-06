@@ -1210,7 +1210,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           </div>
 
         </div>
-      )}
+      ) : null}
 
       {/* Merchant Header Card com Banner & Botão "Editar Minha Loja" */}
       <div className="rounded-3xl bg-[#131520] border border-slate-800 shadow-xl overflow-hidden">
