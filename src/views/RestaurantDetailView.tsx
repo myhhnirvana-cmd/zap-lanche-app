@@ -977,7 +977,8 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                 </article>
               ))}
             </div>
-
+          </div>
+        )}
 
         {/* Tab 2: Promoções */}
         {/* Tab 3: Clube de Fidelidade (Programa de Pontos 70/30) */}
