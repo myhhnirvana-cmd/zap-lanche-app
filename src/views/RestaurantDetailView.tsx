@@ -912,62 +912,72 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {promotions.length > 0 && (
+              <section className="rounded-3xl border border-orange-400/30 bg-gradient-to-br from-orange-500/10 via-[#171821] to-[#13151f] p-4 sm:p-5 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Tag className="w-5 h-5 text-orange-300" />
+                      <h3 className="text-base font-extrabold text-white">Ofertas em destaque</h3>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">Aproveite as promoções desta loja</p>
+                  </div>
+                  <button onClick={() => setActiveTab('promocoes')} className="text-[11px] font-bold text-orange-300 hover:text-orange-200">Ver todas</button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {promotions.slice(0, 2).map((promo) => (
+                    <article key={promo.id} className="overflow-hidden rounded-2xl border border-orange-300/20 bg-slate-950/70">
+                      <div className="relative h-36 bg-slate-900">
+                        {promo.imageUrl ? <img src={promo.imageUrl} alt={promo.title} loading="lazy" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-orange-300"><Tag className="w-10 h-10" /></div>}
+                        <span className="absolute top-2 left-2 rounded-full bg-orange-500 px-2.5 py-1 text-[10px] font-extrabold text-white">{promo.badge || 'Oferta'}</span>
+                      </div>
+                      <div className="p-3">
+                        <h4 className="font-bold text-sm text-white">{promo.title}</h4>
+                        <div className="flex items-baseline gap-2 mt-1">
+                          <span className="text-base font-extrabold text-orange-300 tabular-nums">R$ {promo.discountPrice.toFixed(2).replace('.', ',')}</span>
+                          <span className="text-xs text-slate-500 line-through tabular-nums">R$ {promo.regularPrice.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredMenuItems.map((item) => (
-                <div
+                <article
                   key={item.id}
                   onClick={() => onSelectMenuItem(item)}
-                  className="group cursor-pointer p-3.5 rounded-2xl bg-[#13151f] border border-slate-800/80 hover:border-orange-500/40 transition-all flex gap-3.5 items-center justify-between"
+                  className="group cursor-pointer overflow-hidden rounded-3xl bg-[#13151f] border border-slate-800/80 hover:border-orange-500/50 transition-all shadow-lg"
                 >
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-sm text-white group-hover:text-orange-400 transition-colors">
-                        {item.name}
-                      </h4>
-                      {item.badge && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                          {item.badge}
-                        </span>
-                      )}
+                  <div className="relative w-full aspect-[4/3] bg-slate-900 overflow-hidden">
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.name} loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-600"><Flame className="w-12 h-12" /></div>
+                    )}
+                    {item.badge && <span className="absolute top-3 left-3 rounded-full bg-amber-400 px-3 py-1 text-[10px] font-extrabold text-slate-950 shadow">{item.badge}</span>}
+                    {item.isPopular && <span className="absolute top-3 right-3 rounded-full bg-orange-600/95 px-3 py-1 text-[10px] font-bold text-white shadow">Mais pedido</span>}
+                  </div>
+                  <div className="p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <h4 className="font-extrabold text-base text-white group-hover:text-orange-300 transition-colors">{item.name}</h4>
+                      <span className="text-base font-extrabold text-amber-300 tabular-nums whitespace-nowrap">R$ {item.price.toFixed(2).replace('.', ',')}</span>
                     </div>
-
-                    <p className="text-xs text-slate-400 line-clamp-2">
-                      {item.description}
-                    </p>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <span className="text-sm font-extrabold text-amber-400 tabular-nums">
-                        R$ {item.price.toFixed(2).replace('.', ',')}
-                      </span>
-                      {item.originalPrice && (
-                        <span className="text-xs text-slate-400 line-through tabular-nums">
-                          R$ {item.originalPrice.toFixed(2).replace('.', ',')}
-                        </span>
-                      )}
+                    {item.description && <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">{item.description}</p>}
+                    {item.originalPrice && (
+                      <span className="text-xs text-slate-500 line-through tabular-nums">De R$ {item.originalPrice.toFixed(2).replace('.', ',')}</span>
+                    )}
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                      <span className="text-[10px] uppercase tracking-wider text-slate-500">{item.category}</span>
+                      <span className="text-xs font-bold text-orange-300 flex items-center gap-1">Ver detalhes <Plus className="w-3.5 h-3.5" /></span>
                     </div>
                   </div>
-
-                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl overflow-hidden bg-slate-900 shrink-0 ring-1 ring-orange-500/20 shadow-lg">
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                    <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
-                    <button
-                      type="button"
-                      className="absolute bottom-1 right-1 w-6 h-6 rounded-lg bg-orange-600 text-white flex items-center justify-center shadow-md hover:bg-orange-500 transition-colors"
-                      title="Ver e pedir no Zap"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
+                </article>
               ))}
             </div>
-          </div>
-        )}
+
 
         {/* Tab 2: Promoções */}
         {/* Tab 3: Clube de Fidelidade (Programa de Pontos 70/30) */}
@@ -1076,49 +1086,26 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
                     Nenhuma oferta cadastrada nesta loja no momento.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {promotions.map((promo) => (
-                      <article
-                        key={promo.id}
-                        className="rounded-2xl bg-gradient-to-br from-[#141622] to-[#1a1d2d] border border-amber-500/30 p-4 space-y-3 shadow-lg"
-                      >
-                        {promo.imageUrl && (
-                          <img
-                            src={promo.imageUrl}
-                            alt={`Imagem da promoção ${promo.title}`}
-                            loading="lazy"
-                            className="w-full h-44 rounded-xl object-cover"
-                          />
-                        )}
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <span className="inline-block px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/40 mb-1.5">
-                              {promo.badge || 'Oferta'}
-                            </span>
-                            <h4 className="text-base font-bold text-white">{promo.title}</h4>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <span className="text-xs text-slate-400 line-through block tabular-nums">
-                              R$ {promo.regularPrice.toFixed(2).replace('.', ',')}
-                            </span>
-                            <span className="text-base font-extrabold text-amber-400 tabular-nums">
-                              R$ {promo.discountPrice.toFixed(2).replace('.', ',')}
-                            </span>
-                          </div>
+                      <article key={promo.id} className="overflow-hidden rounded-3xl bg-gradient-to-br from-[#141622] to-[#1a1d2d] border border-amber-500/30 shadow-lg">
+                        <div className="relative h-52 bg-slate-900">
+                          {promo.imageUrl ? <img src={promo.imageUrl} alt={`Imagem da promoção ${promo.title}`} loading="lazy" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-amber-300"><Tag className="w-12 h-12" /></div>}
+                          <span className="absolute top-3 left-3 rounded-full bg-amber-400 px-3 py-1 text-[10px] font-extrabold text-slate-950 shadow">{promo.badge || 'Oferta'}</span>
                         </div>
-                        {promo.description && (
-                          <p className="text-xs text-slate-300 leading-relaxed">{promo.description}</p>
-                        )}
-                        <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 text-xs">
-                          <span className="text-slate-400">{promo.validUntil || 'Consulte a loja'}</span>
-                          {promo.couponCode && (
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-slate-400 text-[11px]">Cupom:</span>
-                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 font-mono font-bold text-amber-400 text-xs">
-                                {promo.couponCode}
-                              </span>
+                        <div className="p-4 space-y-3">
+                          <div>
+                            <h4 className="text-base font-extrabold text-white">{promo.title}</h4>
+                            {promo.description && <p className="text-xs text-slate-300 leading-relaxed mt-1">{promo.description}</p>}
+                          </div>
+                          <div className="flex items-end justify-between gap-2">
+                            <div>
+                              <span className="text-xs text-slate-500 line-through block tabular-nums">De R$ {promo.regularPrice.toFixed(2).replace('.', ',')}</span>
+                              <span className="text-xl font-extrabold text-amber-300 tabular-nums">R$ {promo.discountPrice.toFixed(2).replace('.', ',')}</span>
                             </div>
-                          )}
+                            <span className="text-[10px] text-slate-400 text-right">{promo.validUntil || 'Consulte a loja'}</span>
+                          </div>
+                          {promo.couponCode && <div className="pt-2 border-t border-slate-800 text-xs text-slate-400">Cupom: <strong className="font-mono text-amber-300">{promo.couponCode}</strong></div>}
                         </div>
                       </article>
                     ))}
