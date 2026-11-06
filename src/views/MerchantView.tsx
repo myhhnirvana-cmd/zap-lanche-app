@@ -1643,7 +1643,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-2.5 sm:gap-3.5">
             {rewardsList.map((reward) => {
               const isOutOfStock = reward.stock <= 0 || reward.status === 'esgotado';
               const isPaused = reward.status === 'pausado';
@@ -1651,7 +1651,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               return (
                 <div
                   key={reward.id}
-                  className={`p-4 rounded-2xl bg-slate-900/90 border flex flex-col justify-between space-y-3 transition-colors ${
+                  className={`p-2.5 sm:p-4 rounded-2xl bg-slate-900/90 border flex flex-col justify-between space-y-2.5 sm:space-y-3 min-w-0 transition-colors ${
                     isOutOfStock
                       ? 'border-slate-800 opacity-80'
                       : isPaused
@@ -1660,23 +1660,23 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                   }`}
                 >
                   <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center">
-                          {reward.imageUrl ? (
-                            <img
-                              src={reward.imageUrl}
-                              alt={reward.title}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <Gift className="w-5 h-5 text-amber-400" />
-                          )}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-sm text-white">
-                            {reward.title}
-                          </h4>
+                    <div className="space-y-2.5">
+                      <div className="w-full h-28 sm:h-36 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center">
+                        {reward.imageUrl ? (
+                          <img
+                            src={reward.imageUrl}
+                            alt={reward.title}
+                            loading="lazy"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Gift className="w-9 h-9 text-amber-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-xs sm:text-sm text-white leading-snug break-words">
+                          {reward.title}
+                        </h4>
                           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] border border-amber-500/30 tabular-nums">
                               {reward.pointsCost} pts
@@ -1704,7 +1704,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                     </p>
 
                     {/* Breakdown 70/30 */}
-                    <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 text-[11px] text-slate-300 space-y-1">
+                    <div className="p-2 sm:p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 text-[9px] sm:text-[11px] text-slate-300 space-y-1">
                       <div className="flex justify-between">
                         <span className="text-slate-400">Mínimo da sua loja (70%):</span>
                         <span className="font-semibold text-amber-400 tabular-nums">{reward.minStorePointsRequired} pts</span>
@@ -1723,7 +1723,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                   </div>
 
                   {/* Actions */}
-                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                  <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
                     <button
                       onClick={() => toggleRewardStatus(reward.id)}
                       disabled={reward.stock <= 0}
