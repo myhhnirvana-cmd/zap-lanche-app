@@ -1307,25 +1307,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
       </div>
 
-      {/* Indicadores reais ainda não disponíveis */}
-      <section className="rounded-2xl bg-[#13151f] border border-slate-800 p-4 space-y-2" aria-labelledby="merchant-metrics-title">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-amber-400 shrink-0" />
-          <h3 id="merchant-metrics-title" className="text-sm font-bold text-white">
-            Indicadores de desempenho
-          </h3>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-            Ainda não disponíveis
-          </span>
-        </div>
-        <p className="text-xs text-slate-300 leading-relaxed">
-          O ZapLanche ainda não mede visitas ao cardápio, alcance de público, cliques no WhatsApp ou faturamento nesta área. Por isso, não exibimos estimativas como resultados reais.
-        </p>
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Os pedidos são encaminhados diretamente ao WhatsApp da loja. Atualmente, o aplicativo não mantém uma fila de pedidos nem permite ao comerciante acompanhar status ou vendas por aqui.
-        </p>
-      </section>
-
       {/* Guia do Comerciante */}
       <GuideSection
         title="Guia de Gestão da Sua Loja"
