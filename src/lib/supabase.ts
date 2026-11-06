@@ -1783,6 +1783,7 @@ export async function fetchRewardsFromSupabase(
       minStorePointsRequired: Math.round(r.points_cost * 0.7),
       maxRedemptionsPerUser: r.max_redemptions_per_user || 1,
       imageUrl: r.image_url || '',
+      isDailyFeatured: r.is_daily_featured === true,
     }));
   } catch {
     return null;
@@ -1910,6 +1911,9 @@ export async function updateRewardInSupabase(
     if (reward.is_available !== undefined) payload.is_active = reward.is_available;
     if (reward.maxRedemptionsPerUser !== undefined) payload.max_redemptions_per_user = reward.maxRedemptionsPerUser;
     if (reward.max_redemptions_per_user !== undefined) payload.max_redemptions_per_user = reward.max_redemptions_per_user;
+    if ((reward.status !== undefined && reward.status !== 'ativo') || (reward.stock !== undefined && reward.stock <= 0) || reward.isAvailable === false || reward.is_available === false) {
+      payload.is_daily_featured = false;
+    }
 
     const { data, error } = await supabase
       .from('loyalty_rewards')
@@ -1936,11 +1940,39 @@ export async function updateRewardInSupabase(
       minStorePointsRequired: Math.round(data.points_cost * 0.7),
       maxRedemptionsPerUser: data.max_redemptions_per_user || 1,
       imageUrl: data.image_url || '',
+      isDailyFeatured: data.is_daily_featured === true,
     };
 
     return { data: mapped, error: null };
   } catch (err: any) {
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+export async function setDailyFeaturedRewardInSupabase(
+  restaurantId: string,
+  rewardId: string | null
+): Promise<{ error: Error | null }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { error: new Error('Supabase não configurado') };
+  }
+
+  try {
+    const resolvedRestaurantId = await resolveRestaurantUuid(restaurantId);
+    if (!resolvedRestaurantId) {
+      return { error: new Error('Não foi possível identificar o estabelecimento.') };
+    }
+    if (rewardId && !UUID_REGEX.test(rewardId)) {
+      return { error: new Error('Prêmio inválido para destaque.') };
+    }
+
+    const { error } = await supabase.rpc('set_daily_featured_reward', {
+      p_restaurant_id: resolvedRestaurantId,
+      p_reward_id: rewardId,
+    });
+    return { error: error ? new Error(error.message) : null };
+  } catch (err: any) {
+    return { error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
 
