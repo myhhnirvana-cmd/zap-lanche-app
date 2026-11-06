@@ -584,9 +584,9 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${restaurant.status === 'ativo' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}>
-                    {restaurant.status === 'ativo' ? 'Ativa' : 'Removida'}
+                    {restaurant.status === 'ativo' ? 'Ativa' : 'Inativa'}
                   </span>
-                  {restaurant.status === 'ativo' && (
+                  {(
                     <button
                       type="button"
                       onClick={() => { setPendingRestaurantDeletion({ id: restaurant.id, name: restaurant.name }); setRestaurantDeletionConfirmation(''); }}
