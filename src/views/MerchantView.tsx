@@ -1137,6 +1137,18 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setDeletingReward(null);
   };
 
+  if (!isAdmin && !isRealMerchant) {
+    return (
+      <div className="max-w-xl mx-auto mt-10 rounded-2xl border border-amber-500/30 bg-[#13151f] p-6 text-center space-y-3">
+        <Store className="w-8 h-8 text-amber-400 mx-auto" />
+        <h2 className="text-lg font-bold text-white">Sua loja ainda não está vinculada</h2>
+        <p className="text-sm text-slate-300">
+          Para acessar o painel comercial, a administração precisa concluir a vinculação da sua conta ao estabelecimento. Nenhum dado de demonstração será exibido nesta conta.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-16 animate-fade-in">
       {/* Toast de Feedback */}
@@ -1178,7 +1190,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             </div>
           </div>
         </div>
-      ) : (
+      ) : isAdmin ? (
         <div className="p-4 rounded-3xl bg-slate-900/95 border border-amber-500/30 space-y-2.5 text-xs shadow-lg">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 text-slate-200">
@@ -1218,14 +1230,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             </div>
           </div>
 
-          {!isAdmin && (
-            <div className="p-3 rounded-2xl bg-black/40 border border-slate-800 text-[11px] text-slate-400 leading-relaxed flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <span>
-                <strong className="text-slate-300">Modo Demonstrativo:</strong> Em produção, o comerciante possui acesso restrito estritamente ao identificador da sua própria loja.
-              </span>
-            </div>
-          )}
         </div>
       )}
 
@@ -1897,60 +1901,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             )}
           </div>
         )}
-      </div>
-
-      {/* Orçamento Promocional de Fidelidade (3.000 pontos) */}
-      <div className="rounded-3xl bg-[#13151f] border border-amber-500/30 p-5 space-y-4 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-xl bg-amber-500/20 text-amber-400">
-                <Gift className="w-5 h-5" />
-              </span>
-              <h3 className="text-sm sm:text-base font-bold text-white font-display">
-                Orçamento Promocional de Fidelidade — {currentRestaurant.name}
-              </h3>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Pacote demonstrativo de <strong>3.000 pontos</strong> concedido para você fidelizar clientes locais
-            </p>
-          </div>
-
-          <span className="text-xs px-2.5 py-1 rounded-xl bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30 self-start sm:self-auto shrink-0">
-            Fase de Lançamento Gratuito
-          </span>
-        </div>
-
-        {/* Diferenciação dos 4 Níveis de Valores (Exigência de Arquitetura) */}
-        <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs space-y-2 text-slate-300">
-          <div className="flex items-center gap-2 font-bold text-amber-300">
-            <ShieldCheck className="w-4 h-4 text-amber-400" />
-            Diferenciação Clara dos 4 Níveis de Pontuação & Estoque:
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-400 pt-1">
-            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800/80">
-              <strong className="text-amber-300 block">1. Orçamento da Loja:</strong>
-              Saldo que a lanchonete possui para distribuir em campanhas e atrair clientes.
-            </div>
-            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800/80">
-              <strong className="text-emerald-300 block">2. Saldo do Cliente:</strong>
-              Pontos acumulados na carteira pessoal do morador (por check-in e avaliações).
-            </div>
-            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800/80">
-              <strong className="text-orange-300 block">3. Custo do Prêmio:</strong>
-              Quantidade de pontos necessária para resgatar uma cortesia cadastrada.
-            </div>
-            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800/80">
-              <strong className="text-blue-300 block">4. Estoque Físico:</strong>
-              Quantidade real de unidades disponíveis para entrega no balcão da loja.
-            </div>
-          </div>
-        </div>
-
-        <p className="rounded-xl bg-slate-900 border border-slate-800 p-3 text-xs text-slate-400 leading-relaxed">
-          Os pontos locais são concedidos automaticamente conforme as regras de check-in e avaliação. O painel não possui pacote promocional de 3.000 pontos nem saldo de pontos para distribuição pela loja.
-        </p>
-
       </div>
 
       {/* ============================================================ */}
