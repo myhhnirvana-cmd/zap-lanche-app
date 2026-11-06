@@ -118,12 +118,13 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
         const { data, error: restError } = await supabase
           .from('restaurants')
           .select('id, name, neighborhood, status, owner_profile_id')
-          .eq('status', 'ativo')
           .order('name');
-        if (!restError && data && data.length > 0) {
+        if (!restError && data) {
           setAvailableRestaurants(data);
+          setRestaurantManagementError(null);
           return;
         }
+        if (restError) setRestaurantManagementError(restError.message);
       } catch {
         // Fallback silencioso
       }
@@ -138,6 +139,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
             name: r.name,
             neighborhood: r.neighborhoodName,
             owner_profile_id: null,
+            status: 'ativo',
           }))
       );
     }
