@@ -472,6 +472,7 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
           isOpen={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
           initialMode={authModalMode}
+          signupRedirectTo={`${window.location.origin}${window.location.pathname}?convite=${encodeURIComponent(token)}`}
           customTitle="Entrar para Aceitar Convite"
           customSubtitle={
             previewData
