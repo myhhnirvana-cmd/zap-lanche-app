@@ -47,7 +47,7 @@ import {
   loadAdminNotices,
   saveAdminNotices,
 } from '../data/mockData';
-import { supabase, isSupabaseConfigured, insertRestaurantToSupabase, fetchRestaurantsFromSupabase, getCurrentEnvironment, setEnvironment } from '../lib/supabase';
+import { supabase, SUPABASE_STORAGE_BUCKET, isSupabaseConfigured, insertRestaurantToSupabase, fetchRestaurantsFromSupabase, getCurrentEnvironment, setEnvironment } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { CommunityModeration } from './CommunityModeration';
 
@@ -61,6 +61,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
   const [stats, setStats] = useState<AdminDemoStats>(MOCK_ADMIN_STATS);
   const [pendingDeletion, setPendingDeletion] = useState<{ type: 'highlight' | 'notice' | 'audit'; id: string; title: string } | null>(null);
   const [pendingRestaurantDeletion, setPendingRestaurantDeletion] = useState<{ id: string; name: string } | null>(null);
+  const [restaurantDeletionConfirmation, setRestaurantDeletionConfirmation] = useState('');
   const [restaurantManagementError, setRestaurantManagementError] = useState<string | null>(null);
   const [isDeletingRestaurant, setIsDeletingRestaurant] = useState(false);
   const [approvedList, setApprovedList] = useState<Record<string, 'approved' | 'rejected'>>({});
@@ -152,25 +153,49 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
     loadAvailableRestaurants();
   }, []);
 
-  const handleArchiveRestaurant = async () => {
-    if (!pendingRestaurantDeletion || !supabase) return;
+  const handleDeleteRestaurantPermanently = async () => {
+    if (!pendingRestaurantDeletion || !supabase || restaurantDeletionConfirmation.trim() !== pendingRestaurantDeletion.name) return;
     setIsDeletingRestaurant(true);
     setRestaurantManagementError(null);
-    const { data, error: archiveError } = await supabase
-      .from('restaurants')
-      .update({ status: 'inativo' })
-      .eq('id', pendingRestaurantDeletion.id)
-      .eq('status', 'ativo')
-      .select('id')
-      .maybeSingle();
-    setIsDeletingRestaurant(false);
-    if (archiveError || !data) {
-      setRestaurantManagementError(archiveError?.message || 'A loja não foi removida. Verifique sua permissão de administrador.');
+
+    const restaurantId = pendingRestaurantDeletion.id;
+    const { error: deleteError } = await supabase.rpc('delete_restaurant_permanently', {
+      p_restaurant_id: restaurantId,
+    });
+
+    if (deleteError) {
+      setIsDeletingRestaurant(false);
+      setRestaurantManagementError(deleteError.message || 'Não foi possível excluir a loja.');
       return;
     }
+
+    // Remove the store's uploaded images after the database transaction succeeds.
+    const folder = `restaurants/${restaurantId}`;
+    const { data: storedFiles, error: listError } = await supabase.storage
+      .from(SUPABASE_STORAGE_BUCKET)
+      .list(folder, { limit: 1000 });
+
+    let storageWarning: string | null = null;
+    if (listError) {
+      storageWarning = `A loja foi excluída do banco, mas não foi possível verificar as imagens: ${listError.message}`;
+    } else if (storedFiles?.length) {
+      const paths = storedFiles
+        .filter((file) => file.name && file.id)
+        .map((file) => `${folder}/${file.name}`);
+      if (paths.length) {
+        const { error: storageError } = await supabase.storage
+          .from(SUPABASE_STORAGE_BUCKET)
+          .remove(paths);
+        if (storageError) storageWarning = `A loja foi excluída do banco, mas algumas imagens podem permanecer no armazenamento: ${storageError.message}`;
+      }
+    }
+
+    setIsDeletingRestaurant(false);
     setPendingRestaurantDeletion(null);
+    setRestaurantDeletionConfirmation('');
     await loadAvailableRestaurants();
     if (onRestaurantAdded) onRestaurantAdded();
+    if (storageWarning) setRestaurantManagementError(storageWarning);
   };
 
   const handleRegisterRestaurant = async () => {
@@ -564,11 +589,11 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
                   {restaurant.status === 'ativo' && (
                     <button
                       type="button"
-                      onClick={() => setPendingRestaurantDeletion({ id: restaurant.id, name: restaurant.name })}
+                      onClick={() => { setPendingRestaurantDeletion({ id: restaurant.id, name: restaurant.name }); setRestaurantDeletionConfirmation(''); }}
                       className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                      Excluir loja
+                      Excluir definitivamente
                     </button>
                   )}
                 </div>
@@ -1339,20 +1364,24 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
       </div>
 
       {pendingRestaurantDeletion && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4" role="presentation" onClick={() => !isDeletingRestaurant && setPendingRestaurantDeletion(null)}>
-          <div role="dialog" aria-modal="true" aria-labelledby="archive-restaurant-title" className="w-full max-w-md rounded-2xl border border-rose-500/30 bg-slate-900 p-5 shadow-2xl space-y-4" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4" role="presentation" onClick={() => !isDeletingRestaurant && (setPendingRestaurantDeletion(null), setRestaurantDeletionConfirmation(''))}>
+          <div role="dialog" aria-modal="true" aria-labelledby="delete-restaurant-title" className="w-full max-w-md rounded-2xl border border-rose-500/40 bg-slate-900 p-5 shadow-2xl space-y-4" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center gap-3">
               <span className="rounded-xl bg-rose-500/15 p-2 text-rose-300"><Trash2 className="h-5 w-5" /></span>
-              <h3 id="archive-restaurant-title" className="text-base font-bold text-white">Excluir loja do aplicativo?</h3>
+              <h3 id="delete-restaurant-title" className="text-base font-bold text-white">Excluir loja permanentemente?</h3>
             </div>
-            <p className="text-sm text-slate-300">A loja <strong className="text-white">{pendingRestaurantDeletion.name}</strong> deixará de aparecer para o público e não poderá ser gerenciada como estabelecimento ativo.</p>
-            <p className="text-xs text-amber-300">Os dados históricos, avaliações, publicações e registros de pontos serão preservados. Esta ação apenas desativa a loja, não apaga definitivamente os dados.</p>
+            <p className="text-sm text-slate-300">Você está prestes a apagar <strong className="text-white">{pendingRestaurantDeletion.name}</strong> do banco de dados.</p>
+            <p className="text-xs text-rose-300">Esta ação é irreversível. Serão apagados o cadastro da loja, cardápio, prêmios, promoções, avaliações, publicações, convites, resgates, transações de pontos e imagens vinculadas. Os perfis/contas dos clientes e dos responsáveis não serão excluídos.</p>
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold text-slate-300">Digite exatamente o nome da loja para confirmar:</span>
+              <input autoFocus value={restaurantDeletionConfirmation} onChange={(event) => setRestaurantDeletionConfirmation(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-rose-400" />
+            </label>
             {restaurantManagementError && <p role="alert" className="text-xs text-rose-300">{restaurantManagementError}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" disabled={isDeletingRestaurant} onClick={() => setPendingRestaurantDeletion(null)} className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700 disabled:opacity-50">Cancelar</button>
-              <button type="button" disabled={isDeletingRestaurant} onClick={handleArchiveRestaurant} className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-50">
+              <button type="button" disabled={isDeletingRestaurant} onClick={() => { setPendingRestaurantDeletion(null); setRestaurantDeletionConfirmation(''); }} className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700 disabled:opacity-50">Cancelar</button>
+              <button type="button" disabled={isDeletingRestaurant || restaurantDeletionConfirmation.trim() !== pendingRestaurantDeletion.name} onClick={handleDeleteRestaurantPermanently} className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-40">
                 {isDeletingRestaurant && <Loader2 className="h-4 w-4 animate-spin" />}
-                {isDeletingRestaurant ? 'Removendo...' : 'Confirmar exclusão'}
+                {isDeletingRestaurant ? 'Excluindo...' : 'Apagar definitivamente'}
               </button>
             </div>
           </div>
