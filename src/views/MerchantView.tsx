@@ -1697,7 +1697,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                           </div>
                         </div>
                       </div>
-                    </div>
 
                     <p className="text-xs text-slate-400 leading-relaxed">
                       {reward.description}
