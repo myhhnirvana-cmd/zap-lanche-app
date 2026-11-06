@@ -1329,40 +1329,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
         </div>
       </div>
 
-      {/* Neighborhood Distribution */}
-      <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4">
-        <div>
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Layers className="w-4 h-4 text-orange-400" />
-            Bairros Ativos no ZAP LANCHE
-          </h3>
-          <p className="text-xs text-slate-400">
-            Regiões operando com feed comunitário e catálogo de lanches
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {NEIGHBORHOODS.map((nb) => (
-            <div
-              key={nb.id}
-              className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 flex items-center justify-between"
-            >
-              <div>
-                <span className="font-bold text-sm text-white block">
-                  {nb.name}
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  {nb.zone} · {nb.city} - {nb.state}
-                </span>
-              </div>
-              <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg tabular-nums">
-                {nb.activeSpotsCount} locais
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {pendingRestaurantDeletion && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4" role="presentation" onClick={() => !isDeletingRestaurant && (setPendingRestaurantDeletion(null), setRestaurantDeletionConfirmation(''))}>
           <div role="dialog" aria-modal="true" aria-labelledby="delete-restaurant-title" className="w-full max-w-md rounded-2xl border border-rose-500/40 bg-slate-900 p-5 shadow-2xl space-y-4" onClick={(event) => event.stopPropagation()}>
