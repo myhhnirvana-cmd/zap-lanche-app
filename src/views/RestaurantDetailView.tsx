@@ -144,7 +144,9 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
     if (updated) setReviewSummary(updated);
     setIsReviewFormOpen(false);
     setReviewComment('');
-    setReviewFeedback('Sua avaliação foi registrada. Obrigada!');
+    setReviewFeedback(result.pointsAwarded === 5
+      ? 'Sua avaliação foi registrada! Você ganhou mais 5 pontos. 🎉'
+      : 'Sua avaliação foi registrada! Para ganhar os 5 pontos, a avaliação precisa ser feita em até 2 horas após um check-in válido.');
     setIsSavingReview(false);
   };
 
