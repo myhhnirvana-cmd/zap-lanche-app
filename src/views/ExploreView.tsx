@@ -47,7 +47,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   const filteredRestaurants = useMemo(() => {
     return restaurants.filter((r) => {
       // Matches neighborhood / region (shows all demonstrative spots belonging to that region)
-      const matchesNeighborhood = isRestaurantInNeighborhood(r, currentNeighborhood.id);
+      const matchesNeighborhood = isRestaurantInNeighborhood(r, currentNeighborhood.id, currentNeighborhood.name);
 
       // Matches search query
       const matchesSearch =
