@@ -59,7 +59,10 @@ interface AdminViewProps {
 export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onRestaurantAdded }) => {
   const { session, user } = useAuth();
   const [stats, setStats] = useState<AdminDemoStats>(MOCK_ADMIN_STATS);
-  const [pendingDeletion, setPendingDeletion] = useState<{ type: 'highlight' | 'notice' | 'audit'; id: string; title: string } | null>(null);\n  const [pendingRestaurantDeletion, setPendingRestaurantDeletion] = useState<{ id: string; name: string } | null>(null);\n  const [restaurantManagementError, setRestaurantManagementError] = useState<string | null>(null);\n  const [isDeletingRestaurant, setIsDeletingRestaurant] = useState(false);
+  const [pendingDeletion, setPendingDeletion] = useState<{ type: 'highlight' | 'notice' | 'audit'; id: string; title: string } | null>(null);
+  const [pendingRestaurantDeletion, setPendingRestaurantDeletion] = useState<{ id: string; name: string } | null>(null);
+  const [restaurantManagementError, setRestaurantManagementError] = useState<string | null>(null);
+  const [isDeletingRestaurant, setIsDeletingRestaurant] = useState(false);
   const [approvedList, setApprovedList] = useState<Record<string, 'approved' | 'rejected'>>({});
 
   // Parâmetros configuráveis do programa
@@ -149,7 +152,28 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
     loadAvailableRestaurants();
   }, []);
 
-  const handleArchiveRestaurant = async () => {\n    if (!pendingRestaurantDeletion || !supabase) return;\n    setIsDeletingRestaurant(true);\n    setRestaurantManagementError(null);\n    const { data, error: archiveError } = await supabase\n      .from('restaurants')\n      .update({ status: 'inativo' })\n      .eq('id', pendingRestaurantDeletion.id)\n      .eq('status', 'ativo')\n      .select('id')\n      .maybeSingle();\n    setIsDeletingRestaurant(false);\n    if (archiveError || !data) {\n      setRestaurantManagementError(archiveError?.message || 'A loja não foi removida. Verifique sua permissão de administrador.');\n      return;\n    }\n    setPendingRestaurantDeletion(null);\n    await loadAvailableRestaurants();\n    if (onRestaurantAdded) onRestaurantAdded();\n  };\n\n  const handleRegisterRestaurant = async () => {
+  const handleArchiveRestaurant = async () => {
+    if (!pendingRestaurantDeletion || !supabase) return;
+    setIsDeletingRestaurant(true);
+    setRestaurantManagementError(null);
+    const { data, error: archiveError } = await supabase
+      .from('restaurants')
+      .update({ status: 'inativo' })
+      .eq('id', pendingRestaurantDeletion.id)
+      .eq('status', 'ativo')
+      .select('id')
+      .maybeSingle();
+    setIsDeletingRestaurant(false);
+    if (archiveError || !data) {
+      setRestaurantManagementError(archiveError?.message || 'A loja não foi removida. Verifique sua permissão de administrador.');
+      return;
+    }
+    setPendingRestaurantDeletion(null);
+    await loadAvailableRestaurants();
+    if (onRestaurantAdded) onRestaurantAdded();
+  };
+
+  const handleRegisterRestaurant = async () => {
     if (!newRestName.trim() || !newRestNeighborhood.trim()) {
       setError('Nome e Bairro são obrigatórios.');
       return;
