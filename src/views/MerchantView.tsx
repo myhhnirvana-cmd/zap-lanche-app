@@ -104,8 +104,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     isAdmin,
     isMerchant,
     merchantRestaurant,
-    profile,
-    updateOwnerProfile,
     refreshMerchantStore,
   } = useAuth();
 
@@ -241,15 +239,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   // -------------------------------------------------------------
   const [isEditStoreModalOpen, setIsEditStoreModalOpen] = useState(false);
   const [storeFormName, setStoreFormName] = useState(currentRestaurant.name);
-  const [storeFormOwner, setStoreFormOwner] = useState(
-    profile?.full_name || currentRestaurant.ownerName || stats.ownerName
-  );
-
-  useEffect(() => {
-    if (profile?.full_name) {
-      setStoreFormOwner(profile.full_name);
-    }
-  }, [profile?.full_name]);
+  const [storeFormOwner, setStoreFormOwner] = useState(currentRestaurant.ownerName || '');
   const [storeFormBio, setStoreFormBio] = useState(currentRestaurant.bio);
   const [storeFormNeighborhoodId, setStoreFormNeighborhoodId] = useState(currentRestaurant.neighborhoodName || currentRestaurant.neighborhoodId || '');
   const [sameNeighborhoodRestaurants, setSameNeighborhoodRestaurants] = useState<Array<{ id: string; name: string; neighborhood: string; address: string | null; logo_url: string | null }>>([]);
@@ -362,7 +352,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
   // Abertura do Modal de Edição da Loja
   const handleOpenEditStore = () => {
-    const activeOwner = profile?.full_name || currentRestaurant.ownerName || stats.ownerName;
+    const activeOwner = currentRestaurant.ownerName || '';
     setStoreFormName(currentRestaurant.name);
     setStoreFormOwner(activeOwner);
     setStoreFormBio(currentRestaurant.bio);
@@ -570,19 +560,13 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     }
     const trimmedOwnerName = storeFormOwner.trim();
 
-    // 1. Persistência do nome do proprietário no Supabase (public.profiles)
-    if (updateOwnerProfile && trimmedOwnerName) {
-      const { error: profileSaveError } = await updateOwnerProfile(trimmedOwnerName);
-      if (profileSaveError) {
-        console.warn('Aviso ao persistir nome no perfil do Supabase:', profileSaveError);
-      }
-    }
-
-    // 2. Persistência dos dados da loja no Supabase (public.restaurants)
+    // O nome do responsável pertence ao estabelecimento, nunca ao perfil global do usuário.
+    // Persistimos tudo junto em public.restaurants para evitar contaminar outras lojas.
     if (restUuid) {
       const { data: updatedRest, error: restUpdateErr } = await updateRestaurantInSupabase({
         id: restUuid,
         name: storeFormName.trim(),
+        owner_name: trimmedOwnerName,
         description: storeFormBio.trim(),
         address: storeFormAddress.trim(),
         whatsapp: storeFormWhatsapp.trim(),

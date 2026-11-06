@@ -171,6 +171,7 @@ export async function fetchRestaurantsFromSupabase(): Promise<Restaurant[] | nul
         id: row.slug || row.id,
         supabaseId: row.id,
         name: row.name || 'Lanchonete',
+        ownerName: row.owner_name || undefined,
         neighborhoodId: normalizeSlug(row.neighborhood) || 'todos',
         neighborhoodName: row.neighborhood || 'Bairro',
         category: (row.category || 'hamburguer') as any,
@@ -252,7 +253,7 @@ export async function fetchMerchantRestaurant(
       id: data.slug || data.id,
       supabaseId: data.id,
       name: data.name || 'Lanchonete',
-      ownerName: ownerRealName,
+      ownerName: data.owner_name || ownerRealName,
       neighborhoodId: normalizeSlug(data.neighborhood) || 'todos',
       neighborhoodName: data.neighborhood || 'Bairro',
       category: (data.category || 'hamburguer') as any,
@@ -624,6 +625,7 @@ export async function insertRestaurantToSupabase(
 export interface UpdateRestaurantInput {
   id: string;
   name?: string;
+  owner_name?: string;
   description?: string;
   neighborhood?: string;
   address?: string;
@@ -666,6 +668,7 @@ export async function updateRestaurantInSupabase(input: UpdateRestaurantInput) {
 
   const payload: Record<string, any> = {};
   if (input.name !== undefined) payload.name = input.name.trim();
+  if (input.owner_name !== undefined) payload.owner_name = input.owner_name.trim() || null;
   if (input.description !== undefined) payload.description = input.description?.trim() || null;
   if (input.neighborhood !== undefined) payload.neighborhood = input.neighborhood?.trim() || null;
   if (input.address !== undefined) payload.address = input.address?.trim() || null;
