@@ -67,7 +67,7 @@ export const NEIGHBORHOODS: Neighborhood[] = [
 function normalizeNeighborhoodKey(value: unknown): string {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/\p{Diacritic}/gu, '')
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
