@@ -198,6 +198,7 @@ export default function App() {
         {activeTab === 'feed' && (
           <FeedView
             restaurants={restaurants}
+            currentNeighborhood={currentNeighborhood}
             onSelectRestaurantById={handleSelectRestaurantById}
             onOpenDishPreview={handleOpenDishByName}
           />
