@@ -35,8 +35,6 @@ import {
   Restaurant,
   MerchantDemoStats,
   MenuItem,
-  HighlightStatus,
-  RegionalHighlight,
   LoyaltyReward,
   Promotion,
   RewardStatus,
@@ -46,13 +44,10 @@ import {
   MOCK_MENU_ITEMS,
   MOCK_RESTAURANTS,
   MOCK_LOYALTY_REWARDS,
-  NEIGHBORHOODS,
   CATEGORIES,
   ANTI_FRAUD_RULES,
   loadMerchantStats,
   saveMerchantStats,
-  loadRegionalHighlights,
-  saveRegionalHighlights,
   loadRestaurants,
   saveRestaurants,
   updateSingleRestaurant,
@@ -154,18 +149,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Orçamento Promocional de Fidelidade (3.000 pontos)
-
-  // Destaque Regional (5 Estados) sincronizado
-  const existingHighlights = loadRegionalHighlights();
-  const activeHl = existingHighlights.find((h) => h.restaurantId === selectedRestaurantId);
-  const [currentHighlightStatus, setCurrentHighlightStatus] = useState<HighlightStatus>(
-    (activeHl?.status || stats.highlightStatus) as HighlightStatus
-  );
-  const [highlightHistory, setHighlightHistory] = useState(stats.highlightHistory);
-  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
-  const [selectedNeighborhood, setSelectedNeighborhood] = useState('freguesia');
-
   // Quando o lojista troca de restaurante no seletor de testes
   const handleSelectStore = async (storeId: string) => {
     setSelectedRestaurantId(storeId);
@@ -209,9 +192,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     const storeStats = loadMerchantStats(storeId);
     setStats(storeStats);
 
-    const storeHl = existingHighlights.find((h) => h.restaurantId === storeId);
-    setCurrentHighlightStatus((storeHl?.status || storeStats.highlightStatus) as HighlightStatus);
-    setHighlightHistory(storeStats.highlightHistory);
   };
 
   // Carrega dados persistentes também para o painel administrativo e na primeira abertura.
@@ -225,8 +205,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       handleSelectStore(merchantRestaurant.id);
     }
   }, [isRealMerchant, merchantRestaurant?.id]);
-
-  const [selectedDuration, setSelectedDuration] = useState('2 Horas (Exemplo: R$ 10)');
 
   // -------------------------------------------------------------
   // ESTADOS DO MODAL: EDITAR MINHA LOJA
@@ -1157,83 +1135,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     saveRestaurantRewards(selectedRestaurantId, remaining);
     showToast(`Prêmio "${deletingReward.title}" excluído do programa de fidelidade.`);
     setDeletingReward(null);
-  };
-
-  // Solicitação de Destaque Regional no Bairro
-  const handleRequestHighlight = (e: React.FormEvent) => {
-    e.preventDefault();
-    const nbObj = NEIGHBORHOODS.find((n) => n.id === selectedNeighborhood) || NEIGHBORHOODS[1] || NEIGHBORHOODS[0];
-
-    setCurrentHighlightStatus('solicitado');
-    const newEntry = {
-      id: `hh-${Date.now()}`,
-      neighborhoodName: nbObj.name,
-      duration: selectedDuration,
-      status: 'solicitado' as HighlightStatus,
-      date: 'Hoje, acabou de solicitar',
-    };
-
-    setHighlightHistory((prev) => [newEntry, ...prev]);
-
-    // Salvar destaque na lista global para que apareça imediatamente no Painel Admin
-    const currentList = loadRegionalHighlights();
-    const newRegionalHighlight: RegionalHighlight = {
-      id: `hl-req-${Date.now()}`,
-      restaurantId: selectedRestaurantId,
-      restaurantName: currentRestaurant.name,
-      neighborhoodId: nbObj.id,
-      neighborhoodName: nbObj.name,
-      requestedDuration: selectedDuration,
-      status: 'solicitado',
-      requestedAt: 'Agora mesmo',
-      isSponsored: true,
-      estimatedPriceExample: 'R$ 10 (Gratuito no Lançamento)',
-      launchPhaseFree: true,
-    };
-    saveRegionalHighlights([newRegionalHighlight, ...currentList]);
-
-    setIsRequestModalOpen(false);
-    showToast('Solicitação de destaque enviada para moderação administrativa!');
-  };
-
-  const getStatusBadge = (status: HighlightStatus | string) => {
-    switch (status) {
-      case 'solicitado':
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            Solicitado (Moderação)
-          </span>
-        );
-      case 'aprovado':
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" />
-            Aprovado pela Equipe
-          </span>
-        );
-      case 'agendado':
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            Agendado
-          </span>
-        );
-      case 'ativo':
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-emerald-400" />
-            Ativo no Topo (Patrocinado)
-          </span>
-        );
-      case 'encerrado':
-      default:
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
-            Encerrado
-          </span>
-        );
-    }
   };
 
   return (
