@@ -563,7 +563,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       return;
     }
     const neighborhoodName = storeFormNeighborhoodId.trim();
-    const neighborhoodId = neighborhoodName.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const neighborhoodId = neighborhoodName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     if (!neighborhoodName) {
       setStoreFormError('Informe o bairro do estabelecimento.');
       return;
