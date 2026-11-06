@@ -25,7 +25,7 @@ import { getAvatarById, DEFAULT_AVATAR_ID } from '../data/avatars';
 import {
   supabase,
   isSupabaseConfigured,
-  fetchLoyaltyPoints,
+  fetchGlobalReferralPoints,
   lastLoyaltyError,
   fetchStoreLoyaltyBreakdown,
   fetchUserProfileReferralCode,
@@ -144,7 +144,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
       try {
         const [points, breakdownRes, codeRes, referralsRes] = await Promise.all([
-          fetchLoyaltyPoints(authUser.id),
+          fetchGlobalReferralPoints(authUser.id),
           fetchStoreLoyaltyBreakdown(authUser.id),
           fetchUserProfileReferralCode(authUser.id),
           fetchUserReferralsList(authUser.id),
@@ -306,7 +306,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
           // Atualiza imediatamente saldo real e histórico por loja no perfil
           const [points, breakdownRes] = await Promise.all([
-            fetchLoyaltyPoints(authUser.id),
+            fetchGlobalReferralPoints(authUser.id),
             fetchStoreLoyaltyBreakdown(authUser.id),
           ]);
           if (points !== null) setRealPoints(points);
