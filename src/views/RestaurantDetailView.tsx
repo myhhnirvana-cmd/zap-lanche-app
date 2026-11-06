@@ -30,6 +30,7 @@ import {
   supabase,
   isSupabaseConfigured,
   fetchLoyaltyPoints,
+  fetchGlobalReferralPoints,
   fetchUserLoyaltyBalance,
   redeemRewardInSupabase,
   fetchRewardsFromSupabase,
@@ -109,6 +110,7 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [realTotalPoints, setRealTotalPoints] = useState<number | null>(null);
   const [realStorePoints, setRealStorePoints] = useState<number | null>(null);
+  const [realGlobalReferralPoints, setRealGlobalReferralPoints] = useState<number | null>(null);
 
   const { user } = useAuth();
 
@@ -188,6 +190,9 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const loadRealPoints = async () => {
     if (!isSupabaseConfigured || !user?.id || !supabase) return;
     try {
+      const globalReferralBalance = await fetchGlobalReferralPoints(user.id);
+      setRealGlobalReferralPoints(globalReferralBalance ?? 0);
+
       const targetUuid =
         (restaurant.supabaseId && UUID_REGEX.test(restaurant.supabaseId) && restaurant.supabaseId) ||
         (restaurant.id && UUID_REGEX.test(restaurant.id) && restaurant.id) ||
@@ -533,7 +538,9 @@ export const RestaurantDetailView: React.FC<RestaurantDetailViewProps> = ({
   const customerStorePoints = (isSupabaseConfigured && user && realStorePoints !== null)
     ? realStorePoints
     : (userProfile.loyaltyWallet.storePoints[restaurant.id] || 0);
-  const customerGlobalPoints = userProfile.loyaltyWallet.globalReferralPoints || 0;
+  const customerGlobalPoints = (isSupabaseConfigured && user)
+    ? (realGlobalReferralPoints ?? 0)
+    : (userProfile.loyaltyWallet.globalReferralPoints || 0);
 
   const filteredMenuItems =
     selectedMenuCategory === 'todos'
