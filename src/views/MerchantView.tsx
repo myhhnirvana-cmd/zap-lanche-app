@@ -1380,7 +1380,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Responsável: <strong className="text-slate-300">{profile?.full_name || currentRestaurant.ownerName || stats.ownerName}</strong> · Bairro {currentRestaurant.neighborhoodName}
+                Responsável: <strong className="text-slate-300">{currentRestaurant.ownerName || stats.ownerName || 'Responsável não informado'}</strong> · Bairro {currentRestaurant.neighborhoodName}
               </p>
               <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
                 <Phone className="w-3 h-3 text-emerald-400" />
