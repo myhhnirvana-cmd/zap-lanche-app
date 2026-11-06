@@ -6,18 +6,15 @@ import {
   Star,
   Sparkles,
   Flame,
-  Filter,
   CheckCircle2,
   ChevronRight,
   TrendingUp,
   Gift,
   Bell,
-  X,
 } from 'lucide-react';
 import { Restaurant, FoodCategory, Neighborhood } from '../types';
 import {
   CATEGORIES,
-  MOCK_ADMIN_NOTICES,
   loadAdminNotices,
   loadRegionalHighlights,
   isRestaurantInNeighborhood,
@@ -46,24 +43,15 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   // Filter restaurants
   const filteredRestaurants = useMemo(() => {
     return restaurants.filter((r) => {
-      // Matches neighborhood / region (shows all demonstrative spots belonging to that region)
       const matchesNeighborhood = isRestaurantInNeighborhood(r, currentNeighborhood.id, currentNeighborhood.name);
-
-      // Matches search query
+      const query = searchQuery.trim().toLowerCase();
       const matchesSearch =
-        !searchQuery.trim() ||
-        r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.categoryLabel.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.popularDishes.some((d) => d.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      // Matches category
-      const matchesCategory =
-        selectedCategory === 'todos' || r.category === selectedCategory;
-
-      // Filter open
+        !query ||
+        r.name.toLowerCase().includes(query) ||
+        r.categoryLabel.toLowerCase().includes(query) ||
+        r.popularDishes.some((d) => d.toLowerCase().includes(query));
+      const matchesCategory = selectedCategory === 'todos' || r.category === selectedCategory;
       const matchesOpen = !onlyOpen || r.isOpen;
-
-      // Filter free delivery
       const matchesDelivery = !freeDeliveryOnly || r.deliveryFee === 0;
 
       return matchesNeighborhood && matchesSearch && matchesCategory && matchesOpen && matchesDelivery;
@@ -208,7 +196,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
         )}
       </div>
 
-      {/* Restaurant List */}
+      {/* Restaurant Grid */}
       <div>
         {/* Highlight Regional (Patrocinado) */}
         {(() => {
@@ -285,114 +273,126 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {filteredRestaurants.map((restaurant) => (
-              <div
+              <article
                 key={restaurant.id}
                 onClick={() => onSelectRestaurant(restaurant)}
-                className="group cursor-pointer rounded-2xl bg-bg-surface border border-border-muted/80 hover:border-orange-500/40 transition-all overflow-hidden flex flex-col hover:shadow-xl hover:shadow-orange-500/5"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onSelectRestaurant(restaurant);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Ver restaurante ${restaurant.name}`}
+                className="group min-w-0 cursor-pointer rounded-2xl bg-bg-surface border border-border-muted/80 hover:border-orange-500/50 transition-all overflow-hidden flex flex-col hover:shadow-xl hover:shadow-orange-500/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
               >
-                {/* Image header with badges */}
-                <div className="relative h-44 sm:h-48 w-full bg-bg-surface overflow-hidden">
+                {/* Full cover: contain keeps the complete restaurant artwork visible */}
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 flex items-center justify-center">
                   <img
                     src={restaurant.bannerUrl}
-                    alt={restaurant.name}
+                    alt={`Capa de ${restaurant.name}`}
                     referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-contain object-center p-1.5 transition-transform duration-300 group-hover:scale-[1.02]"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#13151f] via-black/20 to-transparent" />
 
-                  {/* Rating Badge */}
-                  <div className="absolute top-3 right-3 px-2 py-1 rounded-lg bg-black/75 backdrop-blur-md border border-border-muted/60 text-text-primary text-xs font-bold flex items-center gap-1">
-                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span className="tabular-nums">{restaurant.reviewCount > 0 ? restaurant.rating.toFixed(1) : 'Sem avaliações'}</span>
-                    <span className="text-[10px] text-text-secondary">({restaurant.reviewCount})</span>
-                  </div>
+                  {restaurant.logoUrl && (
+                    <div className="absolute bottom-2 left-2 w-9 h-9 rounded-xl bg-white p-0.5 shadow-lg border border-white/70 overflow-hidden">
+                      <img
+                        src={restaurant.logoUrl}
+                        alt={`Logo de ${restaurant.name}`}
+                        loading="lazy"
+                        className="w-full h-full object-contain rounded-lg"
+                      />
+                    </div>
+                  )}
 
-                  {/* Status / Category tag */}
-                  <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <div className="absolute top-2 left-2">
                     <span
-                      className={`px-2.5 py-0.5 rounded-md text-[11px] font-semibold ${
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold shadow-sm ${
                         restaurant.isOpen === true
-                          ? 'bg-emerald-500 text-black font-bold'
-                          : 'bg-slate-800 text-text-secondary'
+                          ? 'bg-emerald-500 text-black'
+                          : 'bg-slate-950/85 text-white'
                       }`}
                     >
                       {restaurant.isOpen === true ? 'Aberto' : restaurant.isOpen === false ? 'Fechado' : 'Status não informado'}
                     </span>
                   </div>
 
-                  {/* Neighborhood badge */}
-                  <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-xs text-text-secondary">
-                    <span className="flex items-center gap-1 font-medium text-amber-300 drop-shadow-sm">
-                      <MapPin className="w-3 h-3 text-orange-400" />
-                      {restaurant.neighborhoodName}{restaurant.distanceKm > 0 ? ` · ${restaurant.distanceKm} km` : ''}
-                    </span>
-                    <span className="flex items-center gap-1 text-text-secondary">
-                      <Clock className="w-3 h-3 text-text-secondary" />
-                      {restaurant.deliveryTime}
-                    </span>
+                  <div className="absolute top-2 right-2 px-2 py-1 rounded-lg bg-black/75 backdrop-blur-sm border border-white/10 text-white text-[10px] font-bold flex items-center gap-1">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    <span>{restaurant.reviewCount > 0 ? restaurant.rating.toFixed(1) : 'Novo'}</span>
+                    {restaurant.reviewCount > 0 && <span className="text-white/70">({restaurant.reviewCount})</span>}
                   </div>
                 </div>
 
-                {/* Details body */}
-                <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-bold text-base text-text-primary group-hover:text-orange-400 transition-colors">
-                        {restaurant.name}
-                      </h3>
-                      <span className="text-xs font-medium text-text-secondary shrink-0">
-                        {restaurant.deliveryFee === 0 ? (
-                          <span className="text-emerald-400 font-semibold">Entrega Grátis</span>
-                        ) : (
-                          `Entrega R$ ${restaurant.deliveryFee.toFixed(2).replace('.', ',')}`
-                        )}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-text-secondary line-clamp-2 mt-1">
+                {/* Compact restaurant identity */}
+                <div className="p-3 sm:p-3.5 flex-1 flex flex-col gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-orange-400 mb-0.5 truncate">
+                      {restaurant.categoryLabel}
+                    </p>
+                    <h3 className="font-bold text-sm sm:text-base leading-tight text-text-primary group-hover:text-orange-400 transition-colors line-clamp-2">
+                      {restaurant.name}
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-text-secondary leading-snug line-clamp-2 mt-1">
                       {restaurant.bio}
                     </p>
                   </div>
 
-                  {/* Loyalty Club Indicator */}
-                  {restaurant.rewards && restaurant.rewards.length > 0 && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-amber-300/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
-                      <Gift className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="truncate">Clube de Fidelidade: Recompensas a partir de {Math.min(...restaurant.rewards.map(r => r.pointsCost))} pts</span>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between gap-1 text-[10px] sm:text-[11px] text-text-secondary">
+                    <span className="flex items-center gap-1 min-w-0">
+                      <MapPin className="w-3 h-3 text-orange-400 shrink-0" />
+                      <span className="truncate">{restaurant.neighborhoodName}</span>
+                    </span>
+                    <span className="flex items-center gap-1 shrink-0">
+                      <Clock className="w-3 h-3" />
+                      {restaurant.deliveryTime}
+                    </span>
+                  </div>
 
-                  {/* Popular Dishes chips */}
-                  <div className="pt-2 border-t border-border-muted/70">
-                    <div className="text-[11px] text-text-secondary font-medium mb-1.5 flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 text-orange-400" />
-                      Pratos famosos da casa:
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {restaurant.popularDishes.map((dish, i) => (
+                  <div className="flex items-center justify-between gap-1 text-[10px] sm:text-[11px]">
+                    <span className="font-semibold text-text-secondary truncate">
+                      {restaurant.deliveryFee === 0
+                        ? <span className="text-emerald-400">Entrega grátis</span>
+                        : `Entrega R$ ${restaurant.deliveryFee.toFixed(2).replace('.', ',')}`}
+                    </span>
+                    {restaurant.rewards && restaurant.rewards.length > 0 && (
+                      <span className="flex items-center gap-1 text-amber-300 shrink-0">
+                        <Gift className="w-3 h-3" />
+                        Prêmios
+                      </span>
+                    )}
+                  </div>
+
+                  {restaurant.popularDishes.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1 border-t border-border-muted/70">
+                      {restaurant.popularDishes.slice(0, 2).map((dish, index) => (
                         <button
-                          key={i}
+                          key={`${restaurant.id}-dish-${index}`}
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
+                          onClick={(event) => {
+                            event.stopPropagation();
                             onSelectDishPreview(dish, restaurant);
                           }}
-                          className="px-2 py-0.5 rounded-md bg-bg-surface hover:bg-orange-500/20 hover:text-orange-300 border border-border-muted text-[11px] text-text-secondary transition-colors truncate max-w-[170px]"
+                          className="max-w-full truncate rounded-md bg-bg-surface border border-border-muted px-1.5 py-1 text-[10px] text-text-secondary hover:text-orange-300 hover:border-orange-500/40 transition-colors"
                         >
                           {dish}
                         </button>
                       ))}
                     </div>
-                  </div>
+                  )}
 
-                  <div className="pt-2 flex items-center justify-between text-xs font-semibold text-orange-400 group-hover:translate-x-0.5 transition-transform">
-                    <span>Ver cardápio e promoções</span>
-                    <ChevronRight className="w-4 h-4" />
+                  <div className="mt-auto pt-1 flex items-center justify-between text-[11px] font-semibold text-orange-400">
+                    <span>Ver restaurante</span>
+                    <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         )}
