@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Restaurant, MenuItem, LoyaltyReward, Promotion } from '../types';
+import { Restaurant, MenuItem, LoyaltyReward, Promotion, Neighborhood } from '../types';
 
 const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
 
@@ -2095,4 +2095,72 @@ export async function insertRestaurantReview(input: { restaurantId: string; prof
     return { success: false, error: 'Não foi possível salvar sua avaliação agora.' };
   }
   return { success: true };
+}
+
+
+/** Lista bairros compartilhados, incluindo contagem atual de estabelecimentos ativos. */
+export async function fetchNeighborhoodsFromSupabase(): Promise<Neighborhood[] | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  const [{ data: neighborhoodRows, error: neighborhoodError }, { data: restaurantRows, error: restaurantError }] = await Promise.all([
+    supabase.from('neighborhoods').select('id, name, zone, city, state').eq('is_active', true).order('name'),
+    supabase.from('restaurants').select('neighborhood').eq('status', 'ativo'),
+  ]);
+
+  if (neighborhoodError) {
+    console.warn('Não foi possível carregar os bairros compartilhados:', neighborhoodError.message);
+    return null;
+  }
+
+  const counts = new Map<string, number>();
+  if (!restaurantError && restaurantRows) {
+    for (const row of restaurantRows) {
+      const key = String(row.neighborhood || '').trim().toLocaleLowerCase('pt-BR');
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    }
+  }
+
+  return (neighborhoodRows || []).map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    zone: row.zone || '',
+    city: row.city || 'Rio de Janeiro',
+    state: row.state || 'RJ',
+    activeSpotsCount: counts.get(String(row.name).trim().toLocaleLowerCase('pt-BR')) || 0,
+  }));
+}
+
+/** Cadastra um bairro globalmente; a RPC exige sessão autenticada e impede duplicatas. */
+export async function createNeighborhoodInSupabase(name: string): Promise<{ success: boolean; neighborhood?: Neighborhood; error?: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, error: 'Conexão com o servidor indisponível.' };
+  }
+
+  const cleanName = name.trim().replace(/\\s+/g, ' ');
+  if (cleanName.length < 2 || cleanName.length > 60) {
+    return { success: false, error: 'O bairro deve ter entre 2 e 60 caracteres.' };
+  }
+
+  const { data, error } = await supabase.rpc('create_neighborhood', {
+    p_name: cleanName,
+    p_city: 'Rio de Janeiro',
+    p_state: 'RJ',
+  });
+
+  if (error || !data) {
+    return { success: false, error: error?.message || 'Não foi possível cadastrar o bairro.' };
+  }
+
+  const row = typeof data === 'string' ? JSON.parse(data) : data;
+  return {
+    success: true,
+    neighborhood: {
+      id: row.id,
+      name: row.name,
+      zone: row.zone || '',
+      city: row.city || 'Rio de Janeiro',
+      state: row.state || 'RJ',
+      activeSpotsCount: Number(row.activeSpotsCount) || 0,
+    },
+  };
 }
