@@ -223,7 +223,7 @@ export interface UserProfileDemo {
     date: string;
     itemsSummary: string;
     total: number;
-    status: 'Encaminhado ao WhatsApp' | 'Concluído' | 'Entregue' | 'Retirado';
+    status: 'Mensagem preparada para WhatsApp' | 'Concluído' | 'Entregue' | 'Retirado';
   }[];
   checkinHistory: {
     restaurantId: string;
