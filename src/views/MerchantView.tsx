@@ -70,6 +70,7 @@ import {
   deleteRestaurantPromotion,
   updateRestaurantOperationalStatus,
   deleteRewardFromSupabase,
+  setDailyFeaturedRewardInSupabase,
   markLoyaltyRedemptionUsed,
   isSupabaseConfigured,
   supabase,
@@ -877,6 +878,37 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     showToast('Promoção excluída.');
   };
 
+  const handleToggleDailyFeaturedReward = async (reward: LoyaltyReward) => {
+    if (!isSupabaseConfigured || !UUID_REGEX.test(reward.id)) {
+      showToast('Este prêmio precisa estar salvo no sistema para ser destacado no Feed.', 'error');
+      return;
+    }
+    const restaurantUuid =
+      (currentRestaurant.supabaseId && UUID_REGEX.test(currentRestaurant.supabaseId) && currentRestaurant.supabaseId) ||
+      (UUID_REGEX.test(currentRestaurant.id) ? currentRestaurant.id : null);
+    if (!restaurantUuid) {
+      showToast('Não foi possível identificar o estabelecimento.', 'error');
+      return;
+    }
+
+    const nextRewardId = reward.isDailyFeatured ? null : reward.id;
+    const { error } = await setDailyFeaturedRewardInSupabase(restaurantUuid, nextRewardId);
+    if (error) {
+      showToast(error.message || 'Não foi possível atualizar o prêmio em destaque.', 'error');
+      return;
+    }
+
+    const updated = rewardsList.map((item) => ({
+      ...item,
+      isDailyFeatured: nextRewardId !== null && item.id === nextRewardId,
+    }));
+    setRewardsList(updated);
+    saveRestaurantRewards(selectedRestaurantId, updated);
+    showToast(nextRewardId
+      ? `“${reward.title}” agora está em destaque no Feed do bairro.`
+      : 'Destaque removido do Feed. O prêmio continua disponível na seção Prêmios.');
+  };
+
   const handleOpenAddReward = () => {
     setEditingReward(null);
     setRewardTitle('');
@@ -998,6 +1030,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               stock,
               status: finalStatus,
               isAvailable: isAvail,
+              isDailyFeatured: isAvail ? r.isDailyFeatured : false,
               maxGlobalPointsAllowed: maxGlobal,
               minStorePointsRequired: minStore,
               maxRedemptionsPerUser: maxPerUser,
@@ -1043,6 +1076,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         stock,
         status: finalStatus,
         isAvailable: isAvail,
+        isDailyFeatured: false,
         maxGlobalPointsAllowed: maxGlobal,
         minStorePointsRequired: minStore,
         maxRedemptionsPerUser: maxPerUser,
@@ -1087,6 +1121,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           ...r,
           status: nextStatus,
           isAvailable: nextAvail,
+          isDailyFeatured: nextStatus === 'ativo' ? r.isDailyFeatured : false,
         };
       }
       return r;
@@ -1720,6 +1755,15 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                     </button>
 
                     <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleToggleDailyFeaturedReward(reward)}
+                        disabled={!isSupabaseConfigured || !UUID_REGEX.test(reward.id) || reward.status !== 'ativo' || reward.stock <= 0}
+                        className={`px-2 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${reward.isDailyFeatured ? 'bg-amber-400 text-slate-950 border-amber-300' : 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'}`}
+                        title={reward.isDailyFeatured ? 'Remover destaque do Feed' : 'Destacar no Feed do bairro'}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        {reward.isDailyFeatured ? 'No Feed' : 'Destacar'}
+                      </button>
                       <button
                         onClick={() => handleOpenEditReward(reward)}
                         className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 transition-colors"
