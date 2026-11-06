@@ -309,6 +309,9 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
                 </div>
               </div>
 
+              <p className="text-[11px] leading-relaxed text-slate-400">
+                O bairro exibido é apenas informativo. Você pode aceitar o convite mesmo que ele ainda não apareça na lista de bairros e completar os dados da loja depois.
+              </p>
               <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
                 <span className="flex items-center gap-1.5">
                   {isManualInvitation ? (

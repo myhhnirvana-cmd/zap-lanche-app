@@ -84,6 +84,7 @@ import {
   deleteRewardFromSupabase,
   markLoyaltyRedemptionUsed,
   isSupabaseConfigured,
+  supabase,
 } from '../lib/supabase';
 import { UUID_REGEX } from '../utils/qrCode';
 
@@ -250,7 +251,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     }
   }, [profile?.full_name]);
   const [storeFormBio, setStoreFormBio] = useState(currentRestaurant.bio);
-  const [storeFormNeighborhoodId, setStoreFormNeighborhoodId] = useState(currentRestaurant.neighborhoodId);
+  const [storeFormNeighborhoodId, setStoreFormNeighborhoodId] = useState(currentRestaurant.neighborhoodName || currentRestaurant.neighborhoodId || '');
+  const [sameNeighborhoodRestaurants, setSameNeighborhoodRestaurants] = useState<Array<{ id: string; name: string; neighborhood: string; address: string | null; logo_url: string | null }>>([]);
   const [storeFormAddress, setStoreFormAddress] = useState(currentRestaurant.address);
   const [storeFormWhatsapp, setStoreFormWhatsapp] = useState(currentRestaurant.whatsappDemo);
   const [storeFormOpeningHours, setStoreFormOpeningHours] = useState(currentRestaurant.openingHours || '');
@@ -364,7 +366,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setStoreFormName(currentRestaurant.name);
     setStoreFormOwner(activeOwner);
     setStoreFormBio(currentRestaurant.bio);
-    setStoreFormNeighborhoodId(currentRestaurant.neighborhoodId);
+    setStoreFormNeighborhoodId(currentRestaurant.neighborhoodName || currentRestaurant.neighborhoodId || '');
     setStoreFormAddress(currentRestaurant.address);
     setStoreFormWhatsapp(currentRestaurant.whatsappDemo);
     setStoreFormOpeningHours(currentRestaurant.openingHours || '');
@@ -560,7 +562,12 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setStoreFormError('Informe latitude e longitude válidas, ou deixe os dois campos vazios.');
       return;
     }
-    const nbObj = NEIGHBORHOODS.find((n) => n.id === storeFormNeighborhoodId) || NEIGHBORHOODS[1] || NEIGHBORHOODS[0];
+    const neighborhoodName = storeFormNeighborhoodId.trim();
+    const neighborhoodId = neighborhoodName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (!neighborhoodName) {
+      setStoreFormError('Informe o bairro do estabelecimento.');
+      return;
+    }
     const trimmedOwnerName = storeFormOwner.trim();
 
     // 1. Persistência do nome do proprietário no Supabase (public.profiles)
@@ -579,7 +586,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         description: storeFormBio.trim(),
         address: storeFormAddress.trim(),
         whatsapp: storeFormWhatsapp.trim(),
-        neighborhood: nbObj.name,
+        neighborhood: neighborhoodName,
         image_url: persistentBannerUrl,
         logo_url: persistentLogoUrl || undefined,
         opening_hours: storeFormOpeningHours.trim() || null,
@@ -601,8 +608,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       name: storeFormName.trim(),
       ownerName: trimmedOwnerName,
       bio: storeFormBio.trim(),
-      neighborhoodId: storeFormNeighborhoodId,
-      neighborhoodName: nbObj.name,
+      neighborhoodId,
+      neighborhoodName,
       address: storeFormAddress.trim(),
       whatsappDemo: storeFormWhatsapp.trim(),
       openingHours: storeFormOpeningHours.trim(),
@@ -2367,22 +2374,51 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 />
               </div>
 
-              {/* Bairro de Atuação */}
+              {/* Bairro livre: não restringe o comerciante à lista inicial */}
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">
-                  Bairro de atuação:
+                  Bairro do estabelecimento:
                 </label>
-                <select
+                <input
+                  type="text"
                   value={storeFormNeighborhoodId}
-                  onChange={(e) => setStoreFormNeighborhoodId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-orange-500 transition-colors"
-                >
-                  {NEIGHBORHOODS.filter((n) => n.id !== 'todos').map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={async (e) => {
+                    const value = e.target.value;
+                    setStoreFormNeighborhoodId(value);
+                    if (!supabase || value.trim().length < 2) {
+                      setSameNeighborhoodRestaurants([]);
+                      return;
+                    }
+                    const { data } = await supabase
+                      .from('restaurants')
+                      .select('id, name, neighborhood, address, logo_url')
+                      .eq('status', 'ativo')
+                      .ilike('neighborhood', value.trim())
+                      .neq('id', currentRestaurant.supabaseId || currentRestaurant.id)
+                      .order('name')
+                      .limit(8);
+                    setSameNeighborhoodRestaurants(data || []);
+                  }}
+                  placeholder="Digite o bairro, mesmo que ainda não esteja na lista"
+                  maxLength={80}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 transition-colors"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Você pode informar qualquer bairro. Não precisa existir previamente no ZAP Lanche.
+                </p>
+                {sameNeighborhoodRestaurants.length > 0 && (
+                  <div className="mt-2 rounded-xl border border-slate-700 bg-slate-900/80 p-3 space-y-2">
+                    <p className="text-[11px] font-semibold text-orange-300">
+                      Estabelecimentos já cadastrados neste bairro
+                    </p>
+                    {sameNeighborhoodRestaurants.map((restaurant) => (
+                      <div key={restaurant.id} className="text-xs text-slate-300">
+                        <span className="font-semibold text-white">{restaurant.name}</span>
+                        {restaurant.address ? <span className="text-slate-500"> · {restaurant.address}</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Endereço ou Referência Comercial */}
