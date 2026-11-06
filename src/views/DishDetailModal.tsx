@@ -37,17 +37,17 @@ export const DishDetailModal: React.FC<DishDetailModalProps> = ({
       window.open(whatsappUrl, '_blank');
     }
 
-    // Conectar circuito: registra pedido no histórico de pedidos do perfil do usuário
+    // Registra apenas que a solicitação foi encaminhada ao WhatsApp; o app não confirma a venda.
     try {
       const user = loadUserProfile();
       const newOrder = {
         id: `ord-${Date.now().toString().slice(-4)}`,
         restaurantId: restaurant?.id || 'rest-jorge-jpa',
         restaurantName: restaurant?.name || 'Lanchonete do Bairro',
-        date: 'Hoje, pedido via Zap',
+        date: 'Hoje · encaminhado ao WhatsApp',
         itemsSummary: `${quantity}x ${item.name}${observacoes ? ` (${observacoes})` : ''}`,
         total: total,
-        status: 'Concluído' as const,
+        status: 'Encaminhado ao WhatsApp' as const,
       };
       saveUserProfile({
         ...user,
