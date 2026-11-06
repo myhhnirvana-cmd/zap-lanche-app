@@ -16,7 +16,6 @@ import {
   Gift,
   ShieldCheck,
   MapPin,
-  Calendar,
   X,
   CheckCircle2,
   Info,
@@ -33,26 +32,15 @@ import {
 } from 'lucide-react';
 import {
   Restaurant,
-  MerchantDemoStats,
   MenuItem,
-  HighlightStatus,
-  RegionalHighlight,
   LoyaltyReward,
   Promotion,
   RewardStatus,
 } from '../types';
 import {
-  MOCK_MERCHANT_STATS,
-  MOCK_MENU_ITEMS,
   MOCK_RESTAURANTS,
-  MOCK_LOYALTY_REWARDS,
-  NEIGHBORHOODS,
   CATEGORIES,
   ANTI_FRAUD_RULES,
-  loadMerchantStats,
-  saveMerchantStats,
-  loadRegionalHighlights,
-  saveRegionalHighlights,
   loadRestaurants,
   saveRestaurants,
   updateSingleRestaurant,
@@ -119,10 +107,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
   const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(initialStoreId);
 
-  const [stats, setStats] = useState<MerchantDemoStats>(() => loadMerchantStats(selectedRestaurantId));
-
   const currentRestaurant =
-    allRestaurants.find((r) => r.id === selectedRestaurantId) || allRestaurants[0];
+    allRestaurants.find((r) => r.id === selectedRestaurantId) || allRestaurants[0] || MOCK_RESTAURANTS[0];
 
   const [isOpenToday, setIsOpenToday] = useState(currentRestaurant.isOpen ?? false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() =>
@@ -153,23 +139,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setToastMessage({ type, text });
     setTimeout(() => setToastMessage(null), 4000);
   };
-
-  // Orçamento Promocional de Fidelidade (3.000 pontos)
-  const [promotionalBudget] = useState(3000);
-  const [pointsDistributed, setPointsDistributed] = useState(
-    stats.promotionalPointsDistributed
-  );
-  const [distributionFeedback, setDistributionFeedback] = useState<string | null>(null);
-
-  // Destaque Regional (5 Estados) sincronizado
-  const existingHighlights = loadRegionalHighlights();
-  const activeHl = existingHighlights.find((h) => h.restaurantId === selectedRestaurantId);
-  const [currentHighlightStatus, setCurrentHighlightStatus] = useState<HighlightStatus>(
-    (activeHl?.status || stats.highlightStatus) as HighlightStatus
-  );
-  const [highlightHistory, setHighlightHistory] = useState(stats.highlightHistory);
-  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
-  const [selectedNeighborhood, setSelectedNeighborhood] = useState('freguesia');
 
   // Quando o lojista troca de restaurante no seletor de testes
   const handleSelectStore = async (storeId: string) => {
@@ -211,13 +180,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setPromotions(dbPromotions ?? []);
     }
 
-    const storeStats = loadMerchantStats(storeId);
-    setStats(storeStats);
-    setPointsDistributed(storeStats.promotionalPointsDistributed);
-
-    const storeHl = existingHighlights.find((h) => h.restaurantId === storeId);
-    setCurrentHighlightStatus((storeHl?.status || storeStats.highlightStatus) as HighlightStatus);
-    setHighlightHistory(storeStats.highlightHistory);
   };
 
   // Carrega dados persistentes também para o painel administrativo e na primeira abertura.
@@ -231,8 +193,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       handleSelectStore(merchantRestaurant.id);
     }
   }, [isRealMerchant, merchantRestaurant?.id]);
-
-  const [selectedDuration, setSelectedDuration] = useState('2 Horas (Exemplo: R$ 10)');
 
   // -------------------------------------------------------------
   // ESTADOS DO MODAL: EDITAR MINHA LOJA
@@ -347,8 +307,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     }
   };
 
-  const remainingBudget = Math.max(0, promotionalBudget - pointsDistributed);
-  const budgetUsagePercent = Math.min(100, Math.round((pointsDistributed / promotionalBudget) * 100));
 
   // Abertura do Modal de Edição da Loja
   const handleOpenEditStore = () => {
@@ -612,15 +570,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     } catch {
       // Ignora erro eventual de refresh
     }
-
-    const updatedStats: MerchantDemoStats = {
-      ...stats,
-      restaurantName: updatedRestaurant.name,
-      ownerName: trimmedOwnerName,
-      neighborhood: updatedRestaurant.neighborhoodName,
-    };
-    setStats(updatedStats);
-    saveMerchantStats(updatedStats);
 
     setIsEditStoreModalOpen(false);
     showToast(`Loja "${updatedRestaurant.name}" e responsável salvos com sucesso!`);
@@ -1167,82 +1116,17 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setDeletingReward(null);
   };
 
-  // Solicitação de Destaque Regional no Bairro
-  const handleRequestHighlight = (e: React.FormEvent) => {
-    e.preventDefault();
-    const nbObj = NEIGHBORHOODS.find((n) => n.id === selectedNeighborhood) || NEIGHBORHOODS[1] || NEIGHBORHOODS[0];
-
-    setCurrentHighlightStatus('solicitado');
-    const newEntry = {
-      id: `hh-${Date.now()}`,
-      neighborhoodName: nbObj.name,
-      duration: selectedDuration,
-      status: 'solicitado' as HighlightStatus,
-      date: 'Hoje, acabou de solicitar',
-    };
-
-    setHighlightHistory((prev) => [newEntry, ...prev]);
-
-    // Salvar destaque na lista global para que apareça imediatamente no Painel Admin
-    const currentList = loadRegionalHighlights();
-    const newRegionalHighlight: RegionalHighlight = {
-      id: `hl-req-${Date.now()}`,
-      restaurantId: selectedRestaurantId,
-      restaurantName: currentRestaurant.name,
-      neighborhoodId: nbObj.id,
-      neighborhoodName: nbObj.name,
-      requestedDuration: selectedDuration,
-      status: 'solicitado',
-      requestedAt: 'Agora mesmo',
-      isSponsored: true,
-      estimatedPriceExample: 'R$ 10 (Gratuito no Lançamento)',
-      launchPhaseFree: true,
-    };
-    saveRegionalHighlights([newRegionalHighlight, ...currentList]);
-
-    setIsRequestModalOpen(false);
-    showToast('Solicitação de destaque enviada para moderação administrativa!');
-  };
-
-  const getStatusBadge = (status: HighlightStatus | string) => {
-    switch (status) {
-      case 'solicitado':
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            Solicitado (Moderação)
-          </span>
-        );
-      case 'aprovado':
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" />
-            Aprovado pela Equipe
-          </span>
-        );
-      case 'agendado':
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            Agendado
-          </span>
-        );
-      case 'ativo':
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-emerald-400" />
-            Ativo no Topo (Patrocinado)
-          </span>
-        );
-      case 'encerrado':
-      default:
-        return (
-          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
-            Encerrado
-          </span>
-        );
-    }
-  };
+  if (!isAdmin && !isRealMerchant) {
+    return (
+      <div className="max-w-xl mx-auto mt-10 rounded-2xl border border-amber-500/30 bg-[#13151f] p-6 text-center space-y-3">
+        <Store className="w-8 h-8 text-amber-400 mx-auto" />
+        <h2 className="text-lg font-bold text-white">Sua loja ainda não está vinculada</h2>
+        <p className="text-sm text-slate-300">
+          Para acessar o painel comercial, a administração precisa concluir a vinculação da sua conta ao estabelecimento. Nenhum dado de demonstração será exibido nesta conta.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-16 animate-fade-in">
@@ -1285,7 +1169,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             </div>
           </div>
         </div>
-      ) : (
+      ) : isAdmin ? (
         <div className="p-4 rounded-3xl bg-slate-900/95 border border-amber-500/30 space-y-2.5 text-xs shadow-lg">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 text-slate-200">
@@ -1325,16 +1209,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             </div>
           </div>
 
-          {!isAdmin && (
-            <div className="p-3 rounded-2xl bg-black/40 border border-slate-800 text-[11px] text-slate-400 leading-relaxed flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <span>
-                <strong className="text-slate-300">Modo Demonstrativo:</strong> Em produção, o comerciante possui acesso restrito estritamente ao identificador da sua própria loja.
-              </span>
-            </div>
-          )}
         </div>
-      )}
+      ) : null}
 
       {/* Merchant Header Card com Banner & Botão "Editar Minha Loja" */}
       <div className="rounded-3xl bg-[#131520] border border-slate-800 shadow-xl overflow-hidden">
@@ -1380,7 +1256,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Responsável: <strong className="text-slate-300">{currentRestaurant.ownerName || stats.ownerName || 'Responsável não informado'}</strong> · Bairro {currentRestaurant.neighborhoodName}
+                Responsável: <strong className="text-slate-300">{currentRestaurant.ownerName || 'Responsável não informado'}</strong> · Bairro {currentRestaurant.neighborhoodName}
               </p>
               <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
                 <Phone className="w-3 h-3 text-emerald-400" />
@@ -1395,9 +1271,9 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           {/* Chapa Open/Closed switch */}
           <div className="flex items-center gap-3 p-2 rounded-2xl bg-slate-900 border border-slate-800 self-stretch sm:self-auto justify-between">
             <div className="text-left text-xs">
-              <span className="text-[10px] text-slate-400 block">Status do Balcão</span>
+              <span className="text-[10px] text-slate-400 block">Status da Loja</span>
               <span className={`font-bold ${isOpenToday ? 'text-emerald-400' : 'text-slate-400'}`}>
-                {isOpenToday ? 'Recebendo Pedidos' : 'Balcão Fechado'}
+                {isOpenToday ? 'Loja Aberta' : 'Loja Fechada'}
               </span>
             </div>
 
@@ -1425,75 +1301,30 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               }`}
             >
               <Power className="w-3.5 h-3.5" />
-              {isUpdatingOpenStatus ? 'Salvando...' : isOpenToday ? 'Aberto' : 'Pausar'}
+              {isUpdatingOpenStatus ? 'Salvando...' : isOpenToday ? 'Fechar loja' : 'Abrir loja'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Analytics KPI strip com transparência */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs px-1">
-          <span className="text-slate-400 font-semibold">Desempenho Comercial</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-            Estimativas Demonstrativas
+      {/* Indicadores reais ainda não disponíveis */}
+      <section className="rounded-2xl bg-[#13151f] border border-slate-800 p-4 space-y-2" aria-labelledby="merchant-metrics-title">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-amber-400 shrink-0" />
+          <h3 id="merchant-metrics-title" className="text-sm font-bold text-white">
+            Indicadores de desempenho
+          </h3>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+            Ainda não disponíveis
           </span>
         </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>Visitas no Cardápio</span>
-              <Eye className="w-4 h-4 text-orange-400" />
-            </div>
-            <span className="text-xl font-extrabold text-white tabular-nums">
-              {stats.viewsThisWeek}
-            </span>
-            <span className="text-[10px] text-emerald-400 block mt-0.5">
-              +18% nesta semana
-            </span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>Cliques p/ WhatsApp</span>
-              <MessageCircle className="w-4 h-4 text-emerald-400" />
-            </div>
-            <span className="text-xl font-extrabold text-emerald-400 tabular-nums">
-              {stats.zapClicksThisWeek}
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">
-              Pedidos direcionados
-            </span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>Interações no Feed</span>
-              <Flame className="w-4 h-4 text-amber-400" />
-            </div>
-            <span className="text-xl font-extrabold text-amber-400 tabular-nums">
-              {stats.feedInteractions}
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">
-              Curtidas e comentários
-            </span>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
-            <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
-              <span>Prato Campeão</span>
-              <Sparkles className="w-4 h-4 text-yellow-400" />
-            </div>
-            <span className="text-sm font-bold text-white truncate block">
-              {menuItems[0]?.name || stats.topDishName}
-            </span>
-            <span className="text-[10px] text-orange-400 font-semibold block mt-0.5">
-              {stats.topDishOrders} pedidos no mês
-            </span>
-          </div>
-        </div>
-      </div>
+        <p className="text-xs text-slate-300 leading-relaxed">
+          O ZapLanche ainda não mede visitas ao cardápio, alcance de público, cliques no WhatsApp ou faturamento nesta área. Por isso, não exibimos estimativas como resultados reais.
+        </p>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Os pedidos são encaminhados diretamente ao WhatsApp da loja. Atualmente, o aplicativo não mantém uma fila de pedidos nem permite ao comerciante acompanhar status ou vendas por aqui.
+        </p>
+      </section>
 
       {/* Guia do Comerciante */}
       <GuideSection
@@ -2051,166 +1882,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         )}
       </div>
 
-      {/* Orçamento Promocional de Fidelidade (3.000 pontos) */}
-      <div className="rounded-3xl bg-[#13151f] border border-amber-500/30 p-5 space-y-4 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-xl bg-amber-500/20 text-amber-400">
-                <Gift className="w-5 h-5" />
-              </span>
-              <h3 className="text-sm sm:text-base font-bold text-white font-display">
-                Orçamento Promocional de Fidelidade — {currentRestaurant.name}
-              </h3>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Pacote demonstrativo de <strong>3.000 pontos</strong> concedido para você fidelizar clientes locais
-            </p>
-          </div>
-
-          <span className="text-xs px-2.5 py-1 rounded-xl bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30 self-start sm:self-auto shrink-0">
-            Fase de Lançamento Gratuito
-          </span>
-        </div>
-
-        {/* Diferenciação dos 4 Níveis de Valores (Exigência de Arquitetura) */}
-        <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs space-y-2 text-slate-300">
-          <div className="flex items-center gap-2 font-bold text-amber-300">
-            <ShieldCheck className="w-4 h-4 text-amber-400" />
-            Diferenciação Clara dos 4 Níveis de Pontuação & Estoque:
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-400 pt-1">
-            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800/80">
-              <strong className="text-amber-300 block">1. Orçamento da Loja:</strong>
-              Saldo que a lanchonete possui para distribuir em campanhas e atrair clientes.
-            </div>
-            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800/80">
-              <strong className="text-emerald-300 block">2. Saldo do Cliente:</strong>
-              Pontos acumulados na carteira pessoal do morador (por check-in e avaliações).
-            </div>
-            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800/80">
-              <strong className="text-orange-300 block">3. Custo do Prêmio:</strong>
-              Quantidade de pontos necessária para resgatar uma cortesia cadastrada.
-            </div>
-            <div className="p-2 rounded-xl bg-slate-950 border border-slate-800/80">
-              <strong className="text-blue-300 block">4. Estoque Físico:</strong>
-              Quantidade real de unidades disponíveis para entrega no balcão da loja.
-            </div>
-          </div>
-        </div>
-
-        {/* Budget Progress Breakdown */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-              Pacote Concedido
-            </span>
-            <span className="text-xl font-extrabold text-white tabular-nums">
-              {promotionalBudget.toLocaleString('pt-BR')} pts
-            </span>
-            <span className="text-[10px] text-emerald-400 block mt-0.5">
-              100% gratuito (Demonstração)
-            </span>
-          </div>
-
-          <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-              Distribuído aos Clientes
-            </span>
-            <span className="text-xl font-extrabold text-orange-400 tabular-nums">
-              {pointsDistributed.toLocaleString('pt-BR')} pts
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">
-              {budgetUsagePercent}% do orçamento consumido
-            </span>
-          </div>
-
-          <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-              Saldo Restante no Caixa
-            </span>
-            <span className="text-xl font-extrabold text-amber-300 tabular-nums">
-              {remainingBudget.toLocaleString('pt-BR')} pts
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">
-              Disponível para novas ações
-            </span>
-          </div>
-        </div>
-
-        {/* Visual Progress Bar */}
-        <div className="space-y-1">
-          <div className="flex justify-between text-[11px] text-slate-400">
-            <span>Consumo do Orçamento</span>
-            <span className="font-semibold text-amber-300">{remainingBudget} pts disponíveis</span>
-          </div>
-          <div className="h-2 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-            <div
-              className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
-              style={{ width: `${budgetUsagePercent}%` }}
-            />
-          </div>
-        </div>
-
-
-      </div>
-
-      {/* Destaque Regional por Bairro (5 Estados) */}
-      <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-xl bg-orange-500/20 text-orange-400">
-                <Sparkles className="w-5 h-5" />
-              </span>
-              <h3 className="text-sm sm:text-base font-bold text-white font-display">
-                Destaque Regional no Bairro (Topo Patrocinado)
-              </h3>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Coloque sua lanchonete em primeiro lugar na listagem de bairros parceiros
-            </p>
-          </div>
-
-          <button
-            onClick={() => setIsRequestModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-orange-500/20 self-start sm:self-auto shrink-0"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            Solicitar Destaque
-          </button>
-        </div>
-
-        {/* Current Highlight State Banner */}
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="space-y-1">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-              Status Atual na {currentRestaurant.neighborhoodName}
-            </span>
-            <div className="flex items-center gap-2">
-              {getStatusBadge(currentHighlightStatus)}
-              <span className="text-xs text-slate-300">
-                {currentHighlightStatus === 'ativo' && 'Exibido com selo Patrocinado no topo'}
-                {currentHighlightStatus === 'solicitado' && 'Aguardando aprovação da administração'}
-                {currentHighlightStatus === 'aprovado' && 'Aprovado, entrará no ar em instantes'}
-                {currentHighlightStatus === 'agendado' && 'Programado para o próximo horário de pico'}
-                {currentHighlightStatus === 'encerrado' && 'Período finalizado'}
-              </span>
-            </div>
-          </div>
-
-          <div className="text-right text-xs">
-            <span className="text-[10px] text-slate-400 block">Exemplo Futuro</span>
-            <span className="font-bold text-amber-400">R$ 10 por 2h (Configurável)</span>
-            <span className="text-[10px] text-emerald-400 block mt-0.5">
-              Gratuito no Lançamento
-            </span>
-          </div>
-        </div>
-      </div>
-
-
-
       {/* ============================================================ */}
       {/* MODAL: EDITAR MINHA LOJA                                      */}
       {/* ============================================================ */}
@@ -2761,101 +2432,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           </div>
         </div>
       )}
-
-      {/* Modal: Solicitar Destaque Regional */}
-      {isRequestModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-md bg-[#13151f] border border-orange-500/40 rounded-2xl p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-orange-400" />
-                <h4 className="font-bold text-base text-white">
-                  Solicitar Destaque Regional no Bairro
-                </h4>
-              </div>
-              <button
-                onClick={() => setIsRequestModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleRequestHighlight} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">
-                  Bairro do Destaque:
-                </label>
-                <select
-                  value={selectedNeighborhood}
-                  onChange={(e) => setSelectedNeighborhood(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-orange-500"
-                >
-                  {NEIGHBORHOODS.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.name} ({n.zone} - {n.city})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">
-                  Duração Desejada & Exemplo de Preço Futuro:
-                </label>
-                <select
-                  value={selectedDuration}
-                  onChange={(e) => setSelectedDuration(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-orange-500"
-                >
-                  <option value="2 Horas (Exemplo: R$ 10)">
-                    2 Horas — Exemplo Futuro: R$ 10 (Gratuito no Lançamento)
-                  </option>
-                  <option value="4 Horas (Exemplo: R$ 18)">
-                    4 Horas — Exemplo Futuro: R$ 18 (Gratuito no Lançamento)
-                  </option>
-                  <option value="12 Horas (Exemplo: R$ 35)">
-                    12 Horas — Exemplo Futuro: R$ 35 (Gratuito no Lançamento)
-                  </option>
-                  <option value="24 Horas (Exemplo: R$ 60)">
-                    24 Horas — Exemplo Futuro: R$ 60 (Gratuito no Lançamento)
-                  </option>
-                </select>
-              </div>
-
-              {/* Free Launch Transparency Notice */}
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 space-y-1">
-                <span className="font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Custo Nesta Fase: R$ 0,00 (Gratuito)
-                </span>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  Durante a fase de lançamento comunitário, todos os destaques são 100% gratuitos para incentivar o comércio local. O valor em reais acima é apenas um exemplo configurável no painel administrativo para sustentabilidade futura.
-                </p>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRequestModalOpen(false)}
-                  className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-md shadow-orange-600/20"
-                >
-                  Enviar Solicitação Demo
-                </button>
-              </div>
-            </form>
-
-          </div>
-        </div>
-      )}
-      
-
 
       {/* ============================================================ */}
       {/* MODAL: CRIAR OU EDITAR PRÊMIO DE FIDELIDADE                  */}

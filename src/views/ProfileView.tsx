@@ -615,6 +615,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <p className="text-xs text-slate-400 leading-relaxed">
           Os pontos locais pertencem exclusivamente a cada restaurante onde foram conquistados (check-ins de +5 pontos com intervalo de 2 horas). Para resgatar uma recompensa, você precisa de no mínimo 70% do custo em pontos da loja escolhida. Pontos de uma loja não podem ser usados em outra.
         </p>
+        <div className="flex items-start gap-2 rounded-xl bg-orange-500/10 border border-orange-500/20 p-3">
+          <Info className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Aqui no seu perfil você acompanha um resumo dos pontos de cada estabelecimento. Para conferir as regras, consultar o programa e usar seus pontos em prêmios, abra a loja desejada e entre na aba <strong className="text-orange-300">Clube Fidelidade</strong>. Os pontos locais só valem na loja onde foram conquistados.
+          </p>
+        </div>
 
         {loadingRealPoints ? (
           <p className="text-xs text-slate-500 text-center py-4">Calculando saldos por loja...</p>

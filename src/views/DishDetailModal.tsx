@@ -24,7 +24,7 @@ export const DishDetailModal: React.FC<DishDetailModalProps> = ({
 
   const handleSimulateZap = () => {
     // Generate formatted WhatsApp message text
-    const message = `🍔 Olá ${restaurant?.name || 'ZAP LANCHE'}! Vi no Zap Lanche e gostaria de pedir:\n- ${quantity}x ${item.name} (R$ ${total.toFixed(2).replace('.', ',')})\n${observacoes ? `Obs: ${observacoes}\n` : ''}Bairro: ${restaurant?.neighborhoodName || 'Meu Bairro'}\n(Modo Demonstração - Fase 1)`;
+    const message = `🍔 Olá ${restaurant?.name || 'ZAP LANCHE'}! Vi no Zap Lanche e gostaria de pedir:\n- ${quantity}x ${item.name} (R$ ${total.toFixed(2).replace('.', ',')})\n${observacoes ? `Obs: ${observacoes}\n` : ''}Bairro: ${restaurant?.neighborhoodName || 'Meu Bairro'}\nEnviado pelo ZapLanche`;
     
     // Copy simulated message safely
     navigator.clipboard?.writeText(message);
@@ -37,17 +37,17 @@ export const DishDetailModal: React.FC<DishDetailModalProps> = ({
       window.open(whatsappUrl, '_blank');
     }
 
-    // Conectar circuito: registra pedido no histórico de pedidos do perfil do usuário
+    // Registra apenas que a solicitação foi encaminhada ao WhatsApp; o app não confirma a venda.
     try {
       const user = loadUserProfile();
       const newOrder = {
         id: `ord-${Date.now().toString().slice(-4)}`,
         restaurantId: restaurant?.id || 'rest-jorge-jpa',
         restaurantName: restaurant?.name || 'Lanchonete do Bairro',
-        date: 'Hoje, pedido via Zap',
+        date: 'Hoje · mensagem preparada para WhatsApp',
         itemsSummary: `${quantity}x ${item.name}${observacoes ? ` (${observacoes})` : ''}`,
         total: total,
-        status: 'Concluído' as const,
+        status: 'Mensagem preparada para WhatsApp' as const,
       };
       saveUserProfile({
         ...user,
