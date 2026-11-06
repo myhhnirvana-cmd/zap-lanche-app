@@ -155,11 +155,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   };
 
   // Orçamento Promocional de Fidelidade (3.000 pontos)
-  const [promotionalBudget] = useState(3000);
-  const [pointsDistributed, setPointsDistributed] = useState(
-    stats.promotionalPointsDistributed
-  );
-  const [distributionFeedback, setDistributionFeedback] = useState<string | null>(null);
 
   // Destaque Regional (5 Estados) sincronizado
   const existingHighlights = loadRegionalHighlights();
@@ -213,7 +208,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
     const storeStats = loadMerchantStats(storeId);
     setStats(storeStats);
-    setPointsDistributed(storeStats.promotionalPointsDistributed);
 
     const storeHl = existingHighlights.find((h) => h.restaurantId === storeId);
     setCurrentHighlightStatus((storeHl?.status || storeStats.highlightStatus) as HighlightStatus);
@@ -347,8 +341,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     }
   };
 
-  const remainingBudget = Math.max(0, promotionalBudget - pointsDistributed);
-  const budgetUsagePercent = Math.min(100, Math.round((pointsDistributed / promotionalBudget) * 100));
 
   // Abertura do Modal de Edição da Loja
   const handleOpenEditStore = () => {
@@ -2054,62 +2046,13 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           </div>
         </div>
 
-        {/* Budget Progress Breakdown */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-              Pacote Concedido
-            </span>
-            <span className="text-xl font-extrabold text-white tabular-nums">
-              {promotionalBudget.toLocaleString('pt-BR')} pts
-            </span>
-            <span className="text-[10px] text-emerald-400 block mt-0.5">
-              100% gratuito (Demonstração)
-            </span>
-          </div>
-
-          <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-              Distribuído aos Clientes
-            </span>
-            <span className="text-xl font-extrabold text-orange-400 tabular-nums">
-              {pointsDistributed.toLocaleString('pt-BR')} pts
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">
-              {budgetUsagePercent}% do orçamento consumido
-            </span>
-          </div>
-
-          <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
-              Saldo Restante no Caixa
-            </span>
-            <span className="text-xl font-extrabold text-amber-300 tabular-nums">
-              {remainingBudget.toLocaleString('pt-BR')} pts
-            </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">
-              Disponível para novas ações
-            </span>
-          </div>
-        </div>
-
-        {/* Visual Progress Bar */}
-        <div className="space-y-1">
-          <div className="flex justify-between text-[11px] text-slate-400">
-            <span>Consumo do Orçamento</span>
-            <span className="font-semibold text-amber-300">{remainingBudget} pts disponíveis</span>
-          </div>
-          <div className="h-2 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-            <div
-              className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
-              style={{ width: `${budgetUsagePercent}%` }}
-            />
-          </div>
-        </div>
-
+        <p className="rounded-xl bg-slate-900 border border-slate-800 p-3 text-xs text-slate-400 leading-relaxed">
+          Os pontos locais são concedidos automaticamente conforme as regras de check-in e avaliação. O painel não possui pacote promocional de 3.000 pontos nem saldo de pontos para distribuição pela loja.
+        </p>
 
       </div>
 
+      {!isRealMerchant && (
       {/* Destaque Regional por Bairro (5 Estados) */}
       <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -2165,6 +2108,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       </div>
 
 
+
+      )}
 
       {/* ============================================================ */}
       {/* MODAL: EDITAR MINHA LOJA                                      */}
@@ -2718,7 +2663,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       )}
 
       {/* Modal: Solicitar Destaque Regional */}
-      {isRequestModalOpen && (
+      {!isRealMerchant && isRequestModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-md bg-[#13151f] border border-orange-500/40 rounded-2xl p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
