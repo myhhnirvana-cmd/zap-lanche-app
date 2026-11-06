@@ -36,7 +36,6 @@ import {
   fetchPostLikesFromSupabase,
   togglePostLikeInSupabase,
   fetchRewardsFromSupabase,
-  isSupabaseConfigured,
 } from '../lib/supabase';
 import { MOCK_POSTS, processAndCompressImage, savePostsFromStorage, loadPostsFromStorage, savePostsToStorage, isRestaurantInNeighborhood } from '../data/mockData';
 
