@@ -59,7 +59,7 @@ interface AdminViewProps {
 export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onRestaurantAdded }) => {
   const { session, user } = useAuth();
   const [stats, setStats] = useState<AdminDemoStats>(MOCK_ADMIN_STATS);
-  const [pendingDeletion, setPendingDeletion] = useState<{ type: 'highlight' | 'notice' | 'audit'; id: string; title: string } | null>(null);
+  const [pendingDeletion, setPendingDeletion] = useState<{ type: 'highlight' | 'notice' | 'audit'; id: string; title: string } | null>(null);\n  const [pendingRestaurantDeletion, setPendingRestaurantDeletion] = useState<{ id: string; name: string } | null>(null);\n  const [restaurantManagementError, setRestaurantManagementError] = useState<string | null>(null);\n  const [isDeletingRestaurant, setIsDeletingRestaurant] = useState(false);
   const [approvedList, setApprovedList] = useState<Record<string, 'approved' | 'rejected'>>({});
 
   // Parâmetros configuráveis do programa
@@ -109,7 +109,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
 
   // Lista de lanchonetes com seus UUIDs reais do Supabase
   const [availableRestaurants, setAvailableRestaurants] = useState<
-    Array<{ id: string; name: string; neighborhood?: string; owner_profile_id?: string | null }>
+    Array<{ id: string; name: string; neighborhood?: string; owner_profile_id?: string | null; status: string }>
   >([]);
 
   const loadAvailableRestaurants = async () => {
@@ -147,7 +147,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
     loadAvailableRestaurants();
   }, []);
 
-  const handleRegisterRestaurant = async () => {
+  const handleArchiveRestaurant = async () => {\n    if (!pendingRestaurantDeletion || !supabase) return;\n    setIsDeletingRestaurant(true);\n    setRestaurantManagementError(null);\n    const { data, error: archiveError } = await supabase\n      .from('restaurants')\n      .update({ status: 'inativo' })\n      .eq('id', pendingRestaurantDeletion.id)\n      .eq('status', 'ativo')\n      .select('id')\n      .maybeSingle();\n    setIsDeletingRestaurant(false);\n    if (archiveError || !data) {\n      setRestaurantManagementError(archiveError?.message || 'A loja não foi removida. Verifique sua permissão de administrador.');\n      return;\n    }\n    setPendingRestaurantDeletion(null);\n    await loadAvailableRestaurants();\n    if (onRestaurantAdded) onRestaurantAdded();\n  };\n\n  const handleRegisterRestaurant = async () => {
     if (!newRestName.trim() || !newRestNeighborhood.trim()) {
       setError('Nome e Bairro são obrigatórios.');
       return;
@@ -511,6 +511,47 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
           </button>
         </div>
       </div>
+
+      {/* Gerenciamento de estabelecimentos */}
+      <section className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-orange-400" />
+          <div>
+            <h3 className="text-sm font-bold text-white">Gerenciar lojas cadastradas</h3>
+            <p className="text-xs text-slate-400">Remova estabelecimentos do aplicativo sem apagar o histórico de clientes, pontos, avaliações e publicações.</p>
+          </div>
+        </div>
+        {availableRestaurants.length === 0 ? (
+          <p className="text-xs text-slate-400">Nenhuma loja encontrada neste ambiente.</p>
+        ) : (
+          <div className="space-y-2">
+            {availableRestaurants.map((restaurant) => (
+              <div key={restaurant.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{restaurant.name}</p>
+                  <p className="text-[11px] text-slate-400">{restaurant.neighborhood || 'Bairro não informado'} · {restaurant.owner_profile_id ? 'Com responsável vinculado' : 'Sem responsável vinculado'}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${restaurant.status === 'ativo' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}>
+                    {restaurant.status === 'ativo' ? 'Ativa' : 'Removida'}
+                  </span>
+                  {restaurant.status === 'ativo' && (
+                    <button
+                      type="button"
+                      onClick={() => setPendingRestaurantDeletion({ id: restaurant.id, name: restaurant.name })}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Excluir loja
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {restaurantManagementError && <p role="alert" className="text-xs text-rose-300">{restaurantManagementError}</p>}
+      </section>
 
       {/* Formulário de Convite de Comerciante */}
       {showInviteForm && (
@@ -1270,6 +1311,27 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
           ))}
         </div>
       </div>
+
+      {pendingRestaurantDeletion && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4" role="presentation" onClick={() => !isDeletingRestaurant && setPendingRestaurantDeletion(null)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="archive-restaurant-title" className="w-full max-w-md rounded-2xl border border-rose-500/30 bg-slate-900 p-5 shadow-2xl space-y-4" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <span className="rounded-xl bg-rose-500/15 p-2 text-rose-300"><Trash2 className="h-5 w-5" /></span>
+              <h3 id="archive-restaurant-title" className="text-base font-bold text-white">Excluir loja do aplicativo?</h3>
+            </div>
+            <p className="text-sm text-slate-300">A loja <strong className="text-white">{pendingRestaurantDeletion.name}</strong> deixará de aparecer para o público e não poderá ser gerenciada como estabelecimento ativo.</p>
+            <p className="text-xs text-amber-300">Os dados históricos, avaliações, publicações e registros de pontos serão preservados. Esta ação apenas desativa a loja, não apaga definitivamente os dados.</p>
+            {restaurantManagementError && <p role="alert" className="text-xs text-rose-300">{restaurantManagementError}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" disabled={isDeletingRestaurant} onClick={() => setPendingRestaurantDeletion(null)} className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700 disabled:opacity-50">Cancelar</button>
+              <button type="button" disabled={isDeletingRestaurant} onClick={handleArchiveRestaurant} className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-50">
+                {isDeletingRestaurant && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isDeletingRestaurant ? 'Removendo...' : 'Confirmar exclusão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingDeletion && (
         <div
