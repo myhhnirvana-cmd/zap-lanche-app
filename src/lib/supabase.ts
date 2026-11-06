@@ -2082,8 +2082,12 @@ export async function fetchRestaurantReviewSummary(restaurantId: string, profile
   };
 }
 
-export async function insertRestaurantReview(input: { restaurantId: string; profileId: string; rating: number; comment?: string }): Promise<{ success: boolean; error?: string }> {
+export async function insertRestaurantReview(input: { restaurantId: string; profileId: string; rating: number; comment?: string }): Promise<{ success: boolean; pointsAwarded?: number; error?: string }> {
   if (!isSupabaseConfigured || !supabase) return { success: false, error: 'Conexão indisponível.' };
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || authData.user?.id !== input.profileId) {
+    return { success: false, error: 'Sua sessão expirou. Entre novamente para avaliar.' };
+  }
   const restaurantUuid = await resolveRestaurantUuid(input.restaurantId);
   if (!restaurantUuid) return { success: false, error: 'Loja não identificada no sistema.' };
   const { error } = await supabase.from('restaurant_reviews').insert({
@@ -2097,7 +2101,18 @@ export async function insertRestaurantReview(input: { restaurantId: string; prof
     console.error('Falha ao registrar avaliação:', error.message);
     return { success: false, error: 'Não foi possível salvar sua avaliação agora.' };
   }
-  return { success: true };
+  // The database trigger awards points atomically only when a valid check-in
+  // exists in the two-hour review window. Query the ledger to report the result.
+  const { data: reward } = await supabase
+    .from('loyalty_transactions')
+    .select('points')
+    .eq('profile_id', input.profileId)
+    .eq('restaurant_id', restaurantUuid)
+    .eq('transaction_type', 'avaliacao')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return { success: true, pointsAwarded: reward?.points === 5 ? 5 : 0 };
 }
 
 
