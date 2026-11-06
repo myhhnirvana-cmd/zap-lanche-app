@@ -17,8 +17,9 @@ import {
   AlertCircle,
   AlertTriangle,
   RotateCcw,
+  Gift,
 } from 'lucide-react';
-import { SocialPost, Restaurant, PostComment } from '../types';
+import { SocialPost, Restaurant, PostComment, Neighborhood, LoyaltyReward } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { getAvatarUrl, DEFAULT_AVATAR_URL } from '../data/avatars';
 import {
@@ -34,12 +35,15 @@ import {
   deletePostInSupabase,
   fetchPostLikesFromSupabase,
   togglePostLikeInSupabase,
+  fetchRewardsFromSupabase,
+  isSupabaseConfigured,
 } from '../lib/supabase';
-import { MOCK_POSTS, processAndCompressImage, savePostsFromStorage, loadPostsFromStorage, savePostsToStorage } from '../data/mockData';
+import { MOCK_POSTS, processAndCompressImage, savePostsFromStorage, loadPostsFromStorage, savePostsToStorage, isRestaurantInNeighborhood } from '../data/mockData';
 
 interface FeedViewProps {
   restaurants: Restaurant[];
-  onSelectRestaurantById: (id: string) => void;
+  currentNeighborhood: Neighborhood;
+  onSelectRestaurantById: (id: string, initialTab?: 'premios') => void;
   onOpenDishPreview: (dishName: string, restaurantName: string) => void;
 }
 
@@ -50,6 +54,7 @@ interface FeedViewProps {
 
 export const FeedView: React.FC<FeedViewProps> = ({
   restaurants,
+  currentNeighborhood,
   onSelectRestaurantById,
   onOpenDishPreview,
 }) => {
@@ -59,6 +64,7 @@ export const FeedView: React.FC<FeedViewProps> = ({
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dailyRewards, setDailyRewards] = useState<LoyaltyReward[]>([]);
 
 
   // Identificação do usuário autenticado a partir do Supabase Auth e public.profiles
@@ -259,6 +265,26 @@ export const FeedView: React.FC<FeedViewProps> = ({
     syncSupabaseFeed();
     return () => { isMounted = false; };
   }, [user?.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadDailyRewards = async () => {
+      if (!isSupabaseConfigured) {
+        setDailyRewards([]);
+        return;
+      }
+      const rewards = await fetchRewardsFromSupabase();
+      if (!isMounted) return;
+      setDailyRewards((rewards || []).filter((reward) =>
+        reward.isDailyFeatured === true &&
+        reward.isAvailable &&
+        reward.status === 'ativo' &&
+        reward.stock > 0
+      ));
+    };
+    void loadDailyRewards();
+    return () => { isMounted = false; };
+  }, []);
 
   // Identificação do proprietário usando o ID real da sessão autenticada (auth.users.id)
   const isCommentOwner = (comment: PostComment): boolean => {
@@ -764,6 +790,18 @@ export const FeedView: React.FC<FeedViewProps> = ({
     }
   };
 
+  const dailyFeaturedCards = dailyRewards.flatMap((reward) => {
+    const restaurant = restaurants.find((item) =>
+      (item.supabaseId || item.id) === reward.restaurantId
+    );
+    if (!restaurant || !isRestaurantInNeighborhood(
+      restaurant,
+      currentNeighborhood.id,
+      currentNeighborhood.name
+    )) return [];
+    return [{ reward, restaurant }];
+  });
+
   const filteredPosts = posts.filter((p) => {
     if (filterRole === 'todos') return true;
     return p.authorRole === filterRole;
@@ -794,6 +832,63 @@ export const FeedView: React.FC<FeedViewProps> = ({
           <span>Postar Lanche</span>
         </button>
       </div>
+
+      {dailyFeaturedCards.length > 0 && (
+        <section className="rounded-3xl border border-amber-400/30 bg-gradient-to-br from-[#211b12] via-[#171821] to-[#12141e] p-4 sm:p-5 space-y-3 shadow-xl">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-300" />
+                <h3 className="text-base font-extrabold text-white">Prêmios do dia</h3>
+              </div>
+              <p className="text-[11px] text-amber-100/70 mt-1">
+                {currentNeighborhood.name === 'Todos os Bairros'
+                  ? 'Destaques dos estabelecimentos participantes'
+                  : `Escolhidos pelas lojas de ${currentNeighborhood.name}`}
+              </p>
+            </div>
+            <span className="rounded-full bg-amber-400/15 border border-amber-300/20 px-2.5 py-1 text-[10px] font-bold text-amber-200">
+              {dailyFeaturedCards.length} em destaque
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {dailyFeaturedCards.map(({ reward, restaurant }) => (
+              <article key={reward.id} className="overflow-hidden rounded-2xl border border-amber-300/20 bg-slate-950/70">
+                <div className="relative h-40 sm:h-44 bg-slate-900">
+                  {reward.imageUrl ? (
+                    <img src={reward.imageUrl} alt={reward.title} loading="lazy" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-amber-300">
+                      <Gift className="w-12 h-12" />
+                    </div>
+                  )}
+                  <span className="absolute top-3 left-3 rounded-full bg-amber-300 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-slate-950">
+                    Prêmio do dia
+                  </span>
+                </div>
+                <div className="p-3.5 space-y-2">
+                  <div>
+                    <h4 className="font-bold text-white text-sm">{reward.title}</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{restaurant.name} · {restaurant.neighborhoodName}</p>
+                  </div>
+                  {reward.description && <p className="text-xs text-slate-300 line-clamp-2">{reward.description}</p>}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-extrabold text-amber-300 text-sm tabular-nums">{reward.pointsCost} pontos</span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectRestaurantById(restaurant.id, 'premios')}
+                      className="rounded-xl bg-amber-400 px-3 py-2 text-[11px] font-extrabold text-slate-950 hover:bg-amber-300 transition-colors"
+                    >
+                      Ver prêmio
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Notificação dinâmica de Sucesso / Aviso / Erro */}
       {notification && (

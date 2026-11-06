@@ -74,6 +74,7 @@ export interface LoyaltyReward {
   stock: number; // Quantidade de unidades em estoque (inteiro >= 0)
   status: RewardStatus; // 'ativo' | 'pausado' | 'esgotado'
   maxRedemptionsPerUser?: number; // Limite opcional de resgates por cliente
+  isDailyFeatured?: boolean; // Prêmio escolhido pelo estabelecimento para destaque no Feed
 }
 
 export interface DemoPointConcession {
