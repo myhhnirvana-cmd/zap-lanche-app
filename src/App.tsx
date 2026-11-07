@@ -124,7 +124,13 @@ export default function App() {
 
   // Navigate to restaurant by ID (e.g. from Feed or Profile)
   const handleSelectRestaurantById = (id: string, initialTab: 'cardapio' | 'promocoes' | 'fidelidade' | 'premios' | 'resgates' | 'publicacoes' = 'cardapio') => {
-    const found = restaurants.find((r) => r.id === id) || restaurants[0];
+    // Publicações do Supabase usam o UUID real da loja; dados locais podem usar o ID interno.
+    // Aceita ambos para evitar falha de navegação e nunca direciona para outra loja por fallback.
+    const found = restaurants.find((r) => r.id === id || r.supabaseId === id);
+    if (!found) {
+      console.warn('[ZapLanche] Loja da publicação não encontrada para navegação:', id);
+      return;
+    }
     handleSelectRestaurant(found, initialTab);
   };
 
