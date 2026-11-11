@@ -1153,42 +1153,29 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     if (!deletingReward || isDeletingReward) return;
     setIsDeletingReward(true);
     try {
+      let archived = false;
       if (isSupabaseConfigured && UUID_REGEX.test(deletingReward.id)) {
-        const { error } = await deleteRewardFromSupabase(deletingReward.id);
-        if (error) {
-          const deletionError = error as Error & { code?: string };
-          if (deletionError.code === '23503' && deletionError.message.includes('loyalty_redemptions')) {
-            const { data: archivedReward, error: archiveError } = await updateRewardInSupabase({
-              id: deletingReward.id,
-              status: 'pausado',
-              is_available: false,
-            });
-            if (archiveError || !archivedReward) {
-              showToast('Este prêmio possui resgates vinculados e não pode ser apagado. Também não foi possível pausá-lo: ' + (archiveError?.message || 'tente novamente.'), 'error');
-              return;
-            }
-            const updated = rewardsList.map((reward) =>
-              reward.id === deletingReward.id
-                ? { ...reward, status: 'pausado' as RewardStatus, isAvailable: false, isDailyFeatured: false }
-                : reward
-            );
-            setRewardsList(updated);
-            saveRestaurantRewards(selectedRestaurantId, updated);
-            showToast('Este prêmio já possui resgates. Para preservar o histórico dos clientes, ele foi pausado e não aceitará novos resgates.');
-            setDeletingReward(null);
-            return;
-          }
-          showToast('Não foi possível excluir o prêmio: ' + error.message, 'error');
+        const result = await deleteRewardFromSupabase(deletingReward.id);
+        if (result.error) {
+          showToast('Não foi possível remover o prêmio: ' + result.error.message, 'error');
           return;
         }
+        archived = result.archived === true;
       }
+
+      // Remove do painel imediatamente tanto na exclusão física quanto no arquivamento.
+      // O histórico de resgates permanece preservado no banco.
       const remaining = rewardsList.filter((reward) => reward.id !== deletingReward.id);
       setRewardsList(remaining);
       saveRestaurantRewards(selectedRestaurantId, remaining);
-      showToast(`Prêmio "${deletingReward.title}" excluído do programa de fidelidade.`);
+      showToast(
+        archived
+          ? `Prêmio "${deletingReward.title}" arquivado. O histórico dos resgates foi preservado.`
+          : `Prêmio "${deletingReward.title}" excluído do programa de fidelidade.`
+      );
       setDeletingReward(null);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Falha inesperada ao excluir o prêmio.', 'error');
+      showToast(error instanceof Error ? error.message : 'Falha inesperada ao remover o prêmio.', 'error');
     } finally {
       setIsDeletingReward(false);
     }
@@ -2527,7 +2514,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               <span className="rounded-xl bg-rose-500/15 p-2 text-rose-400"><Trash2 className="h-5 w-5" /></span>
               <div className="min-w-0 flex-1">
                 <h3 id="delete-reward-title" className="text-base font-bold text-white">Excluir prêmio?</h3>
-                <p className="mt-2 text-sm text-slate-300">Tem certeza de que deseja excluir <strong className="text-white">{deletingReward.title}</strong> do programa de fidelidade? Esta ação não poderá ser desfeita.</p>
+                <p className="mt-2 text-sm text-slate-300">Deseja remover <strong className="text-white">{deletingReward.title}</strong> do painel? Se já houver resgates, o prêmio será arquivado para preservar o histórico dos clientes.</p>
               </div>
             </div>
             <div className="mt-5 flex gap-2">
