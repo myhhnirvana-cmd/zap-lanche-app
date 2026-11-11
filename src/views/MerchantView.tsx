@@ -608,7 +608,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setIsProductModalOpen(true);
   };
 
-  // Upload e Otimização da Foto do Produto
+  // Otimiza a foto do produto e, para lojas reais, salva o arquivo no Supabase Storage.
   const handleProdImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -617,14 +617,36 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setIsOptimizingProdImage(true);
       setProdFormError(null);
       const result = await optimizeImage(file, 1200, 0.8);
-      setProdImageUrl(result.dataUrl);
+
+      const restaurantStorageId =
+        currentRestaurant.supabaseId ||
+        (UUID_REGEX.test(selectedRestaurantId) ? selectedRestaurantId : null);
+
+      if (restaurantStorageId && isSupabaseConfigured) {
+        const { publicUrl, error } = await uploadRestaurantImage(
+          restaurantStorageId,
+          result.dataUrl,
+          'product'
+        );
+
+        if (error || !publicUrl) {
+          throw new Error(error?.message || 'Não foi possível salvar a foto do produto.');
+        }
+
+        setProdImageUrl(publicUrl);
+      } else {
+        // Mantém compatibilidade com lojas locais/de demonstração sem UUID no banco.
+        setProdImageUrl(result.dataUrl);
+      }
+
       setProdOptimizationInfo(
-        `Foto do prato otimizada: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor, ${result.format.toUpperCase()})`
+        `Foto otimizada: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor, ${result.format.toUpperCase()})`
       );
     } catch (err: any) {
-      setProdFormError(err.message || 'Erro ao processar foto do produto.');
+      setProdFormError(err.message || 'Erro ao processar ou enviar a foto do produto.');
     } finally {
       setIsOptimizingProdImage(false);
+      e.target.value = '';
     }
   };
 
