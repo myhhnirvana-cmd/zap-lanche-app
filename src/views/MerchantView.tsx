@@ -802,6 +802,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         return;
       }
       finalImageUrl = upload.publicUrl;
+      setPromotionImageUrl(upload.publicUrl);
+      setPromotionImageData(null);
     }
     const changes = {
       title: promotionTitle.trim(),
@@ -996,6 +998,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           return;
         }
         persistentRewardImg = publicUrl;
+        setRewardImageUrl(publicUrl);
       } else if (isRealMerchant) {
         setRewardFormError('A foto do prêmio não pode ser salva sem conexão com o armazenamento. Tente novamente.');
         return;
