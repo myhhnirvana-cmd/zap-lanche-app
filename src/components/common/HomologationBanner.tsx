@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, Server } from 'lucide-react';
-import { getCurrentEnvironment, setEnvironment } from '../../lib/supabase';
+import { getCurrentEnvironment, setEnvironment, isSupabaseConfigured } from '../../lib/supabase';
 
 export const HomologationBanner: React.FC = () => {
   const env = getCurrentEnvironment();
@@ -10,7 +10,7 @@ export const HomologationBanner: React.FC = () => {
     <div className="bg-amber-500 text-black px-4 py-2 text-xs font-extrabold flex flex-wrap items-center justify-between gap-2 shadow-md z-50 sticky top-0">
       <div className="flex items-center gap-2">
         <AlertTriangle className="w-4 h-4 shrink-0" />
-        <span>MODO HOMOLOGAÇÃO ATIVO — Conectado ao Supabase de Testes (nagrxownsslyeosuqzca). Nenhum dado afeta a Produção.</span>
+        <span>{isSupabaseConfigured ? 'MODO HOMOLOGAÇÃO ATIVO — Projeto de testes: nagrxownsslyeosuqzca. Nenhum dado afeta a Produção.' : 'MODO HOMOLOGAÇÃO SELECIONADO — configuração ausente ou inválida. Nenhuma conexão foi iniciada.'}</span>
       </div>
       <button
         onClick={() => setEnvironment('production')}

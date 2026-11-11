@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { SocialPost, Restaurant, PostComment, Neighborhood, LoyaltyReward } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { getEnvironmentStorageKey } from '../lib/environmentStorage';
 import { getAvatarUrl, DEFAULT_AVATAR_URL } from '../data/avatars';
 import {
   isSupabaseConfigured,
@@ -75,12 +76,13 @@ export const FeedView: React.FC<FeedViewProps> = ({
     'Morador';
 
   const currentUserId = user?.id || 'usr-anon';
+  const isAdmin = profile?.role === 'admin';
 
   const userAvatarChoice =
     (user?.user_metadata?.avatar_id as string | undefined) ||
     (user?.user_metadata?.avatar_url as string | undefined) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_url_${user.id}`) : null) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_${user.id}`) : null);
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(getEnvironmentStorageKey(`zap_lanche_avatar_url_${user.id}`)) : null) ||
+    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(getEnvironmentStorageKey(`zap_lanche_avatar_${user.id}`)) : null);
 
   const currentAvatar = getAvatarUrl(userAvatarChoice);
 
@@ -522,14 +524,19 @@ export const FeedView: React.FC<FeedViewProps> = ({
       return;
     }
 
-    if (isSupabaseConfigured && UUID_REGEX.test(postToDelete.id)) {
+    // Os IDs persistidos do feed usam UUID puro ou o prefixo "post-".
+    // IDs locais/demonstrativos não devem gerar uma chamada inválida ao banco.
+    const isPersistedPostId =
+      UUID_REGEX.test(postToDelete.id) ||
+      /^post-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(postToDelete.id);
+
+    if (isSupabaseConfigured && isPersistedPostId) {
       const { error: delErr } = await deletePostInSupabase(postToDelete.id);
       if (delErr) {
         setNotification({
           type: 'error',
           text: `Erro ao excluir no servidor: ${delErr.message}`,
         });
-        setPostToDelete(null);
         return;
       }
     }

@@ -263,46 +263,38 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
     setIsInviting(true);
 
     try {
-      const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
-      const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY as string | undefined;
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      };
-      if (anonKey) {
-        headers['apikey'] = anonKey;
+      if (!supabase) {
+        setInviteError('Serviço de convites indisponível neste ambiente. Verifique a configuração do Supabase.');
+        return;
       }
 
-      const response = await fetch('https://ortuxqmqtngkvynmgpch.supabase.co/functions/v1/invite-merchant', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          restaurant_id: inviteRestaurantId,
-          mode: inviteMode,
-          email: inviteMode === 'email' ? trimmedEmail : null,
-        }),
-      });
-
-      let responseData: any = null;
-      try {
-        responseData = await response.json();
-      } catch {
-        // Resposta não-JSON
-      }
-
-      if (!response.ok) {
-        const msg = responseData?.error || responseData?.message;
-        if (response.status === 401) {
-          setInviteError('Sessão expirada ou não autorizada (401). Faça login novamente como administrador.');
-        } else if (response.status === 403) {
-          setInviteError('Acesso negado (403). Apenas administradores confirmados podem convidar comerciantes.');
-        } else if (response.status === 409) {
-          setInviteError(msg ? `Conflito (409): ${msg}` : 'Conflito (409): Já existe um convite pendente ou este estabelecimento já possui proprietário.');
-        } else if (response.status === 500) {
-          setInviteError(msg ? `Erro no servidor (500): ${msg}` : 'Erro interno no servidor (500) ao emitir o convite.');
-        } else {
-          setInviteError(msg ? `Erro (${response.status}): ${msg}` : `Erro (${response.status}) ao comunicar com o servidor.`);
+      // Invoca a função pelo cliente do ambiente ativo. Homologação nunca chama Produção.
+      const { data: responseData, error: invokeError } = await supabase.functions.invoke(
+        'invite-merchant',
+        {
+          body: {
+            restaurant_id: inviteRestaurantId,
+            mode: inviteMode,
+            email: inviteMode === 'email' ? trimmedEmail : null,
+          },
+          headers: { Authorization: `Bearer ${token}` },
         }
+      );
+
+      if (invokeError) {
+        const errorContext = (invokeError as any)?.context;
+        const responseStatus = typeof errorContext?.status === 'number' ? errorContext.status : undefined;
+        let errorData: any = null;
+        if (errorContext && typeof errorContext.clone === 'function') {
+          try { errorData = await errorContext.clone().json(); } catch { /* resposta não-JSON */ }
+        }
+        const msg = errorData?.error || errorData?.message || invokeError.message;
+        if (responseStatus === 401) setInviteError('Sessão expirada ou não autorizada (401). Faça login novamente como administrador.');
+        else if (responseStatus === 403) setInviteError('Acesso negado (403). Apenas administradores confirmados podem convidar comerciantes.');
+        else if (responseStatus === 409) setInviteError(msg ? `Conflito (409): ${msg}` : 'Conflito (409): Já existe um convite pendente ou este estabelecimento já possui proprietário.');
+        else if (responseStatus === 500) setInviteError(msg ? `Erro no servidor (500): ${msg}` : 'Erro interno no servidor (500) ao emitir o convite.');
+        else if (responseStatus) setInviteError(msg ? `Erro (${responseStatus}): ${msg}` : `Erro (${responseStatus}) ao comunicar com o servidor.`);
+        else setInviteError(msg ? `Falha ao contatar o serviço de convites: ${msg}` : 'Erro de conexão ao contatar a Edge Function.');
         return;
       }
 

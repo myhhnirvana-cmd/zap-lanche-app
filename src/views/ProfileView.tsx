@@ -21,6 +21,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
 import { AvatarGalleryModal } from '../components/profile/AvatarGalleryModal';
+import { getEnvironmentStorageKey } from '../lib/environmentStorage';
 import { getAvatarById, DEFAULT_AVATAR_ID } from '../data/avatars';
 import {
   supabase,
@@ -467,7 +468,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const userAvatarId =
     (authUser.user_metadata?.avatar_id as string | undefined) ||
-    (typeof window !== 'undefined' && authUser.id ? localStorage.getItem(`zap_lanche_avatar_${authUser.id}`) : null) ||
+    (typeof window !== 'undefined' && authUser.id ? localStorage.getItem(getEnvironmentStorageKey(`zap_lanche_avatar_${authUser.id}`)) : null) ||
     DEFAULT_AVATAR_ID;
 
   const currentAvatarData = getAvatarById(userAvatarId);

@@ -7,7 +7,8 @@ export type ZapLancheEnvironment = 'production' | 'homologation';
 
 export function getCurrentEnvironment(): ZapLancheEnvironment {
   if (typeof window === 'undefined') return 'production';
-  return (localStorage.getItem('zaplanche_env_mode') as ZapLancheEnvironment) || 'production';
+  try { return localStorage.getItem('zaplanche_env_mode') === 'homologation' ? 'homologation' : 'production'; }
+  catch { return 'production'; }
 }
 
 export function setEnvironment(mode: ZapLancheEnvironment): void {
@@ -15,7 +16,7 @@ export function setEnvironment(mode: ZapLancheEnvironment): void {
   if (mode === 'homologation') {
     const hUrl = viteEnv.VITE_SUPABASE_HOMOLOGACAO_URL;
     const hKey = viteEnv.VITE_SUPABASE_HOMOLOGACAO_ANON_KEY;
-    if (!hUrl || !hKey || !hUrl.trim().startsWith('https://nagrxownsslyeosuqzca.supabase.co')) {
+    if (!hUrl || !hKey?.trim() || hUrl.trim().replace(/\/+$/, '') !== 'https://nagrxownsslyeosuqzca.supabase.co') {
       alert('Erro: Configuração de homologação inválida.');
       return;
     }
@@ -38,7 +39,7 @@ let supabaseUrl: string | undefined;
 let supabaseAnonKey: string | undefined;
 
 if (currentEnv === 'homologation') {
-  if (homologUrl?.trim().startsWith('https://nagrxownsslyeosuqzca.supabase.co') && homologKey?.trim()) {
+  if (homologUrl?.trim().replace(/\/+$/, '') === 'https://nagrxownsslyeosuqzca.supabase.co' && homologKey?.trim()) {
     supabaseUrl = homologUrl;
     supabaseAnonKey = homologKey;
   } else {
@@ -50,6 +51,10 @@ if (currentEnv === 'homologation') {
 }
 
 export const isSupabaseConfigured = Boolean(supabaseUrl?.trim() && supabaseAnonKey?.trim());
+
+/** Credenciais públicas do ambiente atualmente selecionado; nunca usar service_role no cliente. */
+export const activeSupabaseUrl = supabaseUrl;
+export const activeSupabaseAnonKey = supabaseAnonKey;
 
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!, {

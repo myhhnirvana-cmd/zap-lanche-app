@@ -1,0 +1,7 @@
+# Os dois endpoints mantêm a verificação do gateway habilitada.
+# O preview recebe apikey; a aceitação valida também a sessão real dentro da função.
+[functions.accept-invitation]
+verify_jwt = true
+
+[functions.invite-merchant]
+verify_jwt = true
