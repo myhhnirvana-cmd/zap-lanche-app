@@ -129,6 +129,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const [promotionValidUntil, setPromotionValidUntil] = useState('');
   const [promotionImageData, setPromotionImageData] = useState<string | null>(null);
   const [promotionImageUrl, setPromotionImageUrl] = useState('');
+  const [isOptimizingPromotionImage, setIsOptimizingPromotionImage] = useState(false);
   const [promotionError, setPromotionError] = useState<string | null>(null);
   const [isSavingPromotion, setIsSavingPromotion] = useState(false);
   const [isUpdatingOpenStatus, setIsUpdatingOpenStatus] = useState(false);
@@ -769,17 +770,21 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       return;
     }
     try {
+      setIsOptimizingPromotionImage(true);
       const optimized = await optimizeImage(file, 1600, 0.8);
       setPromotionImageData(optimized.dataUrl);
       setPromotionImageUrl('');
       setPromotionError(null);
     } catch (error) {
       setPromotionError(error instanceof Error ? error.message : 'Não foi possível preparar a imagem.');
+    } finally {
+      setIsOptimizingPromotionImage(false);
     }
   };
 
   const handleSavePromotion = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isOptimizingPromotionImage) return setPromotionError('Aguarde o processamento da imagem terminar antes de salvar.');
     const discountPrice = Number(promotionDiscountPrice.replace(',', '.'));
     const regularPrice = Number(promotionRegularPrice.replace(',', '.'));
     if (!promotionTitle.trim()) return setPromotionError('Informe o título da promoção.');
@@ -948,6 +953,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
   const handleSaveReward = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isOptimizingRewardImage) {
+      setRewardFormError('Aguarde o processamento da foto terminar antes de salvar.');
+      return;
+    }
     if (!rewardTitle.trim()) {
       setRewardFormError('O nome do prêmio é obrigatório.');
       return;
