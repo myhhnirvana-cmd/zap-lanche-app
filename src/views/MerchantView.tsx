@@ -378,6 +378,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const handleSaveStore = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isOptimizingBanner || isOptimizingLogo) {
+      setStoreFormError('Aguarde o processamento das imagens terminar antes de salvar.');
+      return;
+    }
     if (!storeFormName.trim()) {
       setStoreFormError('O nome do estabelecimento é obrigatório.');
       return;
@@ -398,6 +402,31 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     const restUuid = currentRestaurant.supabaseId || currentRestaurant.id;
     let persistentBannerUrl = storeFormBannerUrl;
     let persistentLogoUrl = storeFormLogoUrl.trim();
+
+    const parsedPrepTime = storeFormPrepTime.trim() ? Number(storeFormPrepTime) : null;
+    const parsedLatitude = storeFormLatitude.trim() ? Number(storeFormLatitude.replace(',', '.')) : null;
+    const parsedLongitude = storeFormLongitude.trim() ? Number(storeFormLongitude.replace(',', '.')) : null;
+    if (parsedPrepTime !== null && (!Number.isInteger(parsedPrepTime) || parsedPrepTime < 1 || parsedPrepTime > 600)) {
+      setStoreFormError('Informe um tempo de preparo entre 1 e 600 minutos.');
+      return;
+    }
+    if ((parsedLatitude === null) !== (parsedLongitude === null) ||
+        (parsedLatitude !== null && (!Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90)) ||
+        (parsedLongitude !== null && (!Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180))) {
+      setStoreFormError('Informe latitude e longitude válidas, ou deixe os dois campos vazios.');
+      return;
+    }
+    const neighborhoodName = storeFormNeighborhoodId.trim();
+    const neighborhoodId = neighborhoodName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (!neighborhoodName) {
+      setStoreFormError('Informe o bairro do estabelecimento.');
+      return;
+    }
+    const trimmedOwnerName = storeFormOwner.trim();
+    if ((persistentBannerUrl.startsWith('data:') || persistentLogoUrl.startsWith('data:')) && isRealMerchant && !isSupabaseConfigured) {
+      setStoreFormError('Não foi possível conectar ao armazenamento. As imagens não foram salvas; tente novamente quando a conexão estiver disponível.');
+      return;
+    }
 
     // Se ainda estiver em base64 (DataURL), realiza o upload para o Supabase Storage
     if (persistentBannerUrl.startsWith('data:')) {
@@ -424,26 +453,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setStoreFormLogoUrl(publicUrl);
     }
 
-    const parsedPrepTime = storeFormPrepTime.trim() ? Number(storeFormPrepTime) : null;
-    const parsedLatitude = storeFormLatitude.trim() ? Number(storeFormLatitude.replace(',', '.')) : null;
-    const parsedLongitude = storeFormLongitude.trim() ? Number(storeFormLongitude.replace(',', '.')) : null;
-    if (parsedPrepTime !== null && (!Number.isInteger(parsedPrepTime) || parsedPrepTime < 1 || parsedPrepTime > 600)) {
-      setStoreFormError('Informe um tempo de preparo entre 1 e 600 minutos.');
-      return;
-    }
-    if ((parsedLatitude === null) !== (parsedLongitude === null) ||
-        (parsedLatitude !== null && (!Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90)) ||
-        (parsedLongitude !== null && (!Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180))) {
-      setStoreFormError('Informe latitude e longitude válidas, ou deixe os dois campos vazios.');
-      return;
-    }
-    const neighborhoodName = storeFormNeighborhoodId.trim();
-    const neighborhoodId = neighborhoodName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    if (!neighborhoodName) {
-      setStoreFormError('Informe o bairro do estabelecimento.');
-      return;
-    }
-    const trimmedOwnerName = storeFormOwner.trim();
 
     // O nome do responsável pertence ao estabelecimento, nunca ao perfil global do usuário.
     // Persistimos tudo junto em public.restaurants para evitar contaminar outras lojas.
@@ -600,6 +609,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           return;
         }
         persistentProductImage = publicUrl;
+        setProdImageUrl(publicUrl);
       } else if (isRealMerchant) {
         setProdFormError('A foto do produto não pode ser salva sem conexão com o armazenamento.');
         return;
