@@ -1774,7 +1774,10 @@ export async function fetchRewardsFromSupabase(
       : null;
     if (restaurantId && !resolvedRestaurantId) return null;
 
-    let query = supabase.from('loyalty_rewards').select('*');
+    let query = supabase
+      .from('loyalty_rewards')
+      .select('*')
+      .is('archived_at', null);
     if (resolvedRestaurantId) {
       query = query.eq('restaurant_id', resolvedRestaurantId);
     }
@@ -1932,11 +1935,15 @@ export async function updateRewardInSupabase(
       .from('loyalty_rewards')
       .update(payload)
       .eq('id', reward.id)
+      .is('archived_at', null)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error || !data) {
-      return { data: null, error: new Error(error?.message || 'Falha ao atualizar prêmio') };
+      return {
+        data: null,
+        error: new Error(error?.message || 'O prêmio não foi atualizado. Ele pode estar arquivado ou não pertencer à sua loja.'),
+      };
     }
 
     const mapped: LoyaltyReward = {
@@ -1991,7 +1998,7 @@ export async function setDailyFeaturedRewardInSupabase(
 
 export async function deleteRewardFromSupabase(
   rewardId: string
-): Promise<{ error: Error | null }> {
+): Promise<{ error: Error | null; archived?: boolean }> {
   if (!isSupabaseConfigured || !supabase) {
     return { error: new Error('Supabase não configurado') };
   }
@@ -2003,16 +2010,51 @@ export async function deleteRewardFromSupabase(
       .eq('id', rewardId)
       .select('id');
 
-    if (error) {
-      const deletionError = new Error(error.message) as Error & { code?: string };
-      deletionError.code = error.code;
-      return { error: deletionError };
-    }
-    if (!data || data.length === 0) {
-      return { error: new Error('O prêmio não foi excluído. Verifique se ele pertence à sua loja.') };
+    if (!error) {
+      if (!data?.length) {
+        return { error: new Error('O prêmio não foi removido. Verifique se ele pertence à sua loja ou se já foi removido.') };
+      }
+      return { error: null, archived: false };
     }
 
-    return { error: null };
+    const deletionError = error as typeof error & { constraint?: string };
+    const isProtectedByRedemptionHistory =
+      deletionError.code === '23503' &&
+      (deletionError.constraint === 'loyalty_redemptions_reward_id_fkey' ||
+        deletionError.message.includes('loyalty_redemptions'));
+
+    if (!isProtectedByRedemptionHistory) {
+      const resultError = new Error(error.message) as Error & { code?: string };
+      resultError.code = error.code;
+      return { error: resultError };
+    }
+
+    // Um prêmio com resgates não pode ser apagado fisicamente.
+    // Arquivamos o cadastro, sem tocar nos vouchers nem no histórico dos clientes.
+    const { data: archivedRow, error: archiveError } = await supabase
+      .from('loyalty_rewards')
+      .update({
+        archived_at: new Date().toISOString(),
+        is_active: false,
+        status: 'pausado',
+        is_daily_featured: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', rewardId)
+      .is('archived_at', null)
+      .select('id')
+      .maybeSingle();
+
+    if (archiveError || !archivedRow) {
+      const resultError = new Error(
+        archiveError?.message ||
+          'O prêmio possui resgates vinculados e não pôde ser arquivado. Verifique a permissão da sua loja e tente novamente.'
+      ) as Error & { code?: string };
+      resultError.code = archiveError?.code;
+      return { error: resultError };
+    }
+
+    return { error: null, archived: true };
   } catch (err: any) {
     return { error: err instanceof Error ? err : new Error(String(err)) };
   }
