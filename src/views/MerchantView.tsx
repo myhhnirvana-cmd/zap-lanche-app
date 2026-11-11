@@ -240,6 +240,9 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
   // Confirmação de exclusão de produto
   const [deletingProduct, setDeletingProduct] = useState<MenuItem | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
+  const [isDeletingReward, setIsDeletingReward] = useState(false);
+  const [deletingPromotionId, setDeletingPromotionId] = useState<string | null>(null);
 
   // -------------------------------------------------------------
   // ESTADOS DO MODAL: GESTÃO DE PRÊMIOS E FIDELIDADE (CRIAR / EDITAR)
@@ -731,23 +734,27 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
   // Excluir Produto do Cardápio
   const handleConfirmDeleteProduct = async () => {
-    if (!deletingProduct) return;
-    
-    const { error } = await deleteMenuItem(deletingProduct.supabaseId || deletingProduct.id);
-    if (error) {
-      showToast('Erro ao excluir produto: ' + error.message, 'error');
+    if (!deletingProduct || isDeletingProduct) return;
+    setIsDeletingProduct(true);
+    try {
+      const { error } = await deleteMenuItem(deletingProduct.supabaseId || deletingProduct.id);
+      if (error) {
+        showToast('Não foi possível excluir o produto: ' + error.message, 'error');
+        return;
+      }
+      const remaining = menuItems.filter((item) => item.id !== deletingProduct.id);
+      setMenuItems(remaining);
+      saveRestaurantMenu(selectedRestaurantId, remaining);
+      if (currentRestaurant.supabaseId && currentRestaurant.supabaseId !== selectedRestaurantId) {
+        saveRestaurantMenu(currentRestaurant.supabaseId, remaining);
+      }
+      showToast(`Item "${deletingProduct.name}" excluído do cardápio.`);
       setDeletingProduct(null);
-      return;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Falha inesperada ao excluir o produto.', 'error');
+    } finally {
+      setIsDeletingProduct(false);
     }
-    
-    const remaining = menuItems.filter((i) => i.id !== deletingProduct.id);
-    setMenuItems(remaining);
-    saveRestaurantMenu(selectedRestaurantId, remaining);
-    if (currentRestaurant.supabaseId && currentRestaurant.supabaseId !== selectedRestaurantId) {
-      saveRestaurantMenu(currentRestaurant.supabaseId, remaining);
-    }
-    showToast(`Item "${deletingProduct.name}" excluído do cardápio.`);
-    setDeletingProduct(null);
   };
 
   // Toggle Rápido de Disponibilidade na Chapa
@@ -895,13 +902,21 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   };
 
   const handleDeletePromotion = async (promotion: Promotion) => {
-    const result = await deleteRestaurantPromotion(promotion.id);
-    if (result.error) {
-      showToast(result.error.message, 'error');
-      return;
+    if (deletingPromotionId) return;
+    setDeletingPromotionId(promotion.id);
+    try {
+      const result = await deleteRestaurantPromotion(promotion.id);
+      if (result.error) {
+        showToast('Não foi possível excluir a promoção: ' + result.error.message, 'error');
+        return;
+      }
+      setPromotions((current) => current.filter((item) => item.id !== promotion.id));
+      showToast('Promoção excluída com sucesso.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Falha inesperada ao excluir a promoção.', 'error');
+    } finally {
+      setDeletingPromotionId(null);
     }
-    setPromotions((current) => current.filter((item) => item.id !== promotion.id));
-    showToast('Promoção excluída.');
   };
 
   const handleToggleDailyFeaturedReward = async (reward: LoyaltyReward) => {
@@ -979,6 +994,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setRewardFormError(err.message || 'Erro ao processar foto do prêmio.');
     } finally {
       setIsOptimizingRewardImage(false);
+      e.target.value = '';
     }
   };
 
@@ -1176,21 +1192,48 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   };
 
   const handleConfirmDeleteReward = async () => {
-    if (!deletingReward) return;
-
-    if (isSupabaseConfigured && UUID_REGEX.test(deletingReward.id)) {
-      const { error } = await deleteRewardFromSupabase(deletingReward.id);
-      if (error) {
-        showToast(`Não foi possível excluir o prêmio: ${error.message}`, 'error');
-        return;
+    if (!deletingReward || isDeletingReward) return;
+    setIsDeletingReward(true);
+    try {
+      if (isSupabaseConfigured && UUID_REGEX.test(deletingReward.id)) {
+        const { error } = await deleteRewardFromSupabase(deletingReward.id);
+        if (error) {
+          const deletionError = error as Error & { code?: string };
+          if (deletionError.code === '23503') {
+            const { data: archivedReward, error: archiveError } = await updateRewardInSupabase({
+              id: deletingReward.id,
+              status: 'pausado',
+              is_available: false,
+            });
+            if (archiveError || !archivedReward) {
+              showToast('Este prêmio possui resgates vinculados e não pode ser apagado. Também não foi possível pausá-lo: ' + (archiveError?.message || 'tente novamente.'), 'error');
+              return;
+            }
+            const updated = rewardsList.map((reward) =>
+              reward.id === deletingReward.id
+                ? { ...reward, status: 'pausado' as RewardStatus, isAvailable: false, isDailyFeatured: false }
+                : reward
+            );
+            setRewardsList(updated);
+            saveRestaurantRewards(selectedRestaurantId, updated);
+            showToast('Este prêmio já possui resgates. Para preservar o histórico dos clientes, ele foi pausado e não aceitará novos resgates.');
+            setDeletingReward(null);
+            return;
+          }
+          showToast('Não foi possível excluir o prêmio: ' + error.message, 'error');
+          return;
+        }
       }
+      const remaining = rewardsList.filter((reward) => reward.id !== deletingReward.id);
+      setRewardsList(remaining);
+      saveRestaurantRewards(selectedRestaurantId, remaining);
+      showToast(`Prêmio "${deletingReward.title}" excluído do programa de fidelidade.`);
+      setDeletingReward(null);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Falha inesperada ao excluir o prêmio.', 'error');
+    } finally {
+      setIsDeletingReward(false);
     }
-
-    const remaining = rewardsList.filter((r) => r.id !== deletingReward.id);
-    setRewardsList(remaining);
-    saveRestaurantRewards(selectedRestaurantId, remaining);
-    showToast(`Prêmio "${deletingReward.title}" excluído do programa de fidelidade.`);
-    setDeletingReward(null);
   };
 
   if (!isAdmin && !isRealMerchant) {
@@ -1634,7 +1677,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 <div className="flex gap-2 pt-1">
                   <button onClick={() => togglePromotionStatus(promotion)} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-[11px] text-slate-300">{promotion.isActive === false ? 'Ativar' : 'Pausar'}</button>
                   <button onClick={() => openPromotionEditor(promotion)} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-[11px] text-slate-300">Editar</button>
-                  <button onClick={() => handleDeletePromotion(promotion)} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-[11px] text-rose-300">Excluir</button>
+                  <button onClick={() => handleDeletePromotion(promotion)} disabled={deletingPromotionId === promotion.id} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-[11px] text-rose-300 disabled:cursor-not-allowed disabled:opacity-50">{deletingPromotionId === promotion.id ? 'Excluindo...' : 'Excluir'}</button>
                 </div>
               </article>
             ))}
@@ -2505,9 +2548,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               </button>
               <button
                 onClick={handleConfirmDeleteProduct}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/20"
+                disabled={isDeletingProduct}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60 text-white font-bold text-xs shadow-md shadow-rose-600/20"
               >
-                Sim, Excluir
+                {isDeletingProduct ? 'Excluindo...' : 'Sim, Excluir'}
               </button>
             </div>
           </div>
@@ -2530,7 +2574,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             </div>
             <div className="mt-5 flex gap-2">
               <button type="button" onClick={() => setDeletingReward(null)} className="flex-1 rounded-xl bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-700">Cancelar</button>
-              <button type="button" onClick={handleConfirmDeleteReward} className="flex-1 rounded-xl bg-rose-600 px-3 py-2.5 text-sm font-bold text-white hover:bg-rose-500">Excluir prêmio</button>
+              <button type="button" onClick={handleConfirmDeleteReward} disabled={isDeletingReward} className="flex-1 rounded-xl bg-rose-600 px-3 py-2.5 text-sm font-bold text-white hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60">{isDeletingReward ? 'Processando...' : 'Excluir prêmio'}</button>
             </div>
           </div>
         </div>
