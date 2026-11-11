@@ -726,7 +726,7 @@ export async function uploadRestaurantImage(
   restaurantId: string,
   dataUrlOrFile: string | File | Blob,
   imageType: 'banner' | 'logo' | 'reward' | 'promotion' | 'product'
-): Promise<{ publicUrl: string | null; error: Error | null }> {
+): Promise<{ publicUrl: string | null; error: Error | null; uploadedPath?: string | null }> {
   if (!isSupabaseConfigured || !supabase) {
     return { publicUrl: null, error: new Error('Supabase não configurado') };
   }
@@ -747,7 +747,7 @@ export async function uploadRestaurantImage(
     if (typeof dataUrlOrFile === 'string') {
       // Se já for uma URL externa ou URL pública do Supabase Storage, reaproveita
       if (dataUrlOrFile.startsWith('http://') || dataUrlOrFile.startsWith('https://')) {
-        return { publicUrl: dataUrlOrFile, error: null };
+        return { publicUrl: dataUrlOrFile, error: null, uploadedPath: null };
       }
       if (dataUrlOrFile.startsWith('data:')) {
         const [header, base64] = dataUrlOrFile.split(',');
@@ -793,10 +793,38 @@ export async function uploadRestaurantImage(
       .from(SUPABASE_STORAGE_BUCKET)
       .getPublicUrl(filePath);
 
-    return { publicUrl: publicUrlData.publicUrl, error: null };
+    return { publicUrl: publicUrlData.publicUrl, error: null, uploadedPath: filePath };
   } catch (err: any) {
     console.error(`Exceção no upload para Supabase Storage (${imageType}):`, err);
     return { publicUrl: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+
+/**
+ * Remove somente um arquivo recém-enviado por esta operação.
+ * Não aceita URLs públicas arbitrárias nem caminhos fora da pasta da loja.
+ */
+export async function removeUploadedRestaurantImage(
+  uploadedPath?: string | null
+): Promise<{ error: Error | null }> {
+  if (!uploadedPath) return { error: null };
+  if (!isSupabaseConfigured || !supabase) {
+    return { error: new Error('Supabase não configurado para limpar o upload temporário.') };
+  }
+
+  const safePathPattern = /^restaurants\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(banner|logo|reward|promotion|product)-[0-9]+\.(webp|jpg|jpeg|png|gif)$/i;
+  if (!safePathPattern.test(uploadedPath)) {
+    return { error: new Error('Caminho de imagem temporária inválido; arquivo preservado.') };
+  }
+
+  try {
+    const { error } = await supabase.storage
+      .from(SUPABASE_STORAGE_BUCKET)
+      .remove([uploadedPath]);
+    return { error: error ? new Error(error.message) : null };
+  } catch (err) {
+    return { error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
 
