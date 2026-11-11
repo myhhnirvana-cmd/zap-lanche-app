@@ -475,8 +475,18 @@ export async function updateRestaurantPromotion(
 
 export async function deleteRestaurantPromotion(promotionId: string): Promise<{ error: Error | null }> {
   if (!isSupabaseConfigured || !supabase) return { error: new Error('Supabase não configurado') };
-  const { error } = await supabase.from('restaurant_promotions').delete().eq('id', promotionId);
-  return { error: error ? new Error(error.message) : null };
+  try {
+    const { data, error } = await supabase
+      .from('restaurant_promotions')
+      .delete()
+      .eq('id', promotionId)
+      .select('id');
+    if (error) return { error: new Error(error.message) };
+    if (!data?.length) return { error: new Error('A promoção não foi excluída. Ela pode já ter sido removida ou você não tem permissão para excluí-la.') };
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err : new Error(String(err)) };
+  }
 }
 
 /** Atualiza o status operacional sem alterar o status de cadastro/moderação da loja. */
@@ -937,13 +947,18 @@ export async function updateMenuItem(item: MenuItem) {
  */
 export async function deleteMenuItem(itemId: string) {
   if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
-
-  const { error } = await supabase
-    .from('menu_items')
-    .delete()
-    .eq('id', itemId);
-
-  return { error };
+  try {
+    const { data, error } = await supabase
+      .from('menu_items')
+      .delete()
+      .eq('id', itemId)
+      .select('id');
+    if (error) return { data: null, error: new Error(error.message) };
+    if (!data?.length) return { data: null, error: new Error('O produto não foi excluído. Ele pode já ter sido removido ou você não tem permissão para excluí-lo.') };
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
 }
 
 /**
@@ -1990,7 +2005,9 @@ export async function deleteRewardFromSupabase(
       .select('id');
 
     if (error) {
-      return { error: new Error(error.message) };
+      const deletionError = new Error(error.message) as Error & { code?: string };
+      deletionError.code = error.code;
+      return { error: deletionError };
     }
     if (!data || data.length === 0) {
       return { error: new Error('O prêmio não foi excluído. Verifique se ele pertence à sua loja.') };
