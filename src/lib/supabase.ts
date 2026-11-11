@@ -813,7 +813,7 @@ export async function removeUploadedRestaurantImage(
     return { error: new Error('Supabase não configurado para limpar o upload temporário.') };
   }
 
-  const safePathPattern = /^restaurants\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\/(banner|logo|reward|promotion|product)-[0-9]+\\.(webp|jpg|jpeg|png|gif)$/i;
+  const safePathPattern = /^restaurants\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(banner|logo|reward|promotion|product)-[0-9]+\.(webp|jpg|jpeg|png|gif)$/i;
   if (!safePathPattern.test(uploadedPath)) {
     return { error: new Error('Caminho de imagem temporária inválido; arquivo preservado.') };
   }
