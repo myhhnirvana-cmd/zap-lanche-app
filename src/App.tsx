@@ -53,19 +53,31 @@ export default function App() {
     }
   }, []);
 
-  // Captura do parâmetro de convite antigo (?convite=TOKEN ou ?token=TOKEN)
+  // Captura e preserva o convite durante cadastro e confirmação de e-mail.
+  // O token é removido da URL, mas permanece salvo até o aceite ou expiração.
   useEffect(() => {
     try {
+      const storageKey = 'zap_pending_merchant_invite';
       const searchParams = new URLSearchParams(window.location.search);
-      const token = searchParams.get('convite') || searchParams.get('token');
-      if (token && token.trim()) {
-        setPendingInviteToken(token.trim());
-        // Remove o token da URL para não permanecer no histórico nem ser copiado indevidamente
+      const urlToken = searchParams.get('convite') || searchParams.get('token');
+      const storedToken = localStorage.getItem(storageKey);
+      const token = urlToken?.trim() || storedToken;
+
+      if (urlToken?.trim()) {
+        localStorage.setItem(storageKey, urlToken.trim());
+      }
+
+      if (token) {
+        setPendingInviteToken(token);
+      }
+
+      if (urlToken) {
+        // Evita manter o token secreto no histórico ou em compartilhamentos acidentais.
         const cleanUrl = window.location.pathname + (window.location.hash || '');
         window.history.replaceState({}, document.title, cleanUrl);
       }
     } catch {
-      // Ignora erro de parsing de URL
+      // A captura do convite não deve impedir a inicialização do aplicativo.
     }
   }, []);
 
@@ -274,6 +286,7 @@ export default function App() {
           token={pendingInviteToken}
           onClose={() => setPendingInviteToken(null)}
           onAccepted={async (restaurantId) => {
+            localStorage.removeItem('zap_pending_merchant_invite');
             setPendingInviteToken(null);
             const restData = await fetchRestaurantsFromSupabase();
             if (restData && restData.length > 0) {

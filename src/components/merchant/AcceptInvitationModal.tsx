@@ -97,6 +97,13 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
               ? 'Esta lanchonete já possui um comerciante responsável.'
               : 'Não foi possível carregar os dados deste convite.');
           setPreviewError(errorMsg);
+          if ([404, 409, 410].includes(response.status)) {
+            try {
+              localStorage.removeItem('zap_pending_merchant_invite');
+            } catch {
+              // Ignora indisponibilidade do armazenamento local.
+            }
+          }
           setIsPreviewLoading(false);
           return;
         }
@@ -349,9 +356,8 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
                   <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
                   <p className="leading-relaxed">
                     {isManualInvitation
-                      ? 'Entre ou crie uma conta para aceitar este convite manual.'
-                      : <>Para aceitar este convite, é necessário entrar com o e-mail convidado:{' '}
-                        <strong className="text-white underline">{previewData.invited_email}</strong>.</>}
+                      ? 'Crie sua conta ou entre. Depois de confirmar seu e-mail, volte ao ZAP Lanche. Seu convite ficará salvo e será retomado automaticamente.'
+                      : <>Crie sua conta usando o e-mail convidado <strong className="text-white underline">{previewData.invited_email}</strong>. Depois de confirmar o e-mail, volte ao ZAP Lanche. Seu convite ficará salvo e será retomado automaticamente.</>}
                   </p>
                 </div>
 
@@ -466,6 +472,7 @@ export const AcceptInvitationModal: React.FC<AcceptInvitationModalProps> = ({
           isOpen={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
           initialMode={authModalMode}
+          signupRedirectTo={`${window.location.origin}${window.location.pathname}?convite=${encodeURIComponent(token)}`}
           customTitle="Entrar para Aceitar Convite"
           customSubtitle={
             previewData
