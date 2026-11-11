@@ -129,6 +129,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const [promotionValidUntil, setPromotionValidUntil] = useState('');
   const [promotionImageData, setPromotionImageData] = useState<string | null>(null);
   const [promotionImageUrl, setPromotionImageUrl] = useState('');
+  const [isOptimizingPromotionImage, setIsOptimizingPromotionImage] = useState(false);
   const [promotionError, setPromotionError] = useState<string | null>(null);
   const [isSavingPromotion, setIsSavingPromotion] = useState(false);
   const [isUpdatingOpenStatus, setIsUpdatingOpenStatus] = useState(false);
@@ -333,7 +334,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setIsEditStoreModalOpen(true);
   };
 
-  // Upload e Otimização do Banner no Supabase Storage
+  // Prepara as imagens localmente. O upload e a persistência acontecem apenas ao salvar a loja.
   const handleBannerFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -343,56 +344,17 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setStoreFormError(null);
       const result = await optimizeImage(file, 1600, 0.8);
       setStoreFormBannerUrl(result.dataUrl);
-
-      const restUuid = currentRestaurant.supabaseId || currentRestaurant.id;
-      const { publicUrl, error: uploadErr } = await uploadRestaurantImage(restUuid, result.dataUrl, 'banner');
-      if (uploadErr || !publicUrl) {
-        const errorMsg = uploadErr?.message || 'Falha ao enviar capa para o Storage.';
-        setStoreFormError(errorMsg);
-        showToast(errorMsg, 'error');
-        return;
-      }
-
-      setStoreFormBannerUrl(publicUrl);
-
-      // Persiste imediatamente a URL da capa no Supabase (public.restaurants.image_url)
-      const { data: updatedRest, error: dbErr } = await updateRestaurantInSupabase({
-        id: restUuid,
-        image_url: publicUrl,
-      });
-
-      if (dbErr || !updatedRest) {
-        const errorMsg = dbErr?.message || 'Falha ao gravar a capa no banco de dados Supabase (nenhuma linha atualizada).';
-        setStoreFormError(errorMsg);
-        showToast(errorMsg, 'error');
-        return;
-      }
-
-      const updatedRestaurant: Restaurant = {
-        ...currentRestaurant,
-        bannerUrl: publicUrl,
-      };
-      updateSingleRestaurant(updatedRestaurant);
-      onUpdateRestaurant?.(updatedRestaurant);
-      try {
-        await refreshMerchantStore();
-      } catch {
-        // Ignora erro eventual de refresh
-      }
-
       setBannerOptimizationInfo(
-        `Capa salva no Storage e banco: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor)`
+        `Capa preparada: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor)`
       );
-      showToast('Capa atualizada e gravada com sucesso!');
     } catch (err: any) {
       setStoreFormError(err.message || 'Erro ao processar imagem de capa.');
-      showToast(err.message || 'Erro ao processar imagem de capa.', 'error');
     } finally {
       setIsOptimizingBanner(false);
+      e.target.value = '';
     }
   };
 
-  // Upload e Otimização da Logo no Supabase Storage
   const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -402,52 +364,14 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setStoreFormError(null);
       const result = await optimizeImage(file, 800, 0.8);
       setStoreFormLogoUrl(result.dataUrl);
-
-      const restUuid = currentRestaurant.supabaseId || currentRestaurant.id;
-      const { publicUrl, error: uploadErr } = await uploadRestaurantImage(restUuid, result.dataUrl, 'logo');
-      if (uploadErr || !publicUrl) {
-        const errorMsg = uploadErr?.message || 'Falha ao enviar logo para o Storage.';
-        setStoreFormError(errorMsg);
-        showToast(errorMsg, 'error');
-        return;
-      }
-
-      setStoreFormLogoUrl(publicUrl);
-
-      // Persiste imediatamente a URL do logo no Supabase (public.restaurants.logo_url)
-      const { data: updatedRest, error: dbErr } = await updateRestaurantInSupabase({
-        id: restUuid,
-        logo_url: publicUrl,
-      });
-
-      if (dbErr || !updatedRest) {
-        const errorMsg = dbErr?.message || 'Falha ao gravar o logo no banco de dados Supabase (nenhuma linha atualizada).';
-        setStoreFormError(errorMsg);
-        showToast(errorMsg, 'error');
-        return;
-      }
-
-      const updatedRestaurant: Restaurant = {
-        ...currentRestaurant,
-        logoUrl: publicUrl,
-      };
-      updateSingleRestaurant(updatedRestaurant);
-      onUpdateRestaurant?.(updatedRestaurant);
-      try {
-        await refreshMerchantStore();
-      } catch {
-        // Ignora erro eventual de refresh
-      }
-
       setLogoOptimizationInfo(
-        `Logo salva no Storage e banco: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor)`
+        `Logo preparada: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor)`
       );
-      showToast('Logo atualizado e gravado com sucesso!');
     } catch (err: any) {
       setStoreFormError(err.message || 'Erro ao processar logo da loja.');
-      showToast(err.message || 'Erro ao processar logo da loja.', 'error');
     } finally {
       setIsOptimizingLogo(false);
+      e.target.value = '';
     }
   };
 
@@ -455,6 +379,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const handleSaveStore = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isOptimizingBanner || isOptimizingLogo) {
+      setStoreFormError('Aguarde o processamento das imagens terminar antes de salvar.');
+      return;
+    }
     if (!storeFormName.trim()) {
       setStoreFormError('O nome do estabelecimento é obrigatório.');
       return;
@@ -475,6 +403,31 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     const restUuid = currentRestaurant.supabaseId || currentRestaurant.id;
     let persistentBannerUrl = storeFormBannerUrl;
     let persistentLogoUrl = storeFormLogoUrl.trim();
+
+    const parsedPrepTime = storeFormPrepTime.trim() ? Number(storeFormPrepTime) : null;
+    const parsedLatitude = storeFormLatitude.trim() ? Number(storeFormLatitude.replace(',', '.')) : null;
+    const parsedLongitude = storeFormLongitude.trim() ? Number(storeFormLongitude.replace(',', '.')) : null;
+    if (parsedPrepTime !== null && (!Number.isInteger(parsedPrepTime) || parsedPrepTime < 1 || parsedPrepTime > 600)) {
+      setStoreFormError('Informe um tempo de preparo entre 1 e 600 minutos.');
+      return;
+    }
+    if ((parsedLatitude === null) !== (parsedLongitude === null) ||
+        (parsedLatitude !== null && (!Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90)) ||
+        (parsedLongitude !== null && (!Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180))) {
+      setStoreFormError('Informe latitude e longitude válidas, ou deixe os dois campos vazios.');
+      return;
+    }
+    const neighborhoodName = storeFormNeighborhoodId.trim();
+    const neighborhoodId = neighborhoodName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (!neighborhoodName) {
+      setStoreFormError('Informe o bairro do estabelecimento.');
+      return;
+    }
+    const trimmedOwnerName = storeFormOwner.trim();
+    if ((persistentBannerUrl.startsWith('data:') || persistentLogoUrl.startsWith('data:')) && isRealMerchant && !isSupabaseConfigured) {
+      setStoreFormError('Não foi possível conectar ao armazenamento. As imagens não foram salvas; tente novamente quando a conexão estiver disponível.');
+      return;
+    }
 
     // Se ainda estiver em base64 (DataURL), realiza o upload para o Supabase Storage
     if (persistentBannerUrl.startsWith('data:')) {
@@ -501,26 +454,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setStoreFormLogoUrl(publicUrl);
     }
 
-    const parsedPrepTime = storeFormPrepTime.trim() ? Number(storeFormPrepTime) : null;
-    const parsedLatitude = storeFormLatitude.trim() ? Number(storeFormLatitude.replace(',', '.')) : null;
-    const parsedLongitude = storeFormLongitude.trim() ? Number(storeFormLongitude.replace(',', '.')) : null;
-    if (parsedPrepTime !== null && (!Number.isInteger(parsedPrepTime) || parsedPrepTime < 1 || parsedPrepTime > 600)) {
-      setStoreFormError('Informe um tempo de preparo entre 1 e 600 minutos.');
-      return;
-    }
-    if ((parsedLatitude === null) !== (parsedLongitude === null) ||
-        (parsedLatitude !== null && (!Number.isFinite(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90)) ||
-        (parsedLongitude !== null && (!Number.isFinite(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180))) {
-      setStoreFormError('Informe latitude e longitude válidas, ou deixe os dois campos vazios.');
-      return;
-    }
-    const neighborhoodName = storeFormNeighborhoodId.trim();
-    const neighborhoodId = neighborhoodName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    if (!neighborhoodName) {
-      setStoreFormError('Informe o bairro do estabelecimento.');
-      return;
-    }
-    const trimmedOwnerName = storeFormOwner.trim();
 
     // O nome do responsável pertence ao estabelecimento, nunca ao perfil global do usuário.
     // Persistimos tudo junto em public.restaurants para evitar contaminar outras lojas.
@@ -611,7 +544,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     setIsProductModalOpen(true);
   };
 
-  // Otimiza a foto do produto e, para lojas reais, salva o arquivo no Supabase Storage.
+  // Prepara a foto do produto localmente. O upload só ocorre quando o cadastro é salvo.
   const handleProdImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -620,37 +553,12 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       setIsOptimizingProdImage(true);
       setProdFormError(null);
       const result = await optimizeImage(file, 1200, 0.8);
-
-      const restaurantStorageId =
-        currentRestaurant.supabaseId ||
-        (UUID_REGEX.test(selectedRestaurantId) ? selectedRestaurantId : null);
-
-      if (isRealMerchant && isSupabaseConfigured && !restaurantStorageId) {
-        throw new Error('Não foi possível identificar a loja no banco de dados. A foto não foi salva. Atualize sua sessão ou entre novamente.');
-      }
-
-      if (restaurantStorageId && isSupabaseConfigured) {
-        const { publicUrl, error } = await uploadRestaurantImage(
-          restaurantStorageId,
-          result.dataUrl,
-          'product'
-        );
-
-        if (error || !publicUrl || publicUrl.startsWith('data:')) {
-          throw new Error(error?.message || 'Não foi possível salvar a foto do produto no armazenamento.');
-        }
-
-        setProdImageUrl(publicUrl);
-      } else {
-        // Somente lojas locais/de demonstração podem manter imagem temporária em memória.
-        setProdImageUrl(result.dataUrl);
-      }
-
+      setProdImageUrl(result.dataUrl);
       setProdOptimizationInfo(
-        `Foto otimizada: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor, ${result.format.toUpperCase()})`
+        `Foto preparada: ${formatBytes(result.originalSize)} → ${formatBytes(result.optimizedSize)} (${result.reductionPercentage}% menor, ${result.format.toUpperCase()})`
       );
     } catch (err: any) {
-      setProdFormError(err.message || 'Erro ao processar ou enviar a foto do produto.');
+      setProdFormError(err.message || 'Erro ao processar foto do produto.');
     } finally {
       setIsOptimizingProdImage(false);
       e.target.value = '';
@@ -661,6 +569,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isOptimizingProdImage) {
+      setProdFormError('Aguarde a otimização da foto terminar antes de salvar.');
+      return;
+    }
     if (!prodName.trim()) {
       setProdFormError('O nome do produto é obrigatório.');
       return;
@@ -672,6 +584,38 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     }
 
     const parsedOrig = prodOriginalPrice ? parseFloat(prodOriginalPrice.replace(',', '.')) : undefined;
+    let persistentProductImage = prodImageUrl || editingProduct?.imageUrl || currentRestaurant.bannerUrl;
+    const restaurantStorageId =
+      currentRestaurant.supabaseId ||
+      (UUID_REGEX.test(currentRestaurant.id) ? currentRestaurant.id : null) ||
+      (UUID_REGEX.test(selectedRestaurantId) ? selectedRestaurantId : null);
+
+    if (persistentProductImage.startsWith('data:')) {
+      if (isRealMerchant && !isSupabaseConfigured) {
+        setProdFormError('Não foi possível conectar ao armazenamento. A foto não foi salva; tente novamente quando a conexão estiver disponível.');
+        return;
+      }
+      if (isRealMerchant && !restaurantStorageId) {
+        setProdFormError('Não foi possível identificar a loja no banco de dados. A foto não foi salva. Atualize sua sessão ou entre novamente.');
+        return;
+      }
+      if (isSupabaseConfigured && restaurantStorageId) {
+        const { publicUrl, error: uploadError } = await uploadRestaurantImage(
+          restaurantStorageId,
+          persistentProductImage,
+          'product'
+        );
+        if (uploadError || !publicUrl || publicUrl.startsWith('data:')) {
+          setProdFormError(uploadError?.message || 'Não foi possível salvar a foto do produto no armazenamento.');
+          return;
+        }
+        persistentProductImage = publicUrl;
+        setProdImageUrl(publicUrl);
+      } else if (isRealMerchant) {
+        setProdFormError('A foto do produto não pode ser salva sem conexão com o armazenamento.');
+        return;
+      }
+    }
 
     if (editingProduct) {
       const updatedItem: MenuItem = {
@@ -684,7 +628,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         badge: prodBadge.trim() || undefined,
         prepTimeMinutes: parseInt(prodPrepTime) || 20,
         isAvailable: editingProduct.isAvailable ?? true,
-        imageUrl: prodImageUrl || editingProduct.imageUrl,
+        imageUrl: persistentProductImage,
       };
 
       const { data, error } = await updateMenuItem(updatedItem);
@@ -692,7 +636,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         setProdFormError('Erro ao atualizar produto: ' + (error?.message || 'Falha ao atualizar'));
         return;
       }
-      
+
       const updatedList = menuItems.map((item) => (item.id === editingProduct.id ? data : item));
       setMenuItems(updatedList);
       saveRestaurantMenu(selectedRestaurantId, updatedList);
@@ -711,7 +655,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         badge: prodBadge.trim() || undefined,
         prepTimeMinutes: parseInt(prodPrepTime) || 20,
         isAvailable: true,
-        imageUrl: prodImageUrl || currentRestaurant.bannerUrl,
+        imageUrl: persistentProductImage,
       };
 
       const { data, error } = await insertMenuItem(newItem);
@@ -719,7 +663,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         setProdFormError('Erro ao adicionar produto: ' + (error?.message || 'Falha ao adicionar'));
         return;
       }
-      
+
       const updatedList = [data, ...menuItems];
       setMenuItems(updatedList);
       saveRestaurantMenu(selectedRestaurantId, updatedList);
@@ -826,17 +770,21 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       return;
     }
     try {
+      setIsOptimizingPromotionImage(true);
       const optimized = await optimizeImage(file, 1600, 0.8);
       setPromotionImageData(optimized.dataUrl);
       setPromotionImageUrl('');
       setPromotionError(null);
     } catch (error) {
       setPromotionError(error instanceof Error ? error.message : 'Não foi possível preparar a imagem.');
+    } finally {
+      setIsOptimizingPromotionImage(false);
     }
   };
 
   const handleSavePromotion = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isOptimizingPromotionImage) return setPromotionError('Aguarde o processamento da imagem terminar antes de salvar.');
     const discountPrice = Number(promotionDiscountPrice.replace(',', '.'));
     const regularPrice = Number(promotionRegularPrice.replace(',', '.'));
     if (!promotionTitle.trim()) return setPromotionError('Informe o título da promoção.');
@@ -859,6 +807,8 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         return;
       }
       finalImageUrl = upload.publicUrl;
+      setPromotionImageUrl(upload.publicUrl);
+      setPromotionImageData(null);
     }
     const changes = {
       title: promotionTitle.trim(),
@@ -1003,6 +953,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
   const handleSaveReward = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isOptimizingRewardImage) {
+      setRewardFormError('Aguarde o processamento da foto terminar antes de salvar.');
+      return;
+    }
     if (!rewardTitle.trim()) {
       setRewardFormError('O nome do prêmio é obrigatório.');
       return;
@@ -1053,6 +1007,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           return;
         }
         persistentRewardImg = publicUrl;
+        setRewardImageUrl(publicUrl);
       } else if (isRealMerchant) {
         setRewardFormError('A foto do prêmio não pode ser salva sem conexão com o armazenamento. Tente novamente.');
         return;
