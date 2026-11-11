@@ -622,6 +622,10 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         currentRestaurant.supabaseId ||
         (UUID_REGEX.test(selectedRestaurantId) ? selectedRestaurantId : null);
 
+      if (isRealMerchant && isSupabaseConfigured && !restaurantStorageId) {
+        throw new Error('Não foi possível identificar a loja no banco de dados. A foto não foi salva. Atualize sua sessão ou entre novamente.');
+      }
+
       if (restaurantStorageId && isSupabaseConfigured) {
         const { publicUrl, error } = await uploadRestaurantImage(
           restaurantStorageId,
@@ -629,13 +633,13 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           'product'
         );
 
-        if (error || !publicUrl) {
-          throw new Error(error?.message || 'Não foi possível salvar a foto do produto.');
+        if (error || !publicUrl || publicUrl.startsWith('data:')) {
+          throw new Error(error?.message || 'Não foi possível salvar a foto do produto no armazenamento.');
         }
 
         setProdImageUrl(publicUrl);
       } else {
-        // Mantém compatibilidade com lojas locais/de demonstração sem UUID no banco.
+        // Somente lojas locais/de demonstração podem manter imagem temporária em memória.
         setProdImageUrl(result.dataUrl);
       }
 
@@ -1013,10 +1017,26 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
       (selectedRestaurantId && UUID_REGEX.test(selectedRestaurantId) && selectedRestaurantId) ||
       null;
 
-    if (targetRestUuid && persistentRewardImg.startsWith('data:')) {
-      const { publicUrl } = await uploadRestaurantImage(targetRestUuid, persistentRewardImg, 'reward');
-      if (publicUrl) {
+    if (persistentRewardImg.startsWith('data:')) {
+      if (isSupabaseConfigured && isRealMerchant && !targetRestUuid) {
+        setRewardFormError('Não foi possível identificar a loja no banco de dados. A foto do prêmio não foi salva. Atualize sua sessão ou entre novamente.');
+        return;
+      }
+
+      if (targetRestUuid && isSupabaseConfigured) {
+        const { publicUrl, error: uploadError } = await uploadRestaurantImage(
+          targetRestUuid,
+          persistentRewardImg,
+          'reward'
+        );
+        if (uploadError || !publicUrl || publicUrl.startsWith('data:')) {
+          setRewardFormError(uploadError?.message || 'Não foi possível salvar a foto do prêmio no armazenamento. Tente novamente.');
+          return;
+        }
         persistentRewardImg = publicUrl;
+      } else if (isRealMerchant) {
+        setRewardFormError('A foto do prêmio não pode ser salva sem conexão com o armazenamento. Tente novamente.');
+        return;
       }
     }
 
