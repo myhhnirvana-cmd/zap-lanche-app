@@ -708,14 +708,14 @@ export async function updateRestaurantInSupabase(input: UpdateRestaurantInput) {
 }
 
 /**
- * Realiza upload de foto de capa (banner) ou logo no bucket do Supabase Storage ('Zaplanche-images').
+ * Realiza upload de imagens da loja, produtos, prêmios e promoções no bucket do Supabase Storage ('Zaplanche-images').
  * Converte base64 (DataURL) para Blob e retorna a URL pública persistente no Supabase.
  * O caminho no Storage segue estritamente o formato: restaurants/<UUID>/<imageType>-<timestamp>.<ext>
  */
 export async function uploadRestaurantImage(
   restaurantId: string,
   dataUrlOrFile: string | File | Blob,
-  imageType: 'banner' | 'logo' | 'reward' | 'promotion'
+  imageType: 'banner' | 'logo' | 'reward' | 'promotion' | 'product'
 ): Promise<{ publicUrl: string | null; error: Error | null }> {
   if (!isSupabaseConfigured || !supabase) {
     return { publicUrl: null, error: new Error('Supabase não configurado') };
@@ -847,8 +847,7 @@ function mapDbRowToMenuItem(row: any, originalInput?: Partial<MenuItem>): MenuIt
 
 /**
  * Cria um item de cardápio no Supabase.
- * A tabela public.menu_items contém exclusivamente as colunas:
- * id, restaurant_id, name, description, price, image_url, available, created_at.
+ * Persiste os campos do cardápio, incluindo preço promocional, categoria, selo e tempo de preparo.
  */
 export async function insertMenuItem(item: Omit<MenuItem, 'id'> & { restaurantId: string }) {
   if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
@@ -900,7 +899,7 @@ export async function insertMenuItem(item: Omit<MenuItem, 'id'> & { restaurantId
 
 /**
  * Atualiza um item de cardápio no Supabase.
- * Envia exclusivamente as colunas reais da tabela public.menu_items.
+ * Atualiza os campos persistidos do item de cardápio.
  */
 export async function updateMenuItem(item: MenuItem) {
   if (!isSupabaseConfigured || !supabase) return { data: null, error: new Error('Supabase não configurado') };
