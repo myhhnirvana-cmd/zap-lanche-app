@@ -221,7 +221,6 @@ export async function fetchMerchantRestaurant(
       .from('restaurants')
       .select('*')
       .eq('owner_profile_id', userId)
-      .eq('status', 'ativo')
       .maybeSingle();
 
     if (error || !data) {
