@@ -737,10 +737,13 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
     if (!deletingProduct || isDeletingProduct) return;
     setIsDeletingProduct(true);
     try {
-      const { error } = await deleteMenuItem(deletingProduct.supabaseId || deletingProduct.id);
-      if (error) {
-        showToast('Não foi possível excluir o produto: ' + error.message, 'error');
-        return;
+      const productId = deletingProduct.supabaseId || deletingProduct.id;
+      if (UUID_REGEX.test(productId)) {
+        const { error } = await deleteMenuItem(productId);
+        if (error) {
+          showToast('Não foi possível excluir o produto: ' + error.message, 'error');
+          return;
+        }
       }
       const remaining = menuItems.filter((item) => item.id !== deletingProduct.id);
       setMenuItems(remaining);
@@ -1199,7 +1202,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         const { error } = await deleteRewardFromSupabase(deletingReward.id);
         if (error) {
           const deletionError = error as Error & { code?: string };
-          if (deletionError.code === '23503') {
+          if (deletionError.code === '23503' && deletionError.message.includes('loyalty_redemptions')) {
             const { data: archivedReward, error: archiveError } = await updateRewardInSupabase({
               id: deletingReward.id,
               status: 'pausado',
