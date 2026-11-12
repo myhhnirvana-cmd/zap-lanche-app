@@ -40,7 +40,6 @@ import {
   MOCK_ADMIN_STATS,
   MOCK_REGIONAL_HIGHLIGHTS,
   MOCK_ADMIN_NOTICES,
-  MOCK_ADMIN_AUDIT_LOGS,
   NEIGHBORHOODS,
   loadRegionalHighlights,
   saveRegionalHighlights,
@@ -51,6 +50,17 @@ import { supabase, SUPABASE_STORAGE_BUCKET, isSupabaseConfigured, insertRestaura
 import { useAuth } from '../contexts/AuthContext';
 import { CommunityModeration } from './CommunityModeration';
 
+interface AdminAuditEntry {
+  id: string;
+  event_type: string;
+  action: string;
+  actor_profile_id: string | null;
+  restaurant_id: string | null;
+  source_table: string;
+  details: { record_name?: string | null; points?: string | null; transaction_type?: string | null };
+  created_at: string;
+}
+
 interface AdminViewProps {
   onOpenGitHubGuide: () => void;
   onRestaurantAdded?: () => void;
@@ -59,7 +69,10 @@ interface AdminViewProps {
 export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onRestaurantAdded }) => {
   const { session, user } = useAuth();
   const [stats, setStats] = useState<AdminDemoStats>(MOCK_ADMIN_STATS);
-  const [pendingDeletion, setPendingDeletion] = useState<{ type: 'highlight' | 'notice' | 'audit'; id: string; title: string } | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AdminAuditEntry[]>([]);
+  const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(true);
+  const [auditLogsError, setAuditLogsError] = useState<string | null>(null);
+  const [pendingDeletion, setPendingDeletion] = useState<{ type: 'highlight' | 'notice'; id: string; title: string } | null>(null);
   const [pendingRestaurantDeletion, setPendingRestaurantDeletion] = useState<{ id: string; name: string } | null>(null);
   const [restaurantDeletionConfirmation, setRestaurantDeletionConfirmation] = useState('');
   const [restaurantManagementError, setRestaurantManagementError] = useState<string | null>(null);
@@ -152,6 +165,42 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
   useEffect(() => {
     loadAvailableRestaurants();
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAuditLogs = async () => {
+      if (!supabase || !isSupabaseConfigured) {
+        if (isMounted) {
+          setAuditLogsError('Conexão com o banco de dados indisponível.');
+          setIsLoadingAuditLogs(false);
+        }
+        return;
+      }
+
+      setIsLoadingAuditLogs(true);
+      const { data, error: queryError } = await supabase
+        .from('admin_audit_logs')
+        .select('id,event_type,action,actor_profile_id,restaurant_id,source_table,details,created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (!isMounted) return;
+      if (queryError) {
+        setAuditLogsError(queryError.message);
+        setAuditLogs([]);
+      } else {
+        setAuditLogsError(null);
+        setAuditLogs((data || []) as AdminAuditEntry[]);
+      }
+      setIsLoadingAuditLogs(false);
+    };
+
+    void loadAuditLogs();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
 
   const handleDeleteRestaurantPermanently = async () => {
     if (!pendingRestaurantDeletion || !supabase || restaurantDeletionConfirmation.trim() !== pendingRestaurantDeletion.name) return;
@@ -396,11 +445,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
     if (item) setPendingDeletion({ type: 'notice', id, title: item.title });
   };
 
-  const handleDeleteAuditLog = (id: string) => {
-    const item = stats.auditLogs.find((log) => log.id === id);
-    if (item) setPendingDeletion({ type: 'audit', id, title: item.action });
-  };
-
   const confirmPendingDeletion = () => {
     if (!pendingDeletion) return;
     const { type, id } = pendingDeletion;
@@ -416,8 +460,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
         saveAdminNotices(updated);
         return updated;
       });
-    } else {
-      setStats((prev) => ({ ...prev, auditLogs: prev.auditLogs.filter((log) => log.id !== id) }));
     }
     setPendingDeletion(null);
   };
@@ -1285,48 +1327,67 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
       </div>
 
       {/* ============================================================ */}
-      {/* 5. REGISTRO DE AUDITORIA SIMPLES (AUDIT LOGS)                */}
-      {/* ============================================================ */}
+      {/* 5. REGISTRO DE AUDITORIA REAL */}
       <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-3">
-        <h3 className="text-sm font-bold text-white flex items-center gap-2">
-          <Shield className="w-4 h-4 text-orange-400" />
-          Registro de Auditoria e Ações Recentes
-        </h3>
-        <p className="text-xs text-slate-400">
-          Transparência das movimentações do sistema e concessões de pontos
-        </p>
-
-        <div className="space-y-2">
-          {stats.auditLogs.map((log) => (
-            <div
-              key={log.id}
-              className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs flex items-center justify-between"
-            >
-              <div>
-                <span className="font-bold text-amber-300 block">
-                  {log.action}
-                </span>
-                <span className="text-slate-300 text-[11px]">
-                  {log.detail}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="text-right text-[10px] text-slate-400">
-                  <span>{log.performedBy}</span>
-                  <span className="block">{log.timestamp}</span>
-                </div>
-                <button
-                  onClick={() => handleDeleteAuditLog(log.id)}
-                  title="Excluir registro"
-                  aria-label={`Excluir registro ${log.action}`}
-                  className="p-2 rounded-lg border border-rose-500/30 text-rose-300 hover:bg-rose-500/20"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Shield className="w-4 h-4 text-orange-400" />
+              Registro de Auditoria e Ações Recentes
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Histórico protegido de movimentações de pontos e alterações relevantes no banco.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-300">
+            Registro real
+          </span>
         </div>
+
+        {isLoadingAuditLogs ? (
+          <div className="flex items-center gap-2 py-5 text-xs text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Carregando movimentações...
+          </div>
+        ) : auditLogsError ? (
+          <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+            Não foi possível carregar o histórico: {auditLogsError}
+          </p>
+        ) : auditLogs.length === 0 ? (
+          <p className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-xs text-slate-400">
+            Nenhuma ação registrada ainda. As próximas movimentações de pontos e alterações em lojas, cardápios, prêmios e promoções aparecerão aqui.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {auditLogs.map((log) => (
+              <div key={log.id} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="block font-bold text-amber-300">{log.action}</span>
+                    {log.details?.record_name && (
+                      <span className="mt-0.5 block text-slate-200">{log.details.record_name}</span>
+                    )}
+                    {log.event_type === 'pontos' && log.details?.points && (
+                      <span className="mt-1 block text-slate-300">
+                        {Number(log.details.points) > 0 ? '+' : ''}{log.details.points} pontos
+                        {log.details.transaction_type ? ` · ${log.details.transaction_type}` : ''}
+                      </span>
+                    )}
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      {log.source_table}{log.restaurant_id ? ` · Loja: ${log.restaurant_id.slice(0, 8)}…` : ''}
+                    </span>
+                  </div>
+                  <div className="shrink-0 text-left sm:text-right text-[10px] text-slate-400">
+                    <span className="block">{log.actor_profile_id ? `Conta ${log.actor_profile_id.slice(0, 8)}…` : 'Sistema / automação'}</span>
+                    <time dateTime={log.created_at}>{new Date(log.created_at).toLocaleString('pt-BR')}</time>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-[10px] text-slate-500">
+          Os registros são somente leitura no painel e não podem ser apagados por aqui.
+        </p>
       </div>
 
       {pendingRestaurantDeletion && (
