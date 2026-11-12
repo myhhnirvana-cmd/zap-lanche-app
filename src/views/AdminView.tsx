@@ -29,6 +29,7 @@ import {
   Loader2,
   Share2,
   Trash2,
+  HelpCircle,
 } from 'lucide-react';
 import {
   AdminDemoStats,
@@ -61,6 +62,30 @@ interface AdminAuditEntry {
   created_at: string;
 }
 
+const AdminHelpText: React.FC<{ text: string }> = ({ text }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        aria-label={isOpen ? 'Ocultar explicação' : 'Ver explicação'}
+        title="Como funciona?"
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-orange-500/10 hover:text-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+      </button>
+      {isOpen && (
+        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-400">
+          {text}
+        </p>
+      )}
+    </div>
+  );
+};
+
 interface AdminViewProps {
   onOpenGitHubGuide: () => void;
   onRestaurantAdded?: () => void;
@@ -72,6 +97,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
   const [auditLogs, setAuditLogs] = useState<AdminAuditEntry[]>([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(true);
   const [auditLogsError, setAuditLogsError] = useState<string | null>(null);
+  const [auditPage, setAuditPage] = useState(0);
   const [pendingDeletion, setPendingDeletion] = useState<{ type: 'highlight' | 'notice'; id: string; title: string } | null>(null);
   const [pendingRestaurantDeletion, setPendingRestaurantDeletion] = useState<{ id: string; name: string } | null>(null);
   const [restaurantDeletionConfirmation, setRestaurantDeletionConfirmation] = useState('');
@@ -528,7 +554,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
             </span>
             <div>
               <h3 className="font-bold text-white text-sm">Gerenciamento de Ambiente Supabase</h3>
-              <p className="text-xs text-slate-400">Alterne entre o ambiente oficial de Produção e o ambiente isolado de Homologação.</p>
+              <AdminHelpText text="Alterne entre o ambiente oficial de Produção e o ambiente isolado de Homologação." />
             </div>
           </div>
           <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${getCurrentEnvironment() === 'homologation' ? 'bg-amber-500 text-black' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
@@ -564,9 +590,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
               Painel Administrativo Geral (ZAP LANCHE)
             </h2>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Gestão macro dos bairros, moderação de destaques regionais e regras do programa de fidelidade
-          </p>
+          <AdminHelpText text="Gestão macro dos bairros, moderação de destaques regionais e regras do programa de fidelidade" />
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -611,7 +635,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
           <Building2 className="w-4 h-4 text-orange-400" />
           <div>
             <h3 className="text-sm font-bold text-white">Gerenciar lojas cadastradas</h3>
-            <p className="text-xs text-slate-400">Remova estabelecimentos do aplicativo sem apagar o histórico de clientes, pontos, avaliações e publicações.</p>
+            <AdminHelpText text="Remova estabelecimentos do aplicativo sem apagar o histórico de clientes, pontos, avaliações e publicações." />
           </div>
         </div>
         {availableRestaurants.length === 0 ? (
@@ -838,9 +862,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-slate-400">
-                  Será gerado um código aleatório válido por 24 horas. Compartilhe-o somente com a pessoa que assumirá o estabelecimento.
-                </p>
+                <AdminHelpText text="Será gerado um código aleatório válido por 24 horas. Compartilhe-o somente com a pessoa que assumirá o estabelecimento." />
               )}
               {inviteError && (
                 <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2 text-rose-300 text-xs animate-fade-in">
@@ -965,9 +987,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
               <Sliders className="w-4 h-4 text-orange-400" />
               Configuração dos Parâmetros do Programa
             </h3>
-            <p className="text-xs text-slate-400">
-              Ajuste do pacote promocional e valores de referência futuros
-            </p>
+            <AdminHelpText text="Ajuste do pacote promocional e valores de referência futuros" />
           </div>
           <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30">
             Fase de Lançamento Gratuito Ativa
@@ -1038,9 +1058,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
               <Sparkles className="w-4 h-4 text-orange-400" />
               Moderação de Destaques Regionais (5 Estados)
             </h3>
-            <p className="text-xs text-slate-400">
-              Gerencie as solicitações de presença prioritária no topo dos bairros parceiros
-            </p>
+            <AdminHelpText text="Gerencie as solicitações de presença prioritária no topo dos bairros parceiros" />
           </div>
 
           {/* State Filter Buttons */}
@@ -1185,9 +1203,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
               <Bell className="w-4 h-4 text-orange-400" />
               Avisos Comunitários para os Moradores e Lojistas
             </h3>
-            <p className="text-xs text-slate-400">
-              Comunique novidades da fase de lançamento para bairros específicos
-            </p>
+            <AdminHelpText text="Comunique novidades da fase de lançamento para bairros específicos" />
           </div>
 
           <button
@@ -1328,16 +1344,14 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
 
       {/* ============================================================ */}
       {/* 5. REGISTRO DE AUDITORIA REAL */}
-      <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-3">
+      <div className="rounded-3xl bg-[#13151f] border border-slate-800 p-4 sm:p-5 space-y-3">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Shield className="w-4 h-4 text-orange-400" />
+              <Shield className="w-4 h-4 text-orange-400 shrink-0" />
               Registro de Auditoria e Ações Recentes
             </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Histórico protegido de movimentações de pontos e alterações relevantes no banco.
-            </p>
+            <AdminHelpText text="Histórico protegido de movimentações de pontos e alterações relevantes no banco." />
           </div>
           <span className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-300">
             Registro real
@@ -1357,33 +1371,59 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
             Nenhuma ação registrada ainda. As próximas movimentações de pontos e alterações em lojas, cardápios, prêmios e promoções aparecerão aqui.
           </p>
         ) : (
-          <div className="space-y-2">
-            {auditLogs.map((log) => (
-              <div key={log.id} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-xs">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                  <div className="min-w-0">
-                    <span className="block font-bold text-amber-300">{log.action}</span>
-                    {log.details?.record_name && (
-                      <span className="mt-0.5 block text-slate-200">{log.details.record_name}</span>
-                    )}
-                    {log.event_type === 'pontos' && log.details?.points && (
-                      <span className="mt-1 block text-slate-300">
-                        {Number(log.details.points) > 0 ? '+' : ''}{log.details.points} pontos
-                        {log.details.transaction_type ? ` · ${log.details.transaction_type}` : ''}
-                      </span>
-                    )}
-                    <span className="mt-1 block text-[10px] text-slate-500">
-                      {log.source_table}{log.restaurant_id ? ` · Loja: ${log.restaurant_id.slice(0, 8)}…` : ''}
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              {auditLogs.slice(auditPage * 4, auditPage * 4 + 4).map((log) => (
+                <div key={log.id} className="min-w-0 rounded-xl border border-slate-800 bg-slate-900 p-2.5 text-[10px] sm:p-3">
+                  <span className="block truncate font-bold text-amber-300" title={log.action}>{log.action}</span>
+                  {log.details?.record_name && (
+                    <span className="mt-0.5 block truncate text-slate-200" title={log.details.record_name}>{log.details.record_name}</span>
+                  )}
+                  {log.event_type === 'pontos' && log.details?.points && (
+                    <span className="mt-1 block text-slate-300">
+                      {Number(log.details.points) > 0 ? '+' : ''}{log.details.points} pts
+                      {log.details.transaction_type ? ` · ${log.details.transaction_type}` : ''}
                     </span>
-                  </div>
-                  <div className="shrink-0 text-left sm:text-right text-[10px] text-slate-400">
-                    <span className="block">{log.actor_profile_id ? `Conta ${log.actor_profile_id.slice(0, 8)}…` : 'Sistema / automação'}</span>
-                    <time dateTime={log.created_at}>{new Date(log.created_at).toLocaleString('pt-BR')}</time>
+                  )}
+                  <span className="mt-1 block truncate text-[9px] text-slate-500" title={log.source_table}>
+                    {log.source_table}
+                  </span>
+                  <div className="mt-1 border-t border-slate-800 pt-1 text-[9px] text-slate-400">
+                    <span className="block truncate">{log.actor_profile_id ? `Conta ${log.actor_profile_id.slice(0, 8)}…` : 'Sistema / automação'}</span>
+                    <time className="block" dateTime={log.created_at}>
+                      {new Date(log.created_at).toLocaleDateString('pt-BR')} · {new Date(log.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </time>
                   </div>
                 </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <span className="text-[10px] text-slate-500">
+                {auditPage * 4 + 1}–{Math.min(auditPage * 4 + 4, auditLogs.length)} de {auditLogs.length} registros
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAuditPage((page) => Math.max(0, page - 1))}
+                  disabled={auditPage === 0}
+                  className="rounded-lg border border-slate-700 px-2.5 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-35"
+                >
+                  Anterior
+                </button>
+                <span className="min-w-10 text-center text-[10px] text-slate-400">
+                  {auditPage + 1}/{Math.max(1, Math.ceil(auditLogs.length / 4))}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAuditPage((page) => Math.min(Math.ceil(auditLogs.length / 4) - 1, page + 1))}
+                  disabled={auditPage >= Math.ceil(auditLogs.length / 4) - 1}
+                  className="rounded-lg border border-slate-700 px-2.5 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-35"
+                >
+                  Próxima
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+          </>
         )}
         <p className="text-[10px] text-slate-500">
           Os registros são somente leitura no painel e não podem ser apagados por aqui.
