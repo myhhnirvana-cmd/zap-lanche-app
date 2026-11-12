@@ -68,7 +68,7 @@ interface AdminViewProps {
 
 export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onRestaurantAdded }) => {
   const { session, user } = useAuth();
-  const [stats, setStats] = useState<AdminDemoStats>(MOCK_ADMIN_STATS);
+  const stats: AdminDemoStats = MOCK_ADMIN_STATS;
   const [auditLogs, setAuditLogs] = useState<AdminAuditEntry[]>([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(true);
   const [auditLogsError, setAuditLogsError] = useState<string | null>(null);
