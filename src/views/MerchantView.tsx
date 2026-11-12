@@ -1379,7 +1379,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         steps={[
           "Mantenha o cardápio atualizado com fotos reais e preços em dia.",
           "Check-in no balcão: cada check-in concede 5 pontos locais ao cliente (intervalo mínimo de 2 horas).",
-          "Recompensas com Regra 70/30: exige no mínimo 70% de pontos da sua loja e até 30% globais da rede.",
           "Validação obrigatória de vouchers: valide o código no painel antes de entregar a cortesia ao cliente."
         ]}
       />
@@ -1657,11 +1656,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
           </div>
         </div>
 
-        {/* Informative distinction notice */}
-        <HelpText>
-          <strong>Distinção entre cardápio e recompensas:</strong> prêmios de fidelidade não são vendidos por dinheiro. O resgate exige no mínimo 70% de pontos desta loja e permite até 30% de pontos globais. Pontos de outras lojas não participam. Cada prêmio tem estoque próprio; itens esgotados ou pausados deixam de aparecer para resgate.
-        </HelpText>
-
         {/* List of Rewards */}
         {rewardsList.length === 0 ? (
           <div className="text-center py-10 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
@@ -1833,23 +1827,22 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 Validação de Voucher no Balcão (Entrega de Cortesia)
               </h3>
             </div>
-            <HelpText>Valide o código fornecido pelo morador antes de entregar a cortesia. O sistema confere a autenticidade e dá baixa imediata.</HelpText>
+            <HelpText>
+              <strong>Como funciona a segurança 70/30 e a validação:</strong> prêmios de fidelidade são cortesias resgatadas com pontos, não são vendidos por dinheiro. O resgate exige no mínimo 70% de pontos conquistados nesta loja e permite até 30% de pontos globais da rede. Pontos de outras lojas não participam.
+              <ul className="mt-1 list-disc space-y-1 pl-4">
+                <li>Valide o voucher no painel antes de entregar a cortesia.</li>
+                <li>Somente esta loja ou um administrador pode validar vouchers emitidos para esta loja.</li>
+                <li>Recuse códigos já utilizados, cancelados, expirados ou de outro restaurante.</li>
+              </ul>
+              O sistema confere a autenticidade do código e dá baixa imediata.
+            </HelpText>
           </div>
           <span className="text-xs px-2.5 py-1 rounded-xl bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30 self-start sm:self-auto shrink-0">
             Segurança 70/30
           </span>
         </div>
 
-        {/* Regras Operacionais para o Lojista */}
-        <HelpText>
-          <strong>Regras obrigatórias de validação:</strong>
-          <ul className="mt-1 list-disc space-y-1 pl-4">
-            <li>Valide o voucher no painel antes de entregar o prêmio.</li>
-            <li>Somente esta loja ou um administrador pode validar vouchers emitidos para esta loja.</li>
-            <li>Recuse códigos já utilizados, cancelados, expirados ou de outro restaurante.</li>
-            <li>A regra 70/30 exige pelo menos 70% dos pontos conquistados nesta loja e permite até 30% de pontos globais.</li>
-          </ul>
-        </HelpText>
+
 
         <form onSubmit={handleValidateVoucher} className="flex flex-col sm:flex-row gap-2.5 pt-1">
           <div className="flex-1 relative">
