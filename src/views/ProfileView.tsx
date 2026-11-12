@@ -39,6 +39,7 @@ import { parseAndValidateRestaurantQr } from '../utils/qrCode';
 import { MOCK_RESTAURANTS } from '../data/mockData';
 import { ThemeSelector } from '../components/common/ThemeSelector';
 import { GuideSection } from '../components/common/GuideSection';
+import { HelpText } from '../components/common/HelpText';
 
 interface ProfileViewProps {
   onSelectRestaurantById: (
@@ -562,9 +563,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </span>
         </div>
 
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Pontos globais acumulados por indicações de amigos (15 pontos por amigo após o 1º check-in validado dele). Podem ser utilizados para cobrir até 30% do valor de qualquer resgate na rede.
-        </p>
+        <HelpText>Pontos globais são acumulados por indicações: você recebe 15 pontos quando o amigo indicado realiza o primeiro check-in validado. Eles podem cobrir até 30% de um resgate na rede e têm validade de 180 dias.</HelpText>
 
         {loadingRealPoints ? (
           <div className="text-xs text-text-secondary text-center py-6">
@@ -612,15 +611,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
         </div>
 
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Os pontos locais pertencem exclusivamente a cada restaurante onde foram conquistados (check-ins de +5 pontos com intervalo de 2 horas). Para resgatar uma recompensa, você precisa de no mínimo 70% do custo em pontos da loja escolhida. Pontos de uma loja não podem ser usados em outra.
-        </p>
-        <div className="flex items-start gap-2 rounded-xl bg-orange-500/10 border border-orange-500/20 p-3">
-          <Info className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Aqui no seu perfil você acompanha um resumo dos pontos de cada estabelecimento. Para conferir as regras, consultar o programa e usar seus pontos em prêmios, abra a loja desejada e entre na aba <strong className="text-orange-300">Clube Fidelidade</strong>. Os pontos locais só valem na loja onde foram conquistados.
-          </p>
-        </div>
+        <HelpText>
+          Os pontos locais são exclusivos do restaurante onde foram conquistados. Cada check-in validado concede 5 pontos, respeitando o intervalo de 2 horas. Para resgatar um prêmio, pelo menos 70% do custo deve vir da loja escolhida; pontos de outra loja não podem ser usados. Para consultar e resgatar, abra a loja e acesse Clube Fidelidade.
+        </HelpText>
 
         {loadingRealPoints ? (
           <p className="text-xs text-slate-500 text-center py-4">Calculando saldos por loja...</p>
@@ -663,9 +656,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </span>
         </div>
 
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Compartilhe seu código exclusivo. Quando seu amigo convidado se cadastrar e realizar o <strong>primeiro check-in validado</strong> em qualquer lanchonete participante, você recebe <strong>15 pontos globais</strong> creditados na sua carteira! Os pontos de indicação têm validade de <strong>180 dias</strong> e podem cobrir até 30% do valor dos seus resgates.
-        </p>
+        <HelpText>
+          Compartilhe seu código. Quando a pessoa convidada se cadastrar e fizer o primeiro check-in validado em uma loja participante, você recebe 15 pontos globais. Eles valem por 180 dias e podem cobrir até 30% dos resgates.
+        </HelpText>
 
         {/* Meu Código e Compartilhamento */}
         <div className="p-4 rounded-2xl bg-purple-950/20 border border-purple-500/30 space-y-3">
