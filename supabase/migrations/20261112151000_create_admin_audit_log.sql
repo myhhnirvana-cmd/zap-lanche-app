@@ -56,6 +56,13 @@ begin
   end if;
   v_subject_profile_id := nullif(v_row ->> 'profile_id', '')::uuid;
 
+  -- A cascade delete may fire child-table triggers after the restaurant row
+  -- has already disappeared. Keep the audit insert independent of that FK.
+  if v_restaurant_id is not null
+     and not exists (select 1 from public.restaurants r where r.id = v_restaurant_id) then
+    v_restaurant_id := null;
+  end if;
+
   v_event_type := case
     when tg_table_name = 'loyalty_transactions' then 'pontos'
     when tg_table_name = 'restaurants' then 'lojas'
