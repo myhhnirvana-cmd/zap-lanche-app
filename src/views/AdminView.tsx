@@ -30,6 +30,8 @@ import {
   Share2,
   Trash2,
   HelpCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   AdminDemoStats,
@@ -151,6 +153,9 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
   const [hasCopiedInvite, setHasCopiedInvite] = useState(false);
 
   // Lista de lanchonetes com seus UUIDs reais do Supabase
+  const [showRestaurantManagement, setShowRestaurantManagement] = useState(false);
+  const [restaurantPage, setRestaurantPage] = useState(0);
+
   const [availableRestaurants, setAvailableRestaurants] = useState<
     Array<{ id: string; name: string; neighborhood?: string; owner_profile_id?: string | null; status: string }>
   >([]);
@@ -629,47 +634,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
         </div>
       </div>
 
-      {/* Gerenciamento de estabelecimentos */}
-      <section className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Building2 className="w-4 h-4 text-orange-400" />
-          <div>
-            <h3 className="text-sm font-bold text-white">Gerenciar lojas cadastradas</h3>
-            <AdminHelpText text="Remova estabelecimentos do aplicativo sem apagar o histórico de clientes, pontos, avaliações e publicações." />
-          </div>
-        </div>
-        {availableRestaurants.length === 0 ? (
-          <p className="text-xs text-slate-400">Nenhuma loja encontrada neste ambiente.</p>
-        ) : (
-          <div className="space-y-2">
-            {availableRestaurants.map((restaurant) => (
-              <div key={restaurant.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{restaurant.name}</p>
-                  <p className="text-[11px] text-slate-400">{restaurant.neighborhood || 'Bairro não informado'} · {restaurant.owner_profile_id ? 'Com responsável vinculado' : 'Sem responsável vinculado'}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${restaurant.status === 'ativo' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}>
-                    {restaurant.status === 'ativo' ? 'Ativa' : 'Inativa'}
-                  </span>
-                  {(
-                    <button
-                      type="button"
-                      onClick={() => { setPendingRestaurantDeletion({ id: restaurant.id, name: restaurant.name }); setRestaurantDeletionConfirmation(''); }}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Excluir definitivamente
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {restaurantManagementError && <p role="alert" className="text-xs text-rose-300">{restaurantManagementError}</p>}
-      </section>
-
       {/* Formulário de Convite de Comerciante */}
       {showInviteForm && (
         <div className="p-5 rounded-3xl bg-slate-900 border border-amber-500/40 space-y-4 animate-fade-in shadow-xl">
@@ -919,7 +883,80 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
         </div>
       )}
 
-      {/* KPI Cards */}
+      {/* Gerenciamento de estabelecimentos */}
+      <section className="rounded-3xl bg-[#13151f] border border-slate-800 p-5 space-y-4">
+        <button
+          type="button"
+          onClick={() => setShowRestaurantManagement((open) => !open)}
+          aria-expanded={showRestaurantManagement}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <Building2 className="h-4 w-4 shrink-0 text-orange-400" />
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-white">Gerenciar lojas cadastradas</span>
+              <span className="mt-0.5 block text-[11px] text-slate-400">{availableRestaurants.length} estabelecimento(s) neste ambiente · 2 por página</span>
+            </span>
+          </span>
+          {showRestaurantManagement ? <ChevronUp className="h-4 w-4 shrink-0 text-slate-400" /> : <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />}
+        </button>
+        {showRestaurantManagement && (
+          <div className="space-y-3">
+            <AdminHelpText text="Remova estabelecimentos do aplicativo. A exclusão definitiva é irreversível e exige confirmação pelo nome da loja." />
+        {availableRestaurants.length === 0 ? (
+          <p className="text-xs text-slate-400">Nenhuma loja encontrada neste ambiente.</p>
+        ) : (
+          <div className="space-y-2">
+            {availableRestaurants.slice(restaurantPage * 2, restaurantPage * 2 + 2).map((restaurant) => (
+              <div key={restaurant.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{restaurant.name}</p>
+                  <p className="text-[11px] text-slate-400">{restaurant.neighborhood || 'Bairro não informado'} · {restaurant.owner_profile_id ? 'Com responsável vinculado' : 'Sem responsável vinculado'}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${restaurant.status === 'ativo' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}>
+                    {restaurant.status === 'ativo' ? 'Ativa' : 'Inativa'}
+                  </span>
+                  {(
+                    <button
+                      type="button"
+                      onClick={() => { setPendingRestaurantDeletion({ id: restaurant.id, name: restaurant.name }); setRestaurantDeletionConfirmation(''); }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Excluir definitivamente
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+            {restaurantManagementError && <p role="alert" className="text-xs text-rose-300">{restaurantManagementError}</p>}
+            {availableRestaurants.length > 2 && (
+              <div className="flex items-center justify-between border-t border-slate-800 pt-3">
+                <span className="text-[10px] text-slate-500">
+                  {restaurantPage * 2 + 1}–{Math.min(restaurantPage * 2 + 2, availableRestaurants.length)} de {availableRestaurants.length} lojas
+                </span>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setRestaurantPage((page) => Math.max(0, page - 1))} disabled={restaurantPage === 0} className="rounded-lg border border-slate-700 px-2.5 py-1 text-[10px] font-semibold text-slate-300 disabled:opacity-35">Anterior</button>
+                  <span className="text-[10px] text-slate-400">{restaurantPage + 1}/{Math.ceil(availableRestaurants.length / 2)}</span>
+                  <button type="button" onClick={() => setRestaurantPage((page) => Math.min(Math.ceil(availableRestaurants.length / 2) - 1, page + 1))} disabled={restaurantPage >= Math.ceil(availableRestaurants.length / 2) - 1} className="rounded-lg border border-slate-700 px-2.5 py-1 text-[10px] font-semibold text-slate-300 disabled:opacity-35">Próxima</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Indicadores demonstrativos, ainda sem integração com métricas reais */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-bold text-slate-300">Visão geral</h3>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-300">Indicadores demonstrativos</span>
+        </div>
+        <p className="text-[10px] leading-relaxed text-slate-500">Estes números são exemplos de apresentação e não representam métricas atualizadas do banco de dados.</p>
+      </section>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="p-4 rounded-2xl bg-[#13151f] border border-slate-800">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
