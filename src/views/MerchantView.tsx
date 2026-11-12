@@ -53,6 +53,7 @@ import { optimizeImage, formatBytes } from '../utils/imageOptimizer';
 import { useAuth } from '../contexts/AuthContext';
 import { RestaurantQrCodeCard } from '../components/loyalty/RestaurantQrCodeCard';
 import { GuideSection } from '../components/common/GuideSection';
+import { HelpText } from '../components/common/HelpText';
 import { CheckInQrSection } from '../components/merchant/CheckInQrSection';
 import {
   insertMenuItem,
@@ -1399,9 +1400,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 Gerenciar Cardápio — {currentRestaurant.name}
               </h3>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Adicione produtos, altere preços, fotos e controle a disponibilidade na chapa ({menuItems.length} itens)
-            </p>
+            <HelpText>Adicione produtos, altere preços, fotos e controle a disponibilidade na chapa. ({menuItems.length} itens)</HelpText>
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -1552,7 +1551,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               <span className="p-1.5 rounded-xl bg-orange-500/20 text-orange-400"><Tag className="w-5 h-5" /></span>
               <h3 className="text-base font-bold text-white font-display">Promoções da Loja</h3>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Ofertas desta loja, com preço promocional, validade e cupom. ({promotions.length})</p>
+            <HelpText>Ofertas desta loja, com preço promocional, validade e cupom. ({promotions.length})</HelpText>
           </div>
           <button onClick={() => openPromotionEditor()} className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-black font-bold text-xs flex items-center gap-1.5">
             <Plus className="w-4 h-4" /> Nova promoção
@@ -1644,9 +1643,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 Prêmios e Fidelidade — {currentRestaurant.name}
               </h3>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Cadastre brindes e cortesias que seus clientes resgatam com pontos acumulados ({rewardsList.length} prêmios)
-            </p>
+            <HelpText>Cadastre brindes e cortesias que seus clientes resgatam com pontos acumulados ({rewardsList.length} prêmios).</HelpText>
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -1661,17 +1658,9 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
 
         {/* Informative distinction notice */}
-        <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs space-y-1 text-slate-300">
-          <div className="flex items-center gap-2 font-bold text-amber-300">
-            <Info className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Distinção entre Cardápio Comercial e Programa de Recompensas:</span>
-          </div>
-          <p className="text-[11px] text-slate-400 leading-relaxed">
-            • <strong>Não são produtos vendidos por dinheiro:</strong> prêmios de fidelidade são adquiridos exclusivamente através de pontos acumulados pelos clientes (no mínimo 70% obtidos nesta loja e até 30% em pontos globais da rede). Pontos de outras lojas nunca participam do resgate.
-            <br />
-            • Cada prêmio tem seu próprio estoque físico. Prêmios com estoque zerado ou pausados deixam de ficar disponíveis para resgate no aplicativo do cliente.
-          </p>
-        </div>
+        <HelpText>
+          <strong>Distinção entre cardápio e recompensas:</strong> prêmios de fidelidade não são vendidos por dinheiro. O resgate exige no mínimo 70% de pontos desta loja e permite até 30% de pontos globais. Pontos de outras lojas não participam. Cada prêmio tem estoque próprio; itens esgotados ou pausados deixam de aparecer para resgate.
+        </HelpText>
 
         {/* List of Rewards */}
         {rewardsList.length === 0 ? (
@@ -1844,9 +1833,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
                 Validação de Voucher no Balcão (Entrega de Cortesia)
               </h3>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Valide o código fornecido pelo morador antes de entregar a cortesia. O sistema confere a autenticidade e dá baixa imediata.
-            </p>
+            <HelpText>Valide o código fornecido pelo morador antes de entregar a cortesia. O sistema confere a autenticidade e dá baixa imediata.</HelpText>
           </div>
           <span className="text-xs px-2.5 py-1 rounded-xl bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30 self-start sm:self-auto shrink-0">
             Segurança 70/30
@@ -1854,18 +1841,15 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
         </div>
 
         {/* Regras Operacionais para o Lojista */}
-        <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs space-y-1.5 text-slate-300">
-          <div className="flex items-center gap-2 font-bold text-amber-300">
-            <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Regras Obrigatórias de Validação para o Comerciante:</span>
-          </div>
-          <ul className="text-[11px] text-slate-400 space-y-1 list-disc list-inside leading-relaxed">
-            <li><strong>Validação prévia obrigatória:</strong> valide o código no painel <em>antes</em> de entregar o prêmio ao morador.</li>
-            <li><strong>Permissão exclusiva:</strong> apenas a sua lanchonete (ou um administrador) pode validar vouchers emitidos para esta loja.</li>
-            <li><strong>Vouchers inválidos:</strong> códigos já utilizados, cancelados, expirados ou pertencentes a outro restaurante são recusados pelo sistema e não devem ser aceitos.</li>
-            <li><strong>Garantia 70/30:</strong> o sistema garante que pelo menos 70% dos pontos foram conquistados na sua loja e até 30% complementados com pontos globais da rede.</li>
+        <HelpText>
+          <strong>Regras obrigatórias de validação:</strong>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            <li>Valide o voucher no painel antes de entregar o prêmio.</li>
+            <li>Somente esta loja ou um administrador pode validar vouchers emitidos para esta loja.</li>
+            <li>Recuse códigos já utilizados, cancelados, expirados ou de outro restaurante.</li>
+            <li>A regra 70/30 exige pelo menos 70% dos pontos conquistados nesta loja e permite até 30% de pontos globais.</li>
           </ul>
-        </div>
+        </HelpText>
 
         <form onSubmit={handleValidateVoucher} className="flex flex-col sm:flex-row gap-2.5 pt-1">
           <div className="flex-1 relative">
