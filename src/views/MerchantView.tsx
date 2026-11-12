@@ -1834,11 +1834,6 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
               </h3>
             </div>
             <HelpText>Valide o código fornecido pelo morador antes de entregar a cortesia. O sistema confere a autenticidade e dá baixa imediata.</HelpText>
-          </div>
-          <span className="text-xs px-2.5 py-1 rounded-xl bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30 self-start sm:self-auto shrink-0">
-            Segurança 70/30
-          </span>
-        </div>
 
         {/* Regras Operacionais para o Lojista */}
         <HelpText>
@@ -1850,6 +1845,13 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
             <li>A regra 70/30 exige pelo menos 70% dos pontos conquistados nesta loja e permite até 30% de pontos globais.</li>
           </ul>
         </HelpText>
+          </div>
+          <span className="text-xs px-2.5 py-1 rounded-xl bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30 self-start sm:self-auto shrink-0">
+            Segurança 70/30
+          </span>
+        </div>
+
+
 
         <form onSubmit={handleValidateVoucher} className="flex flex-col sm:flex-row gap-2.5 pt-1">
           <div className="flex-1 relative">
