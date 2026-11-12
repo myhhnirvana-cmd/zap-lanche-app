@@ -1,5 +1,6 @@
 import React from 'react';
 import { RestaurantQrCodeCard } from '../loyalty/RestaurantQrCodeCard';
+import { HelpText } from '../common/HelpText';
 import { Restaurant } from '../../types';
 
 interface CheckInQrSectionProps {
@@ -13,10 +14,9 @@ export const CheckInQrSection: React.FC<CheckInQrSectionProps> = ({ restaurant }
         <h3 className="text-base font-bold text-text-primary font-display">
           QR Code de Check-in
         </h3>
-        <p className="text-sm text-text-secondary">
-          Cada check-in validado concede 5 pontos locais para o cliente (intervalo mínimo de 2 horas entre check-ins no mesmo restaurante). Imprima e disponibilize o código perto do caixa.
-          <strong className="text-orange-400"> Permita o acesso ao QR Code somente após o atendimento.</strong>
-        </p>
+        <HelpText>
+          Cada check-in validado concede 5 pontos locais ao cliente, com intervalo mínimo de 2 horas entre check-ins no mesmo restaurante. Imprima e disponibilize o código perto do caixa. Permita o acesso ao QR Code somente após o atendimento.
+        </HelpText>
       </div>
       
       <RestaurantQrCodeCard restaurant={restaurant} />

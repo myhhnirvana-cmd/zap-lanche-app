@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { HelpText } from '../common/HelpText';
 import QRCode from 'qrcode';
 import { QrCode, Download, Printer, CheckCircle2, AlertTriangle, Sparkles, Store, Copy, Check } from 'lucide-react';
 import { Restaurant } from '../../types';
@@ -162,9 +163,7 @@ export const RestaurantQrCodeCard: React.FC<RestaurantQrCodeCardProps> = ({
             <h3 className="text-base font-bold text-white font-display">
               QR Code da sua loja
             </h3>
-            <p className="text-xs text-slate-400">
-              Imprima e coloque no balcão ou nas mesas para os clientes fazerem check-in
-            </p>
+            <HelpText>Imprima e coloque no balcão ou nas mesas para os clientes fazerem check-in.</HelpText>
           </div>
         </div>
 
@@ -197,9 +196,9 @@ export const RestaurantQrCodeCard: React.FC<RestaurantQrCodeCardProps> = ({
             <h4 className="text-sm font-semibold text-white mt-0.5">
               Check-in de Fidelidade Oficial
             </h4>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Cada cliente que escanear este QR Code ganha <strong>5 pontos</strong> por check-in validado (intervalo mínimo de 2 horas entre check-ins no mesmo restaurante). O sistema valida automaticamente o tempo e a autenticação.
-            </p>
+            <HelpText>
+              Cada cliente que escanear este QR Code ganha <strong>5 pontos</strong> por check-in validado, respeitando o intervalo mínimo de 2 horas entre check-ins no mesmo restaurante. O sistema valida automaticamente o tempo e a autenticação.
+            </HelpText>
           </div>
 
           <div className="p-2.5 rounded-xl bg-black/50 border border-slate-800 text-[11px] space-y-1">
