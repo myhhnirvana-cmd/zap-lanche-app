@@ -60,6 +60,17 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
 
   return (
     <div className="space-y-4 pb-12 animate-fade-in">
+    <section aria-labelledby="zaplanche-public-intro" className="rounded-2xl border border-orange-500/20 bg-gradient-to-br from-orange-500/10 via-bg-surface to-bg-surface p-4 sm:p-5">
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-400">ZAP LANCHE · Gastronomia do bairro</p>
+      <h1 id="zaplanche-public-intro" className="mt-1.5 text-xl sm:text-2xl font-extrabold font-display text-text-primary">
+        Descubra sabores e negócios perto de você
+      </h1>
+      <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-secondary">
+        Encontre restaurantes e lanchonetes, conheça seus cardápios, acompanhe novidades da comunidade e descubra prêmios e benefícios de fidelidade. Explore opções por categoria e região e consulte as informações de cada estabelecimento.
+      </p>
+    </section>
+
+
       {/* Search & Location Bar */}
       <div className="space-y-2">
         <div className="relative">
