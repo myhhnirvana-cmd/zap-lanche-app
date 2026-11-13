@@ -298,4 +298,4 @@ export interface AdminDemoStats {
   auditLogs: AdminAuditLog[];
 }
 
-export type ActiveTab = 'explorar' | 'feed' | 'restaurante' | 'perfil' | 'lojista' | 'admin';
+export type ActiveTab = 'explorar' | 'feed' | 'restaurante' | 'perfil' | 'traga-sua-loja' | 'lojista' | 'admin';
