@@ -2344,7 +2344,7 @@ export async function createNeighborhoodInSupabase(name: string): Promise<{ succ
     return { success: false, error: 'Conexão com o servidor indisponível.' };
   }
 
-  const cleanName = name.trim().replace(/\\s+/g, ' ');
+  const cleanName = name.trim().replace(/\s+/g, ' ');
   if (cleanName.length < 2 || cleanName.length > 60) {
     return { success: false, error: 'O bairro deve ter entre 2 e 60 caracteres.' };
   }
