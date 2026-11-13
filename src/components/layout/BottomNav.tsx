@@ -9,8 +9,10 @@ interface BottomNavProps {
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onChangeTab }) => {
-  const { user, isAdmin, isMerchant } = useAuth();
+  const { user, isAdmin, isMerchant, merchantRestaurant, profileLoading, merchantStoreLoading } = useAuth();
   const showMerchantTab = isMerchant || isAdmin;
+  // A aba de captação só aparece para contas que ainda não possuem loja.
+  const showStoreRegistration = Boolean(user) && !isAdmin && !isMerchant && !merchantRestaurant && !profileLoading && !merchantStoreLoading;
 
   const tabs = [
     {
@@ -28,7 +30,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onChangeTab }) 
       label: 'Meu Perfil',
       icon: User,
     },
-    ...(user
+    ...(showStoreRegistration
       ? [
           {
             id: 'traga-sua-loja' as ActiveTab,

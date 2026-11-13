@@ -26,7 +26,7 @@ import { loadAllMenuItems, MOCK_MENU_ITEMS, saveCurrentNeighborhood } from './da
 import { useAuth } from './contexts/AuthContext';
 
 export default function App() {
-  const { user, profile } = useAuth();
+  const { user, profile, isAdmin, isMerchant, merchantRestaurant } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('explorar');
   const [currentNeighborhood, setCurrentNeighborhood] = useState<Neighborhood>({ id: 'todos', name: 'Todos os Bairros', zone: '', city: '', state: '', activeSpotsCount: 0 });
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
@@ -76,6 +76,13 @@ export default function App() {
       setActiveTab('explorar');
     }
   }, [user, activeTab]);
+
+  // Impede que contas que já possuem acesso/loja vinculada permaneçam na tela de captação.
+  useEffect(() => {
+    if (activeTab === 'traga-sua-loja' && (isAdmin || isMerchant || merchantRestaurant)) {
+      setActiveTab(isMerchant && !isAdmin ? 'lojista' : 'explorar');
+    }
+  }, [activeTab, isAdmin, isMerchant, merchantRestaurant]);
 
   // Busca assíncrona dos restaurantes e cardápios no Supabase com fallback transparente para dados locais
   useEffect(() => {

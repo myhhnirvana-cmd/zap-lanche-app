@@ -18,7 +18,9 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   onChangeTab,
 }) => {
-  const { user, isAdmin, isMerchant, signOut } = useAuth();
+  const { user, isAdmin, isMerchant, merchantRestaurant, profileLoading, merchantStoreLoading, signOut } = useAuth();
+  // Só oferece cadastro a contas autenticadas que ainda não possuem uma loja vinculada.
+  const showStoreRegistration = Boolean(user) && !isAdmin && !isMerchant && !merchantRestaurant && !profileLoading && !merchantStoreLoading;
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // Extrai nome de exibição amigável
@@ -86,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             Minha Conta
           </button>
-          {user && (
+          {showStoreRegistration && (
             <button
               onClick={() => onChangeTab('traga-sua-loja')}
               className={`inline-flex items-center gap-1.5 transition-colors hover:text-white ${
