@@ -13,6 +13,7 @@ export interface UserProfileRecord {
   is_suspended?: boolean;
   suspension_reason?: string | null;
   suspended_until?: string | null;
+  neighborhood_id?: string | null;
 }
 
 export interface AdminDiagnostic {
@@ -37,7 +38,7 @@ interface AuthContextType {
   refreshMerchantStore: () => Promise<void>;
   adminDiagnostic: AdminDiagnostic | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, name?: string) => Promise<{ error: string | null; message?: string }>;
+  signUp: (email: string, password: string, name?: string, neighborhoodId?: string) => Promise<{ error: string | null; message?: string }>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
   updateOwnerProfile: (fullName: string) => Promise<{ error: string | null }>;
@@ -107,7 +108,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, username, role, created_at, is_suspended, suspension_reason, suspended_until')
+        .select('id, full_name, username, role, created_at, is_suspended, suspension_reason, suspended_until, neighborhood_id')
         .eq('id', currentUser.id)
         .maybeSingle();
 
@@ -249,13 +250,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (err: any) { return { error: translateAuthError(err) }; }
   };
 
-  const signUp = async (email: string, password: string, name?: string): Promise<{ error: string | null; message?: string }> => {
+  const signUp = async (email: string, password: string, name?: string, neighborhoodId?: string): Promise<{ error: string | null; message?: string }> => {
     if (!isSupabaseConfigured || !supabase) return { error: 'Serviço de autenticação não configurado no ambiente.' };
+    if (!neighborhoodId) return { error: 'Selecione seu bairro para concluir o cadastro.' };
     try {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { data: { full_name: name?.trim() || '', name: name?.trim() || '', role: 'cliente' } },
+        options: { data: { full_name: name?.trim() || '', name: name?.trim() || '', role: 'cliente', neighborhood_id: neighborhoodId } },
       });
       if (error) return { error: translateAuthError(error) };
       if (data.user && !data.session) return { error: null, message: 'Cadastro realizado! Verifique seu e-mail para ativar a conta.' };

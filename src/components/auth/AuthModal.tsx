@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Mail, Lock, User as UserIcon, LogIn, UserPlus, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { fetchNeighborhoodsFromSupabase } from '../../lib/supabase';
+import { Neighborhood } from '../../types';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -22,6 +24,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   fitViewport = false,
 }) => {
   const { signIn, signUp } = useAuth();
+  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
+  const [selectedNeighborhoodId, setSelectedNeighborhoodId] = useState('');
+  const [isLoadingNeighborhoods, setIsLoadingNeighborhoods] = useState(false);
+  const [neighborhoodLoadError, setNeighborhoodLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,6 +48,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setSuccessMessage(null);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || mode !== 'signup') return;
+    let active = true;
+    setIsLoadingNeighborhoods(true);
+    setNeighborhoodLoadError(null);
+    fetchNeighborhoodsFromSupabase()
+      .then((items) => {
+        if (!active) return;
+        if (!items || items.length === 0) {
+          setNeighborhoods([]);
+          setNeighborhoodLoadError('Não foi possível carregar os bairros. Tente fechar e abrir o cadastro novamente.');
+          return;
+        }
+        setNeighborhoods(items);
+      })
+      .catch(() => {
+        if (active) setNeighborhoodLoadError('Não foi possível carregar os bairros. Tente novamente.');
+      })
+      .finally(() => {
+        if (active) setIsLoadingNeighborhoods(false);
+      });
+    return () => { active = false; };
+  }, [isOpen, mode]);
 
   if (!isOpen) return null;
 
@@ -71,7 +101,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           onClose();
         }
       } else {
-        const { error, message } = await signUp(email, password, name);
+        if (!selectedNeighborhoodId) {
+          setErrorMessage('Selecione seu bairro para continuar.');
+          return;
+        }
+        const { error, message } = await signUp(email, password, name, selectedNeighborhoodId);
         if (error) {
           setErrorMessage(error);
         } else {
@@ -192,6 +226,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-orange-500 transition-colors"
                 />
               </div>
+            </div>
+          )}
+
+          {mode === 'signup' && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Seu bairro
+              </label>
+              <select
+                required
+                value={selectedNeighborhoodId}
+                onChange={(event) => setSelectedNeighborhoodId(event.target.value)}
+                disabled={isLoadingNeighborhoods || neighborhoods.length === 0}
+                className="w-full rounded-xl border border-slate-700/80 bg-slate-900 px-3 py-2.5 text-xs text-white outline-none focus:border-orange-500 disabled:opacity-60"
+              >
+                <option value="">{isLoadingNeighborhoods ? 'Carregando bairros...' : 'Selecione seu bairro'}</option>
+                {neighborhoods.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+              {neighborhoodLoadError && <p role="alert" className="mt-1.5 text-[11px] text-rose-300">{neighborhoodLoadError}</p>}
+              <p className="mt-1 text-[11px] text-slate-500">Usaremos essa informação apenas para organizar avisos relevantes da sua região.</p>
             </div>
           )}
 
