@@ -78,6 +78,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralCodeLoaded, setReferralCodeLoaded] = useState(false);
   const [referralsList, setReferralsList] = useState<ReferralRecord[]>([]);
+  const [referralPage, setReferralPage] = useState(0);
   const [hasCopiedCode, setHasCopiedCode] = useState(false);
   const [inputReferralCode, setInputReferralCode] = useState('');
   const [isApplyingCode, setIsApplyingCode] = useState(false);
@@ -734,35 +735,106 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           )}
         </form>
 
-        {/* Lista de amigos indicados */}
+        {/* Acompanhamento das indicações: duas por página */}
         {referralsList.length > 0 && (
-          <div className="space-y-2 pt-2 border-t border-slate-800">
-            <span className="text-[11px] font-bold text-slate-300">
-              Suas Indicações ({referralsList.length}):
-            </span>
-            <div className="divide-y divide-slate-800/80 rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-              {referralsList.map((ref) => (
-                <div key={ref.id} className="p-2.5 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-3.5 h-3.5 text-purple-400" />
-                    <span className="text-slate-300 font-medium">
-                      {ref.referred_name || 'Amigo convidado'}
-                    </span>
-                  </div>
-                  <div>
-                    {ref.status === 'completed' ? (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-semibold border border-emerald-500/30">
-                        +15 pts Creditados
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-semibold border border-amber-500/30">
-                        Aguardando 1º check-in
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+          <div className="space-y-3 pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold text-slate-300">
+                Acompanhe suas indicações ({referralsList.length})
+              </span>
+              <span className="text-[10px] text-slate-500">
+                Página {referralPage + 1} de {Math.max(1, Math.ceil(referralsList.length / 2))}
+              </span>
             </div>
+
+            <div className="space-y-2">
+              {referralsList.slice(referralPage * 2, referralPage * 2 + 2).map((ref, index) => {
+                const isCompleted = ref.status === 'completed';
+                const isCancelled = ref.status === 'cancelled';
+                const invitedNumber = referralsList.length - (referralPage * 2 + index);
+
+                return (
+                  <article key={ref.id} className="rounded-xl border border-slate-800 bg-slate-900/40 p-3 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Users className="w-4 h-4 text-purple-400 shrink-0" />
+                        <span className="text-xs font-semibold text-slate-200 truncate">
+                          {ref.referred_name || `Convidado #${invitedNumber}`}
+                        </span>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold border ${
+                        isCancelled
+                          ? 'bg-slate-800 text-slate-400 border-slate-700'
+                          : isCompleted
+                          ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                          : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                      }`}>
+                        {isCancelled ? 'Indicação cancelada' : isCompleted ? 'Concluída' : 'Em andamento'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="text-slate-300">Usuário cadastrado</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px]">
+                        {isCompleted ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-600 shrink-0" />
+                        )}
+                        <span className={isCompleted ? 'text-slate-300' : 'text-slate-500'}>
+                          Primeiro check-in
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px]">
+                        {isCompleted ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-600 shrink-0" />
+                        )}
+                        <span className={isCompleted ? 'text-emerald-300 font-semibold' : 'text-slate-500'}>
+                          Recompensa garantida
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className={`text-[10px] ${isCompleted ? 'text-emerald-300' : isCancelled ? 'text-slate-500' : 'text-amber-300'}`}>
+                      {isCompleted
+                        ? '15 pontos de indicação recebidos.'
+                        : isCancelled
+                        ? 'Esta indicação foi cancelada.'
+                        : 'Aguardando o primeiro check-in validado para liberar os 15 pontos.'}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+
+            {referralsList.length > 2 && (
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setReferralPage((page) => Math.max(0, page - 1))}
+                  disabled={referralPage === 0}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-[10px] font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Anteriores
+                </button>
+                <span className="text-[10px] text-slate-500">
+                  {referralPage * 2 + 1}–{Math.min(referralPage * 2 + 2, referralsList.length)} de {referralsList.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setReferralPage((page) => Math.min(Math.ceil(referralsList.length / 2) - 1, page + 1))}
+                  disabled={referralPage >= Math.ceil(referralsList.length / 2) - 1}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-[10px] font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Próximas
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
