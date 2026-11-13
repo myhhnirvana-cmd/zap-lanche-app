@@ -86,6 +86,17 @@ export const Header: React.FC<HeaderProps> = ({
           >
             Minha Conta
           </button>
+          {user && (
+            <button
+              onClick={() => onChangeTab('traga-sua-loja')}
+              className={`inline-flex items-center gap-1.5 transition-colors hover:text-white ${
+                activeTab === 'traga-sua-loja' ? 'text-orange-400 font-semibold' : ''
+              }`}
+            >
+              <Store className="h-4 w-4 text-amber-400" />
+              Traga sua loja
+            </button>
+          )}
         </nav>
 
         {/* Zone 3: Quick Area Switches (Comerciante / Admin / Auth) */}

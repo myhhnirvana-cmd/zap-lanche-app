@@ -14,6 +14,7 @@ import { RestaurantDetailView } from './views/RestaurantDetailView';
 import { FeedView } from './views/FeedView';
 import { ProfileView } from './views/ProfileView';
 import { MerchantView } from './views/MerchantView';
+import { MerchantRegistrationView } from './views/MerchantRegistrationView';
 import { AdminView } from './views/AdminView';
 import { AdminGate } from './components/auth/AdminGate';
 import { MerchantGate } from './components/auth/MerchantGate';
@@ -71,7 +72,7 @@ export default function App() {
 
   // Redireciona para 'explorar' se o usuário deslogar enquanto estiver na área de comerciante
   useEffect(() => {
-    if (activeTab === 'lojista' && !user && isSupabaseConfigured) {
+    if ((activeTab === 'lojista' || activeTab === 'traga-sua-loja') && !user && isSupabaseConfigured) {
       setActiveTab('explorar');
     }
   }, [user, activeTab]);
@@ -215,6 +216,10 @@ export default function App() {
             onSelectRestaurantById={handleSelectRestaurantById}
             onOpenGitHubGuide={() => setIsGitHubGuideOpen(true)}
           />
+        )}
+
+        {activeTab === 'traga-sua-loja' && (
+          <MerchantRegistrationView onOpenMerchantArea={() => setActiveTab('lojista')} />
         )}
 
         {activeTab === 'lojista' && (
