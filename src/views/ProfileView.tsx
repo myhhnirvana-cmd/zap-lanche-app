@@ -40,6 +40,7 @@ import { MOCK_RESTAURANTS } from '../data/mockData';
 import { ThemeSelector } from '../components/common/ThemeSelector';
 import { GuideSection } from '../components/common/GuideSection';
 import { HelpText } from '../components/common/HelpText';
+import { NotificationInbox } from '../components/notifications/NotificationInbox';
 
 interface ProfileViewProps {
   onSelectRestaurantById: (
@@ -550,6 +551,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </button>
         </div>
       </div>
+
+      <NotificationInbox />
 
       {/* Pontos reais */}
       <div className="rounded-3xl bg-bg-surface border border-emerald-500/20 p-6 shadow-xl space-y-4">
