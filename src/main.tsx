@@ -3,6 +3,7 @@ import App from './App.tsx';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
+import { InstallAppPrompt } from './components/common/InstallAppPrompt';
 import './index.css';
 
 const rootElement = document.getElementById('root');
@@ -15,7 +16,10 @@ createRoot(rootElement).render(
   <AppErrorBoundary>
     <AuthProvider>
       <ThemeProvider>
-        <App />
+        <>
+          <App />
+          <InstallAppPrompt />
+        </>
       </ThemeProvider>
     </AuthProvider>
   </AppErrorBoundary>
