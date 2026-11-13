@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured, fetchMerchantRestaurant } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, fetchMerchantRestaurant, createNeighborhoodInSupabase } from '../lib/supabase';
 import { Restaurant } from '../types';
 import { getAvatarById } from '../data/avatars';
 
@@ -38,12 +38,14 @@ interface AuthContextType {
   refreshMerchantStore: () => Promise<void>;
   adminDiagnostic: AdminDiagnostic | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, name?: string, neighborhoodId?: string) => Promise<{ error: string | null; message?: string }>;
+  signUp: (email: string, password: string, name?: string, neighborhoodId?: string, neighborhoodName?: string) => Promise<{ error: string | null; message?: string }>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
   updateOwnerProfile: (fullName: string) => Promise<{ error: string | null }>;
   updateUserAvatar: (avatarId: string) => Promise<{ error: string | null }>;
 }
+
+const pendingNeighborhoodSync = new Set<string>();
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -88,6 +90,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Conclui o vínculo de um bairro digitado durante o cadastro após a autenticação.
+  // O nome fica nos metadados do Auth quando o Supabase exige confirmação de e-mail.
+  const syncPendingNeighborhood = async (currentUser: User) => {
+    if (!supabase || pendingNeighborhoodSync.has(currentUser.id)) return;
+    const pendingName = currentUser.user_metadata?.zaplanche_pending_neighborhood_name;
+    if (typeof pendingName !== 'string' || !pendingName.trim()) return;
+
+    pendingNeighborhoodSync.add(currentUser.id);
+    try {
+      const result = await createNeighborhoodInSupabase(pendingName);
+      if (!result.success || !result.neighborhood) {
+        throw new Error(result.error || 'Não foi possível cadastrar o bairro.');
+      }
+
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .update({ neighborhood_id: result.neighborhood.id })
+        .eq('id', currentUser.id);
+
+      if (profileUpdateError) throw profileUpdateError;
+
+      const { error: metadataError } = await supabase.auth.updateUser({
+        data: { zaplanche_pending_neighborhood_name: null },
+      });
+      if (metadataError) {
+        console.warn('Bairro vinculado, mas não foi possível limpar o dado temporário do cadastro:', metadataError.message);
+      }
+    } catch (err: any) {
+      console.warn('Não foi possível concluir o vínculo do bairro informado no cadastro. Será tentado novamente no próximo acesso:', err?.message || err);
+    } finally {
+      pendingNeighborhoodSync.delete(currentUser.id);
+    }
+  };
+
   // Busca segura do perfil em public.profiles e verificação de admin por ID (auth.uid())
   const fetchUserProfile = async (currentUser: User | null) => {
     if (!currentUser || !isSupabaseConfigured || !supabase) {
@@ -103,6 +139,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     setProfileLoading(true);
     setProfileError(null);
+    await syncPendingNeighborhood(currentUser);
     const diagnostic: AdminDiagnostic = { isSessionActive: !!currentUser, error: null, recordFound: false, roleValue: null, isAdminResult: false };
 
     try {
@@ -259,14 +296,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (err: any) { return { error: translateAuthError(err) }; }
   };
 
-  const signUp = async (email: string, password: string, name?: string, neighborhoodId?: string): Promise<{ error: string | null; message?: string }> => {
+  const signUp = async (
+    email: string,
+    password: string,
+    name?: string,
+    neighborhoodId?: string,
+    neighborhoodName?: string
+  ): Promise<{ error: string | null; message?: string }> => {
     if (!isSupabaseConfigured || !supabase) return { error: 'Serviço de autenticação não configurado no ambiente.' };
-    if (!neighborhoodId) return { error: 'Selecione seu bairro para concluir o cadastro.' };
+    const cleanNeighborhoodName = neighborhoodName?.trim().replace(/\s+/g, ' ') || '';
+    if (!neighborhoodId && (cleanNeighborhoodName.length < 2 || cleanNeighborhoodName.length > 60)) {
+      return { error: 'Selecione seu bairro ou informe um nome entre 2 e 60 caracteres.' };
+    }
     try {
+      const userMetadata: Record<string, string> = {
+        full_name: name?.trim() || '',
+        name: name?.trim() || '',
+        role: 'cliente',
+      };
+      if (neighborhoodId) {
+        userMetadata.neighborhood_id = neighborhoodId;
+      } else {
+        userMetadata.zaplanche_pending_neighborhood_name = cleanNeighborhoodName;
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { data: { full_name: name?.trim() || '', name: name?.trim() || '', role: 'cliente', neighborhood_id: neighborhoodId } },
+        options: { data: userMetadata },
       });
       if (error) return { error: translateAuthError(error) };
       if (data.user && !data.session) return { error: null, message: 'Cadastro realizado! Verifique seu e-mail para ativar a conta.' };
