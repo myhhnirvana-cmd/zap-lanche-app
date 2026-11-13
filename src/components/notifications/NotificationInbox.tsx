@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bell, ChevronDown, ChevronLeft, ChevronRight, CheckCheck, Loader2 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
 type NotificationRow = {
   id: string;
