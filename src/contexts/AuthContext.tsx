@@ -119,10 +119,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           throw new Error(result.error || 'Não foi possível cadastrar o bairro.');
         }
 
-        const { error: profileUpdateError } = await supabase!
-          .from('profiles')
-          .update({ neighborhood_id: result.neighborhood.id })
-          .eq('id', currentUser.id);
+        const { error: profileUpdateError } = await supabase!.rpc('set_my_neighborhood', {
+          p_neighborhood_id: result.neighborhood.id,
+        });
 
         if (profileUpdateError) throw profileUpdateError;
       } catch (err: any) {
