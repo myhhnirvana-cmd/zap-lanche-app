@@ -141,15 +141,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         diagnostic.isAdminResult = rec.role === 'admin';
 
         // Aplicação automática de código de indicação pendente
-        const pendingCode = localStorage.getItem('pending_referral_code');
+        let pendingCode: string | null = null;
+        try {
+          pendingCode = localStorage.getItem('pending_referral_code');
+        } catch {
+          pendingCode = null;
+        }
         if (pendingCode) {
           import('../lib/supabase').then(({ applyReferralCode }) => {
-            applyReferralCode(pendingCode).then((res) => {
-              if (res.success) {
-                localStorage.removeItem('pending_referral_code');
-                console.log('Convite vinculado com sucesso!');
-              } else if (res.message.includes('autoindicação') || res.message.includes('inválido') || res.message.includes('perfil')) {
-                localStorage.removeItem('pending_referral_code');
+            applyReferralCode(pendingCode!).then((res) => {
+              try {
+                if (res.success) {
+                  localStorage.removeItem('pending_referral_code');
+                  console.log('Convite vinculado com sucesso!');
+                } else if (res.message.includes('autoindicação') || res.message.includes('inválido') || res.message.includes('perfil')) {
+                  localStorage.removeItem('pending_referral_code');
+                }
+              } catch {
+                // Ignora bloqueio de armazenamento
               }
             });
           }).catch(console.error);

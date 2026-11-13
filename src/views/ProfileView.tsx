@@ -468,9 +468,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       })
     : 'Recente';
 
+  let cachedAvatarId: string | null = null;
+  if (typeof window !== 'undefined' && authUser.id) {
+    try {
+      cachedAvatarId = localStorage.getItem(`zap_lanche_avatar_${authUser.id}`);
+    } catch {
+      cachedAvatarId = null;
+    }
+  }
   const userAvatarId =
     (authUser.user_metadata?.avatar_id as string | undefined) ||
-    (typeof window !== 'undefined' && authUser.id ? localStorage.getItem(`zap_lanche_avatar_${authUser.id}`) : null) ||
+    cachedAvatarId ||
     DEFAULT_AVATAR_ID;
 
   const currentAvatarData = getAvatarById(userAvatarId);

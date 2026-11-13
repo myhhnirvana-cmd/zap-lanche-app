@@ -25,11 +25,20 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Extrai nome de exibição amigável
   const displayName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || '';
+  let cachedAvatarChoice: string | null = null;
+  if (typeof window !== 'undefined' && user?.id) {
+    try {
+      cachedAvatarChoice =
+        localStorage.getItem(`zap_lanche_avatar_url_${user.id}`) ||
+        localStorage.getItem(`zap_lanche_avatar_${user.id}`);
+    } catch {
+      cachedAvatarChoice = null;
+    }
+  }
   const userAvatarChoice =
     (user?.user_metadata?.avatar_id as string | undefined) ||
     (user?.user_metadata?.avatar_url as string | undefined) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_url_${user.id}`) : null) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_${user.id}`) : null);
+    cachedAvatarChoice;
   const avatarUrl = getAvatarUrl(userAvatarChoice);
 
   return (

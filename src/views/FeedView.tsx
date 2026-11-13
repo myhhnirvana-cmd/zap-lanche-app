@@ -76,11 +76,20 @@ export const FeedView: React.FC<FeedViewProps> = ({
 
   const currentUserId = user?.id || 'usr-anon';
 
+  let cachedFeedAvatarChoice: string | null = null;
+  if (typeof window !== 'undefined' && user?.id) {
+    try {
+      cachedFeedAvatarChoice =
+        localStorage.getItem(`zap_lanche_avatar_url_${user.id}`) ||
+        localStorage.getItem(`zap_lanche_avatar_${user.id}`);
+    } catch {
+      cachedFeedAvatarChoice = null;
+    }
+  }
   const userAvatarChoice =
     (user?.user_metadata?.avatar_id as string | undefined) ||
     (user?.user_metadata?.avatar_url as string | undefined) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_url_${user.id}`) : null) ||
-    (typeof window !== 'undefined' && user?.id ? localStorage.getItem(`zap_lanche_avatar_${user.id}`) : null);
+    cachedFeedAvatarChoice;
 
   const currentAvatar = getAvatarUrl(userAvatarChoice);
 

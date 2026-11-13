@@ -5,9 +5,45 @@ const viteEnv = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?
 
 export type ZapLancheEnvironment = 'production' | 'homologation';
 
+const memoryStorage = new Map<string, string>();
+
+const safeStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return typeof window !== 'undefined'
+        ? window.localStorage.getItem(key)
+        : (memoryStorage.get(key) ?? null);
+    } catch {
+      return memoryStorage.get(key) ?? null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(key, value);
+        return;
+      }
+    } catch {
+      // Alguns previews isolados bloqueiam o acesso ao localStorage.
+    }
+    memoryStorage.set(key, value);
+  },
+  removeItem: (key: string): void => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(key);
+        return;
+      }
+    } catch {
+      // Alguns previews isolados bloqueiam o acesso ao localStorage.
+    }
+    memoryStorage.delete(key);
+  },
+};
+
 export function getCurrentEnvironment(): ZapLancheEnvironment {
   if (typeof window === 'undefined') return 'production';
-  return (localStorage.getItem('zaplanche_env_mode') as ZapLancheEnvironment) || 'production';
+  return (safeStorage.getItem('zaplanche_env_mode') as ZapLancheEnvironment) || 'production';
 }
 
 export function setEnvironment(mode: ZapLancheEnvironment): void {
@@ -22,7 +58,7 @@ export function setEnvironment(mode: ZapLancheEnvironment): void {
   }
   const current = getCurrentEnvironment();
   if (current !== mode) {
-    localStorage.setItem('zaplanche_env_mode', mode);
+    safeStorage.setItem('zaplanche_env_mode', mode);
     window.location.reload();
   }
 }
@@ -56,6 +92,7 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+        storage: typeof window !== 'undefined' ? safeStorage : undefined,
         storageKey: currentEnv === 'homologation' ? 'zaplanche_auth_homologation' : 'zaplanche_auth_production',
       },
     })

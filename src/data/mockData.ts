@@ -330,7 +330,11 @@ export function loadCurrentNeighborhood(): Neighborhood {
 
 export function saveCurrentNeighborhood(neighborhood: Neighborhood): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem('zap_lanche_neighborhood_v1', JSON.stringify(neighborhood));
+  try {
+    localStorage.setItem('zap_lanche_neighborhood_v1', JSON.stringify(neighborhood));
+  } catch {
+    // Ignora bloqueio de armazenamento em previews isolados
+  }
 }
 
 export function loadLoyaltyWallet(): LoyaltyPointWallet {
