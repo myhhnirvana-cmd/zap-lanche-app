@@ -205,10 +205,10 @@ begin
       jsonb_build_object('redemption_id',new.id,'restaurant_id',new.restaurant_id),
       'redemption-used:'||new.id::text);
   end if;
-  return coalesce(new,old);
+  return new;
 exception when others then
   raise warning 'ZAP Lanche redemption notification skipped: %', SQLERRM;
-  return coalesce(new,old);
+  return new;
 end;
 $$;
 
