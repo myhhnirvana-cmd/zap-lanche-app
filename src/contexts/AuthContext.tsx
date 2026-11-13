@@ -105,6 +105,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const syncPromise = (async () => {
       try {
+        const { data: existingProfile, error: profileReadError } = await supabase!
+          .from('profiles')
+          .select('neighborhood_id')
+          .eq('id', currentUser.id)
+          .maybeSingle();
+
+        if (profileReadError) throw profileReadError;
+        if (existingProfile?.neighborhood_id) return;
+
         const result = await createNeighborhoodInSupabase(pendingName);
         if (!result.success || !result.neighborhood) {
           throw new Error(result.error || 'Não foi possível cadastrar o bairro.');
@@ -116,13 +125,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           .eq('id', currentUser.id);
 
         if (profileUpdateError) throw profileUpdateError;
-
-        const { error: metadataError } = await supabase!.auth.updateUser({
-          data: { zaplanche_pending_neighborhood_name: null },
-        });
-        if (metadataError) {
-          console.warn('Bairro vinculado, mas não foi possível limpar o dado temporário do cadastro:', metadataError.message);
-        }
       } catch (err: any) {
         console.warn('Não foi possível concluir o vínculo do bairro informado no cadastro. Será tentado novamente no próximo acesso:', err?.message || err);
       }
