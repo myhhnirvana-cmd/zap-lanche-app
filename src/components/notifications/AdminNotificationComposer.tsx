@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BellRing, Loader2, Send, CheckCircle2, AlertCircle } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
-type MerchantOption = { id: string; name: string; neighborhood: string | null };
+type MerchantOption = { id: string; name: string; neighborhoods: string[] };
 
 export const AdminNotificationComposer: React.FC = () => {
   const [target, setTarget] = useState<'all' | 'individual' | 'neighborhood'>('all');
@@ -33,9 +33,9 @@ export const AdminNotificationComposer: React.FC = () => {
         const current = grouped.get(row.owner_profile_id);
         if (current) {
           if (!current.name.split(' / ').includes(row.name)) current.name += ` / ${row.name}`;
-          if (!current.neighborhood && row.neighborhood) current.neighborhood = row.neighborhood;
+          if (row.neighborhood && !current.neighborhoods.includes(row.neighborhood)) current.neighborhoods.push(row.neighborhood);
         } else {
-          grouped.set(row.owner_profile_id, { id: row.owner_profile_id, name: row.name, neighborhood: row.neighborhood });
+          grouped.set(row.owner_profile_id, { id: row.owner_profile_id, name: row.name, neighborhoods: row.neighborhood ? [row.neighborhood] : [] });
         }
       }
       setMerchants(Array.from(grouped.values()));
@@ -46,7 +46,7 @@ export const AdminNotificationComposer: React.FC = () => {
     return () => { active = false; };
   }, []);
 
-  const neighborhoods = Array.from(new Set(merchants.map((item) => item.neighborhood).filter((item): item is string => Boolean(item)))).sort((a,b) => a.localeCompare(b,'pt-BR'));
+  const neighborhoods = Array.from(new Set(merchants.flatMap((item) => item.neighborhoods))).sort((a,b) => a.localeCompare(b,'pt-BR'));
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
