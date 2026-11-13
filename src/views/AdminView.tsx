@@ -53,6 +53,7 @@ import { supabase, SUPABASE_STORAGE_BUCKET, isSupabaseConfigured, insertRestaura
 import { useAuth } from '../contexts/AuthContext';
 import { CommunityModeration } from './CommunityModeration';
 import { MerchantRegistrationRequests } from './MerchantRegistrationRequests';
+import { AdminNotificationComposer } from '../components/notifications/AdminNotificationComposer';
 
 interface AdminAuditEntry {
   id: string;
@@ -636,6 +637,8 @@ export const AdminView: React.FC<AdminViewProps> = ({ onOpenGitHubGuide, onResta
       </div>
 
       <MerchantRegistrationRequests onRestaurantAdded={onRestaurantAdded} />
+
+      <AdminNotificationComposer />
 
       {/* Formulário de Convite de Comerciante */}
       {showInviteForm && (
