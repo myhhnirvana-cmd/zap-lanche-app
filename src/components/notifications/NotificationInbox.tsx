@@ -17,6 +17,7 @@ export const NotificationInbox: React.FC<{ heading?: string }> = ({ heading = 'N
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!supabase || !isSupabaseConfigured) {
@@ -25,13 +26,14 @@ export const NotificationInbox: React.FC<{ heading?: string }> = ({ heading = 'N
       return;
     }
     setLoading(true);
+    setActionError(null);
     const { data, error: queryError } = await supabase
       .from('notifications')
       .select('id,category,title,body,created_at,read_at')
       .order('created_at', { ascending: false })
       .limit(100);
     if (queryError) {
-      setError('Não foi possível carregar suas notificações.');
+      setError(`Não foi possível carregar suas notificações: ${queryError.message}`);
       setItems([]);
     } else {
       setError(null);
@@ -49,14 +51,17 @@ export const NotificationInbox: React.FC<{ heading?: string }> = ({ heading = 'N
   const markRead = async (id: string) => {
     if (!supabase) return;
     const now = new Date().toISOString();
-    const { error: updateError } = await supabase.from('notifications').update({ read_at: now }).eq('id', id);
-    if (!updateError) setItems((current) => current.map((item) => item.id === id ? { ...item, read_at: now } : item));
+    const { error: updateError } = await supabase.from('notifications').update({ read_at: now }).eq('id', id).is('read_at', null);
+    if (updateError) setActionError(`Não foi possível marcar como lida: ${updateError.message}`);
+    else setItems((current) => current.map((item) => item.id === id ? { ...item, read_at: item.read_at || now } : item));
   };
 
   const markAllRead = async () => {
     if (!supabase || unread === 0) return;
-    const { error: updateError } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).is('read_at', null);
-    if (!updateError) setItems((current) => current.map((item) => ({ ...item, read_at: item.read_at || new Date().toISOString() })));
+    const now = new Date().toISOString();
+    const { error: updateError } = await supabase.from('notifications').update({ read_at: now }).is('read_at', null);
+    if (updateError) setActionError(`Não foi possível marcar as notificações como lidas: ${updateError.message}`);
+    else setItems((current) => current.map((item) => ({ ...item, read_at: item.read_at || now })));
   };
 
   return (
@@ -78,6 +83,7 @@ export const NotificationInbox: React.FC<{ heading?: string }> = ({ heading = 'N
       </div>
       {expanded && (
         <div className="space-y-3 border-t border-slate-800 pt-3">
+          {actionError && <p role="alert" className="text-xs text-rose-300">{actionError}</p>}
           {loading ? <div className="flex justify-center py-5"><Loader2 className="h-5 w-5 animate-spin text-orange-400" /></div>
             : error ? <p role="alert" className="text-xs text-rose-300">{error}</p>
             : items.length === 0 ? <p className="py-4 text-center text-xs text-slate-500">Você ainda não tem notificações.</p>
