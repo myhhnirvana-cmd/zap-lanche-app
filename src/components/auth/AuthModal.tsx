@@ -26,6 +26,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const { signIn, signUp } = useAuth();
   const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
   const [selectedNeighborhoodId, setSelectedNeighborhoodId] = useState('');
+  const [isAddingNeighborhood, setIsAddingNeighborhood] = useState(false);
+  const [newNeighborhoodName, setNewNeighborhoodName] = useState('');
   const [isLoadingNeighborhoods, setIsLoadingNeighborhoods] = useState(false);
   const [neighborhoodLoadError, setNeighborhoodLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
@@ -101,11 +103,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           onClose();
         }
       } else {
-        if (!selectedNeighborhoodId) {
-          setErrorMessage('Selecione seu bairro para continuar.');
+        const cleanNewNeighborhood = newNeighborhoodName.trim().replace(/\s+/g, ' ');
+        if (!selectedNeighborhoodId && !cleanNewNeighborhood) {
+          setErrorMessage('Selecione seu bairro ou adicione o nome dele para continuar.');
           return;
         }
-        const { error, message } = await signUp(email, password, name, selectedNeighborhoodId);
+        const { error, message } = await signUp(
+          email,
+          password,
+          name,
+          selectedNeighborhoodId || undefined,
+          cleanNewNeighborhood || undefined
+        );
         if (error) {
           setErrorMessage(error);
         } else {
@@ -234,20 +243,63 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Seu bairro
               </label>
-              <select
-                required
-                value={selectedNeighborhoodId}
-                onChange={(event) => setSelectedNeighborhoodId(event.target.value)}
-                disabled={isLoadingNeighborhoods || neighborhoods.length === 0}
-                className="w-full rounded-xl border border-slate-700/80 bg-slate-900 px-3 py-2.5 text-xs text-white outline-none focus:border-orange-500 disabled:opacity-60"
-              >
-                <option value="">{isLoadingNeighborhoods ? 'Carregando bairros...' : 'Selecione seu bairro'}</option>
-                {neighborhoods.map((item) => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
-                ))}
-              </select>
+              {!isAddingNeighborhood ? (
+                <>
+                  <select
+                    required
+                    value={selectedNeighborhoodId}
+                    onChange={(event) => {
+                      setSelectedNeighborhoodId(event.target.value);
+                      setNewNeighborhoodName('');
+                    }}
+                    disabled={isLoadingNeighborhoods || neighborhoods.length === 0}
+                    className="w-full rounded-xl border border-slate-700/80 bg-slate-900 px-3 py-2.5 text-xs text-white outline-none focus:border-orange-500 disabled:opacity-60"
+                  >
+                    <option value="">{isLoadingNeighborhoods ? 'Carregando bairros...' : 'Selecione seu bairro'}</option>
+                    {neighborhoods.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingNeighborhood(true);
+                      setSelectedNeighborhoodId('');
+                      setErrorMessage(null);
+                    }}
+                    className="mt-2 text-left text-xs font-semibold text-orange-400 hover:text-orange-300 underline underline-offset-2"
+                  >
+                    Não encontrou seu bairro? Adicione o seu.
+                  </button>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    maxLength={60}
+                    value={newNeighborhoodName}
+                    onChange={(event) => setNewNeighborhoodName(event.target.value)}
+                    placeholder="Digite o nome do seu bairro"
+                    className="w-full rounded-xl border border-slate-700/80 bg-slate-900 px-3 py-2.5 text-xs text-white outline-none focus:border-orange-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingNeighborhood(false);
+                      setNewNeighborhoodName('');
+                      setErrorMessage(null);
+                    }}
+                    className="text-xs font-semibold text-orange-400 hover:text-orange-300 underline underline-offset-2"
+                  >
+                    Escolher um bairro da lista
+                  </button>
+                  <p className="text-[11px] text-slate-500">Após criar sua conta, o bairro será incluído na lista compartilhada do ZAP Lanche.</p>
+                </div>
+              )}
               {neighborhoodLoadError && <p role="alert" className="mt-1.5 text-[11px] text-rose-300">{neighborhoodLoadError}</p>}
-              <p className="mt-1 text-[11px] text-slate-500">Usaremos essa informação apenas para organizar avisos relevantes da sua região.</p>
+              <p className="mt-1 text-[11px] text-slate-500">Usaremos essa informação para organizar avisos relevantes da sua região.</p>
             </div>
           )}
 
