@@ -49,7 +49,7 @@ begin
   if auth.uid() is null or not public.is_admin() then
     raise exception 'Apenas administradores podem enviar comunicados.' using errcode = '42501';
   end if;
-  if p_target_type not in ('all','individual','neighborhood') then
+  if p_target_type is null or p_target_type not in ('all','individual','neighborhood') then
     raise exception 'Destinatário inválido.';
   end if;
   if char_length(btrim(coalesce(p_title,''))) not between 1 and 120
@@ -100,7 +100,7 @@ security definer
 set search_path = ''
 as $$
 begin
-  if p_recipient is null or p_role not in ('cliente','comerciante') then return; end if;
+  if p_recipient is null or p_role is null or p_role not in ('cliente','comerciante') then return; end if;
   insert into public.notifications(recipient_profile_id,recipient_role,category,title,body,metadata,dedupe_key)
   values(p_recipient,p_role,p_category,p_title,p_body,coalesce(p_metadata,'{}'::jsonb),p_dedupe)
   on conflict do nothing;
@@ -155,6 +155,8 @@ exception when others then
   return new;
 end;
 $$;
+
+revoke all on function public.notify_loyalty_transaction() from public, anon, authenticated;
 
 drop trigger if exists trg_notify_loyalty_transaction on public.loyalty_transactions;
 create trigger trg_notify_loyalty_transaction
@@ -211,6 +213,8 @@ exception when others then
   return new;
 end;
 $$;
+
+revoke all on function public.notify_loyalty_redemption() from public, anon, authenticated;
 
 drop trigger if exists trg_notify_loyalty_redemption_insert on public.loyalty_redemptions;
 create trigger trg_notify_loyalty_redemption_insert
