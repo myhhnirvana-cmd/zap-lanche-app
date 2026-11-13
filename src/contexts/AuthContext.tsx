@@ -45,7 +45,7 @@ interface AuthContextType {
   updateUserAvatar: (avatarId: string) => Promise<{ error: string | null }>;
 }
 
-const pendingNeighborhoodSync = new Set<string>();
+const pendingNeighborhoodSync = new Map<string, Promise<void>>();
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -93,34 +93,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Conclui o vínculo de um bairro digitado durante o cadastro após a autenticação.
   // O nome fica nos metadados do Auth quando o Supabase exige confirmação de e-mail.
   const syncPendingNeighborhood = async (currentUser: User) => {
-    if (!supabase || pendingNeighborhoodSync.has(currentUser.id)) return;
+    if (!supabase) return;
+    const inFlight = pendingNeighborhoodSync.get(currentUser.id);
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+
     const pendingName = currentUser.user_metadata?.zaplanche_pending_neighborhood_name;
     if (typeof pendingName !== 'string' || !pendingName.trim()) return;
 
-    pendingNeighborhoodSync.add(currentUser.id);
+    const syncPromise = (async () => {
+      try {
+        const result = await createNeighborhoodInSupabase(pendingName);
+        if (!result.success || !result.neighborhood) {
+          throw new Error(result.error || 'Não foi possível cadastrar o bairro.');
+        }
+
+        const { error: profileUpdateError } = await supabase!
+          .from('profiles')
+          .update({ neighborhood_id: result.neighborhood.id })
+          .eq('id', currentUser.id);
+
+        if (profileUpdateError) throw profileUpdateError;
+
+        const { error: metadataError } = await supabase!.auth.updateUser({
+          data: { zaplanche_pending_neighborhood_name: null },
+        });
+        if (metadataError) {
+          console.warn('Bairro vinculado, mas não foi possível limpar o dado temporário do cadastro:', metadataError.message);
+        }
+      } catch (err: any) {
+        console.warn('Não foi possível concluir o vínculo do bairro informado no cadastro. Será tentado novamente no próximo acesso:', err?.message || err);
+      }
+    })();
+
+    pendingNeighborhoodSync.set(currentUser.id, syncPromise);
     try {
-      const result = await createNeighborhoodInSupabase(pendingName);
-      if (!result.success || !result.neighborhood) {
-        throw new Error(result.error || 'Não foi possível cadastrar o bairro.');
-      }
-
-      const { error: profileUpdateError } = await supabase
-        .from('profiles')
-        .update({ neighborhood_id: result.neighborhood.id })
-        .eq('id', currentUser.id);
-
-      if (profileUpdateError) throw profileUpdateError;
-
-      const { error: metadataError } = await supabase.auth.updateUser({
-        data: { zaplanche_pending_neighborhood_name: null },
-      });
-      if (metadataError) {
-        console.warn('Bairro vinculado, mas não foi possível limpar o dado temporário do cadastro:', metadataError.message);
-      }
-    } catch (err: any) {
-      console.warn('Não foi possível concluir o vínculo do bairro informado no cadastro. Será tentado novamente no próximo acesso:', err?.message || err);
+      await syncPromise;
     } finally {
-      pendingNeighborhoodSync.delete(currentUser.id);
+      if (pendingNeighborhoodSync.get(currentUser.id) === syncPromise) {
+        pendingNeighborhoodSync.delete(currentUser.id);
+      }
     }
   };
 
