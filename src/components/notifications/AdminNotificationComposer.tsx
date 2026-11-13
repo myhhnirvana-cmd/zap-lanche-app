@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BellRing, Loader2, Send, CheckCircle2, AlertCircle } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 
 type MerchantOption = { id: string; name: string; neighborhood: string | null };
 
