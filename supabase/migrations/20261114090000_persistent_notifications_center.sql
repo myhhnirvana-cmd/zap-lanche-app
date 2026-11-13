@@ -64,7 +64,7 @@ begin
   end if;
 
   insert into public.notifications(recipient_profile_id, recipient_role, category, title, body, metadata)
-  select distinct r.owner_profile_id, 'comerciante', 'admin_message',
+  select distinct on (r.owner_profile_id) r.owner_profile_id, 'comerciante', 'admin_message',
          btrim(p_title), btrim(p_body),
          jsonb_build_object('restaurant_id',r.id,'restaurant_name',r.name,'neighborhood',r.neighborhood)
   from public.restaurants r
