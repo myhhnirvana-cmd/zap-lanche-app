@@ -66,7 +66,7 @@ export const NeighborhoodModal: React.FC<NeighborhoodModalProps> = ({
       setError('Entre na sua conta para cadastrar um bairro compartilhado.');
       return;
     }
-    const cleanName = newNeighborhood.trim().replace(/\\s+/g, ' ');
+    const cleanName = newNeighborhood.trim().replace(/\s+/g, ' ');
     if (cleanName.length < 2) {
       setError('Digite o nome do bairro para continuar.');
       return;
