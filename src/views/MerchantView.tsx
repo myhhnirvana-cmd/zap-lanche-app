@@ -77,6 +77,7 @@ import {
   supabase,
 } from '../lib/supabase';
 import { UUID_REGEX } from '../utils/qrCode';
+import { NotificationInbox } from '../components/notifications/NotificationInbox';
 
 interface MerchantViewProps {
   restaurants?: Restaurant[];
@@ -1196,6 +1197,7 @@ export const MerchantView: React.FC<MerchantViewProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-16 animate-fade-in">
+      {isRealMerchant && <NotificationInbox heading="Avisos da sua loja" />}
       {/* Toast de Feedback */}
       {toastMessage && (
         <div
